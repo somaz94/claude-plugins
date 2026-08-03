@@ -11,8 +11,9 @@ Design contract:
   - stdlib only. A tool that audits config must not need an install step.
 
 Subcommands:
-  scan      emit the normalized asset graph as JSON
-  catalog   render a Markdown catalog of everything found
+  scan         emit the normalized asset graph as JSON
+  catalog      render a Markdown catalog of everything found
+  portability  grade each item by how tightly it is bound to this machine
 """
 
 from __future__ import annotations
@@ -69,6 +70,26 @@ KNOWN_KEYS = (
 # Rough chars-per-token ratio for English prose. Used only for order-of-magnitude
 # context-budget reporting, never for anything that must be exact.
 CHARS_PER_TOKEN = 4
+
+# Git hosts shared by everyone. An `origin` on one of these says nothing about
+# who you are, so only the account segment of such a remote is a marker.
+PUBLIC_FORGES = {
+    "github.com",
+    "gitlab.com",
+    "bitbucket.org",
+    "codeberg.org",
+    "git.sr.ht",
+    "gitea.com",
+}
+
+# Shortest string accepted as a derived marker. Below this, substring matching
+# produces more noise than signal.
+MIN_MARKER_LEN = 4
+
+# Portability tiers, ordered most to least shareable.
+TIER_PORTABLE = "PORTABLE"
+TIER_PARAM = "PARAMETERIZABLE"
+TIER_PERSONAL = "PERSONAL"
 
 
 # --------------------------------------------------------------------------
@@ -342,6 +363,278 @@ def _read_hooks(settings: Path, root: dict[str, Any], origin: str) -> list[dict[
 
 
 # --------------------------------------------------------------------------
+# portability
+# --------------------------------------------------------------------------
+
+
+def derive_markers(config: dict[str, Any], roots: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Work out which strings identify THIS machine and THIS owner.
+
+    Nothing here is hardcoded: markers come from the config, the environment,
+    and the git remotes of the repos being scanned. That is what lets the same
+    check run for a different person and flag their identifiers instead.
+    """
+    found: dict[str, dict[str, str]] = {}
+
+    def add(value: str | None, category: str, source: str) -> None:
+        if not value or len(value) < MIN_MARKER_LEN:
+            return
+        found.setdefault(value, {"value": value, "category": category, "source": source})
+
+    for marker in config["portability"].get("markers", []):
+        add(marker, "configured", "config")
+
+    add(os.environ.get("USER"), "user", "$USER")
+    add(Path.home().name, "user", "$HOME")
+
+    # Directory names the user invented to organize their repos: the parts of a
+    # projectRoots pattern that sit BELOW home and above the first glob. Parts
+    # at or above home (`/Users`, `/home`) are universal, not personal.
+    home = Path.home()
+    for pattern in config["projectRoots"]:
+        expanded = Path(os.path.expanduser(pattern))
+        try:
+            relative = expanded.relative_to(home)
+        except ValueError:
+            relative = expanded
+        for part in relative.parts:
+            if any(ch in part for ch in "*?["):
+                break
+            if part not in (os.sep, "~", ".", ".."):
+                add(part, "layout", f"projectRoots {pattern}")
+
+    for root in roots:
+        repo = root["path"].parent if root["scope"] == "repo" else None
+        if repo is None:
+            continue
+        for owner, host in _remote_identities(repo):
+            forge = _public_forge(host)
+            if forge:
+                # A public forge namespace is globally unique, so the account
+                # name identifies its owner.
+                add(owner, "account", f"git remote of {repo.name}")
+                continue
+            if not host:
+                continue
+            # On a self-hosted forge the "owner" is just a group name and is
+            # often a generic word (`server`, `infra`, `platform`) that would
+            # match prose everywhere. The HOST is the identifying part, so only
+            # that is taken.
+            add(host, "host", f"git remote of {repo.name}")
+            labels = [p for p in host.split(".") if p not in ("www", "git", "gitlab", "github")]
+            if labels:
+                add(labels[0], "host", f"git remote of {repo.name}")
+
+    return sorted(found.values(), key=lambda m: (-len(m["value"]), m["value"]))
+
+
+def _public_forge(host: str | None) -> str | None:
+    """Return the public forge a host refers to, if any.
+
+    Handles SSH config aliases such as `github.com-work`, which resolve to a
+    public forge but carry an account-specific suffix.
+    """
+    if not host:
+        return None
+    lowered = host.lower()
+    for forge in PUBLIC_FORGES:
+        if lowered == forge or lowered.startswith(forge + "-") or lowered.endswith("." + forge):
+            return forge
+    return None
+
+
+def _remote_identities(repo: Path) -> list[tuple[str | None, str | None]]:
+    """Return (owner, host) pairs parsed from the repo's git remotes."""
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(repo), "remote", "-v"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+
+    identities: list[tuple[str | None, str | None]] = []
+    for line in out.stdout.splitlines():
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        url = parts[1]
+        # scp-style (git@host:owner/repo) and URL-style (scheme://host/owner/repo)
+        match = re.match(r"^[\w.+-]+@([^:]+):([^/]+)/", url) or re.match(
+            r"^[a-z]+://(?:[^@/]+@)?([^/:]+)(?::\d+)?/([^/]+)/", url
+        )
+        if match:
+            host, owner = match.group(1), match.group(2)
+            # SSH host aliases like `github.com-someone` carry the account too.
+            identities.append((owner, host))
+    return identities
+
+
+def find_hits(path: Path, markers: list[dict[str, str]]) -> list[dict[str, Any]]:
+    """Locate every marker occurrence, recording WHERE it lands.
+
+    Placement is what separates a swappable literal from a baked-in assumption,
+    so each hit is classified as frontmatter / code / prose.
+    """
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+
+    _, offset = parse_frontmatter(text)
+    frontmatter_lines = text[:offset].count("\n") if offset else 0
+
+    hits: list[dict[str, Any]] = []
+    in_fence = False
+    for lineno, line in enumerate(text.splitlines(), start=1):
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        lowered = line.lower()
+        for marker in markers:
+            if marker["value"].lower() not in lowered:
+                continue
+            if lineno <= frontmatter_lines:
+                placement = "frontmatter"
+            elif in_fence or _in_inline_code(line, marker["value"]):
+                placement = "code"
+            else:
+                placement = "prose"
+            hits.append(
+                {
+                    "line": lineno,
+                    "marker": marker["value"],
+                    "category": marker["category"],
+                    "placement": placement,
+                    "text": line.strip()[:160],
+                }
+            )
+    return hits
+
+
+def _in_inline_code(line: str, marker: str) -> bool:
+    """True when every occurrence of `marker` on this line sits inside backticks."""
+    spans = [(m.start(), m.end()) for m in re.finditer(r"`[^`]*`", line)]
+    lowered, needle = line.lower(), marker.lower()
+    start = lowered.find(needle)
+    while start != -1:
+        if not any(a <= start and start + len(needle) <= b for a, b in spans):
+            return False
+        start = lowered.find(needle, start + 1)
+    return True
+
+
+def grade(hits: list[dict[str, Any]]) -> str:
+    """Assign a portability tier from where the markers landed.
+
+    The rule is mechanical on purpose — a reviewer can re-derive it from the
+    evidence rather than trusting a judgment call:
+
+      no hits                      -> PORTABLE
+      hits only in code/paths      -> PARAMETERIZABLE (swap the literal for a setting)
+      any hit in frontmatter/prose -> PERSONAL (the charter itself assumes this
+                                      environment; routing or scope would have
+                                      to be rewritten, not configured)
+    """
+    if not hits:
+        return TIER_PORTABLE
+    if any(h["placement"] in ("frontmatter", "prose") for h in hits):
+        return TIER_PERSONAL
+    return TIER_PARAM
+
+
+def build_portability(graph: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    roots = [
+        {"path": Path(r["path"]), "scope": r["scope"], "repo": r["repo"]}
+        for r in graph["roots"]
+    ]
+    markers = derive_markers(config, roots)
+
+    graded: list[dict[str, Any]] = []
+    for item in graph["items"]:
+        if item["kind"] == "hook":
+            continue  # a hook is a settings.json registration, not a shareable unit
+        hits = find_hits(Path(item["file"]), markers)
+        graded.append(
+            {
+                "name": item["name"],
+                "kind": item["kind"],
+                "origin": item["origin"],
+                "file": item["file"],
+                "tier": grade(hits),
+                "hits": hits,
+                "markers": sorted({h["marker"] for h in hits}),
+            }
+        )
+
+    tiers = {t: 0 for t in (TIER_PORTABLE, TIER_PARAM, TIER_PERSONAL)}
+    for entry in graded:
+        tiers[entry["tier"]] += 1
+
+    return {"markers": markers, "items": graded, "tiers": tiers}
+
+
+def render_portability(report: dict[str, Any], evidence: int) -> str:
+    tiers = report["tiers"]
+    total = sum(tiers.values())
+    out = ["# Portability triage", ""]
+
+    shareable = tiers[TIER_PORTABLE]
+    out += [
+        f"- Graded: {total} items (hooks excluded — a hook is a settings.json "
+        "registration, not a shareable unit)",
+        f"- 🟢 {TIER_PORTABLE}: **{shareable}**  ·  "
+        f"🟡 {TIER_PARAM}: **{tiers[TIER_PARAM]}**  ·  "
+        f"🔴 {TIER_PERSONAL}: **{tiers[TIER_PERSONAL]}**",
+        f"- Share-ready without edits: {shareable}/{total}"
+        f" ({shareable * 100 // total if total else 0}%)",
+        "",
+        "Derived markers — strings that identify this machine or owner:",
+        "",
+        "| Marker | Category | Derived from |",
+        "|---|---|---|",
+    ]
+    for marker in report["markers"]:
+        out.append(f"| `{marker['value']}` | {marker['category']} | {marker['source']} |")
+    out.append("")
+
+    for tier, emoji, note in (
+        (TIER_PORTABLE, "🟢", "no machine-specific reference; promote as-is"),
+        (TIER_PARAM, "🟡", "markers appear only as literals in code/paths — swap for a setting"),
+        (TIER_PERSONAL, "🔴", "markers appear in frontmatter or prose — the charter assumes this environment"),
+    ):
+        group = [i for i in report["items"] if i["tier"] == tier]
+        if not group:
+            continue
+        out += ["<br/>", "", f"## {emoji} {tier} ({len(group)})", "", f"_{note}_", ""]
+        out += ["| Item | Kind | Origin | Hits | Markers |", "|---|---|---|---|---|"]
+        for item in sorted(group, key=lambda i: (-len(i["hits"]), i["name"])):
+            markers = ", ".join(f"`{m}`" for m in item["markers"]) or "—"
+            out.append(
+                f"| `{item['name']}` | {item['kind']} | {item['origin']} "
+                f"| {len(item['hits'])} | {markers} |"
+            )
+        out.append("")
+
+        if tier != TIER_PORTABLE and evidence:
+            out += [f"### Evidence (first {evidence} hits per item)", ""]
+            for item in sorted(group, key=lambda i: (-len(i["hits"]), i["name"])):
+                out.append(f"**`{item['name']}`** — {item['file']}")
+                for hit in item["hits"][:evidence]:
+                    out.append(
+                        f"- `{item['file']}:{hit['line']}` "
+                        f"[{hit['placement']}/{hit['category']}] `{hit['marker']}` — "
+                        f"{_truncate(hit['text'], 100)}"
+                    )
+                out.append("")
+
+    return "\n".join(out)
+
+
+# --------------------------------------------------------------------------
 # reporting
 # --------------------------------------------------------------------------
 
@@ -463,6 +756,13 @@ def main(argv: list[str] | None = None) -> int:
         "--top", type=int, default=10, help="context-budget ranking size (default: 10)"
     )
 
+    port = sub.add_parser("portability", help="grade items by machine-specific coupling")
+    port.add_argument("--out", help="write to this file instead of stdout")
+    port.add_argument(
+        "--evidence", type=int, default=3, help="hits shown per item (0 to omit; default: 3)"
+    )
+    port.add_argument("--json", action="store_true", help="emit the raw report as JSON")
+
     args = parser.parse_args(argv)
     config, origin = load_config(args.config)
     graph = build_graph(config, origin)
@@ -470,6 +770,20 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "scan":
         json.dump(graph, sys.stdout, indent=2, ensure_ascii=False)
         sys.stdout.write("\n")
+        return 0
+
+    if args.command == "portability":
+        report = build_portability(graph, config)
+        if args.json:
+            json.dump(report, sys.stdout, indent=2, ensure_ascii=False)
+            sys.stdout.write("\n")
+            return 0
+        rendered = render_portability(report, args.evidence)
+        if args.out:
+            Path(args.out).write_text(rendered, encoding="utf-8")
+            print(f"wrote {args.out} ({sum(report['tiers'].values())} items graded)")
+        else:
+            sys.stdout.write(rendered)
         return 0
 
     rendered = render_catalog(graph, args.top)
