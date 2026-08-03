@@ -49,6 +49,8 @@ Four axes, reported as 🔴 / 🟡 / 🟢.
 
 So the offset is **calibrated per mirror directory** — whatever delta most of a directory's pairs share becomes its baseline, and only files that deviate from their own siblings are reported. No house style is hardcoded, so a convention this tool has never seen calibrates away just the same. Deviation counts in both directions: a file missing the banner its fifteen siblings all have is as much an outlier as one that added a section.
 
+Shape is not the whole story, though. Two files can match structurally while the mirror is months behind, and content cannot settle it — a translation is *supposed* to read differently, so diffing it reports translation as drift. Git history answers it instead: a source committed since its mirror last was means the mirror is behind, in any language. Untracked or uncommitted files get no verdict rather than a wrong one.
+
 **Hooks.** A hook is a pointer, and the file it points at can be absent — the registration stays in `settings.json`, so the hook looks configured while doing nothing. Nothing else reports this.
 
 **Frontmatter.** A missing `description` is the one that actually breaks something — it is the only signal Claude has for when to reach for an item, so without it the item is unreachable unless named outright.

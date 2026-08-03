@@ -41,6 +41,8 @@ A mirror normally differs from its source by a *constant* — a house style migh
 
 This means a deviation is meaningful in *both* directions — a file missing the banner its fifteen siblings all have is as much an outlier as one that added a section.
 
+`pair-stale` answers the question shape cannot. Two files can match structurally while the mirror is months behind, and content cannot settle it — a translation is meant to read differently, so diffing it reports translation as drift. History is the honest signal: if the source has been committed since the mirror last was, the mirror is behind, whatever language either side is in. It needs git, so an untracked root or an uncommitted file simply gets no verdict rather than a wrong one.
+
 **Hooks.** A hook is a pointer, so it has one failure the other axes cannot express: the script it points at can be absent. `hook-missing-script` is 🔴 because nothing else reports it — the registration stays in `settings.json`, so the hook looks configured while doing nothing on every matching event. Name the guard the user thinks they have.
 
 **Frontmatter.** `no-description` is the one that actually breaks something: the description is the only signal Claude has for when to reach for an item, so without it the item is unreachable unless named outright. `name-mismatch` and `key-typo` mislead readers or are silently ignored.

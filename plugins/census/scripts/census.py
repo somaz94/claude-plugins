@@ -837,10 +837,13 @@ def build_drift(graph: dict[str, Any]) -> dict[str, Any]:
     """
     items = [i for i in graph["items"] if i["kind"] != "hook"]
     hooks = [i for i in graph["items"] if i["kind"] == "hook"]
+    commit_times = git_commit_times(
+        [i["file"] for i in items] + [i["pair"]["file"] for i in items if i.get("pair")]
+    )
     findings: list[dict[str, Any]] = []
 
     findings += _duplicate_findings(items)
-    findings += _pair_findings(items)
+    findings += _pair_findings(items, commit_times)
     findings += _frontmatter_findings(items)
     findings += _hook_findings(hooks)
     findings = _merge_duplicate_findings(findings)
@@ -920,12 +923,83 @@ def _duplicate_findings(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 METRICS = ("headings", "codeBlocks", "tableRows")
 
+# A source edited at least this long after its mirror is treated as having moved
+# on without it. Below a day the two are almost always the same editing session.
+STALE_PAIR_DAYS = 1
+
+
+def git_commit_times(files: Iterable[str]) -> dict[str, int]:
+    """Last commit timestamp for each file, keyed by absolute path.
+
+    Content cannot answer whether a translation is stale — the text is SUPPOSED
+    to differ, so every attempt to diff it reports translation as drift. History
+    can: if the source has been committed since the mirror last was, the mirror
+    is behind, and that holds no matter what language either side is written in.
+
+    Files outside a git repo, or not yet committed, simply get no entry.
+    """
+    parents = {str(Path(file).parent) for file in files}
+    times: dict[str, int] = {}
+    for top in {t for t in (_git_toplevel(p) for p in parents) if t}:
+        times.update(_git_log_times(top))
+    return times
+
+
+def _resolved(path: str) -> str:
+    """Canonical form of a path, so a symlinked root still matches git's view.
+
+    `git rev-parse --show-toplevel` always answers with symlinks resolved. On
+    macOS a `/var/...` root comes back as `/private/var/...`, and without this
+    the two spellings never meet — the git signal would go quietly missing for
+    any config root reached through a link.
+    """
+    try:
+        return str(Path(path).resolve())
+    except OSError:
+        return path
+
+
+def _git_toplevel(directory: str) -> str | None:
+    try:
+        out = subprocess.run(
+            ["git", "-C", directory, "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.stdout.strip() or None
+
+
+def _git_log_times(toplevel: str) -> dict[str, int]:
+    """One `git log` per repo, newest first, so the first sighting wins."""
+    try:
+        out = subprocess.run(
+            ["git", "-C", toplevel, "log", "--format=%ct", "--name-only"],
+            capture_output=True, text=True, timeout=60, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return {}
+
+    times: dict[str, int] = {}
+    stamp = 0
+    for line in out.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.isdigit():
+            stamp = int(line)
+            continue
+        times.setdefault(_resolved(str(Path(toplevel) / line)), stamp)
+    return times
+
 # Below this many pairs there is not enough evidence to tell a house style from
 # an accident, so comparison falls back to requiring an exact match.
 CALIBRATION_MIN = 3
 
 
-def _pair_findings(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _pair_findings(
+    items: list[dict[str, Any]], commit_times: dict[str, int]
+) -> list[dict[str, Any]]:
     """Translation mirrors that are absent or no longer shaped like the source.
 
     A mirror usually differs from its source by a CONSTANT: a house style may
@@ -990,6 +1064,33 @@ def _pair_findings(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
             })
 
         for comparison in group:
+            item, pair = comparison["item"], comparison["pair"]
+
+            source_at = commit_times.get(_resolved(item["file"]))
+            mirror_at = commit_times.get(_resolved(pair["file"]))
+            if source_at and mirror_at:
+                behind = (source_at - mirror_at) // 86400
+                if behind >= STALE_PAIR_DAYS:
+                    findings.append({
+                        "severity": SEV_MED,
+                        "axis": "pairs",
+                        "code": "pair-stale",
+                        "title": (
+                            f"`{item['name']}` ({item['kind']}) mirror is {behind} day(s) "
+                            "behind its source"
+                        ),
+                        "detail": (
+                            "The source has been committed since the mirror last was. Shapes can "
+                            "still match — this is the drift a structural comparison cannot see, "
+                            "and content cannot answer it because a translation is meant to differ."
+                        ),
+                        "refs": [item["file"], pair["file"]],
+                        "dedupe": (
+                            "pair-stale", item["kind"], item["name"],
+                            item["digest"], pair["digest"],
+                        ),
+                    })
+
             deviations = [
                 f"{m}: {comparison['deltas'][m]:+d} where this mirror usually has "
                 f"{baseline[m]:+d}"
@@ -997,7 +1098,6 @@ def _pair_findings(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 if comparison["deltas"][m] != baseline[m]
             ]
             if deviations:
-                item, pair = comparison["item"], comparison["pair"]
                 findings.append({
                     "severity": SEV_MED,
                     "axis": "pairs",
