@@ -1,0 +1,14 @@
+version: 2
+updates:
+  # github-actions only. The plugins here ship no runtime dependencies: census
+  # is python3 stdlib-only by design, so there is no pip or gomod manifest for
+  # Dependabot to track.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions-minor:
+        update-types:
+          - minor
+          - patch

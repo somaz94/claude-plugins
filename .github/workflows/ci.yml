@@ -1,0 +1,178 @@
+name: CI
+
+# NOTE: deliberately no `paths-ignore: '**/*.md'` here, unlike the sibling tool
+# repos. In a plugin repo Markdown IS the product — skills/<name>/SKILL.md is
+# executable content, so skipping CI on .md changes would skip CI on the code.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  manifests:
+    name: Validate manifests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Validate marketplace
+        run: claude plugin validate .
+
+      - name: Validate each plugin
+        run: |
+          for manifest in plugins/*/.claude-plugin/plugin.json; do
+            plugin_dir="$(dirname "$(dirname "$manifest")")"
+            echo "--- $plugin_dir"
+            claude plugin validate "$plugin_dir"
+          done
+
+  consistency:
+    name: Version and skill consistency
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Marketplace entry version matches plugin.json
+        # The version users actually receive is the marketplace entry's. If it
+        # drifts from the plugin's own manifest, the wrong version ships
+        # silently — `claude plugin validate` only warns about this.
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, sys
+
+          market = json.loads(pathlib.Path(".claude-plugin/marketplace.json").read_text())
+          root = market.get("metadata", {}).get("pluginRoot", ".")
+          failures = []
+
+          for entry in market["plugins"]:
+              source = entry["source"]
+              if not isinstance(source, str):
+                  continue  # remote source; nothing local to compare against
+              path = (pathlib.Path(root) / source).resolve()
+              manifest = path / ".claude-plugin" / "plugin.json"
+              if not manifest.is_file():
+                  failures.append(f"{entry['name']}: no plugin.json at {manifest}")
+                  continue
+              plugin = json.loads(manifest.read_text())
+              if entry.get("version") != plugin.get("version"):
+                  failures.append(
+                      f"{entry['name']}: marketplace={entry.get('version')!r} "
+                      f"!= plugin.json={plugin.get('version')!r}"
+                  )
+              if entry["name"] != plugin.get("name"):
+                  failures.append(
+                      f"{entry['name']}: marketplace name != plugin.json name "
+                      f"{plugin.get('name')!r}"
+                  )
+
+          for line in failures:
+              print(f"FAIL: {line}")
+          sys.exit(1 if failures else 0)
+          PY
+
+      - name: Tag matches shipped version
+        # Only meaningful on a tag build; a mismatch here means the release
+        # would publish a version nobody can install.
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, sys
+
+          tag = os.environ["GITHUB_REF_NAME"].lstrip("v")
+          market = json.loads(pathlib.Path(".claude-plugin/marketplace.json").read_text())
+          mismatched = [
+              e["name"] for e in market["plugins"] if e.get("version") != tag
+          ]
+          if mismatched:
+              print(f"FAIL: tag {tag} does not match: {', '.join(mismatched)}")
+              sys.exit(1)
+          PY
+
+      - name: Every skill declares a description
+        run: |
+          python3 - <<'PY'
+          import pathlib, re, sys
+
+          failures = []
+          for skill in sorted(pathlib.Path("plugins").glob("*/skills/*/SKILL.md")):
+              text = skill.read_text(encoding="utf-8")
+              if not text.startswith("---"):
+                  failures.append(f"{skill}: no frontmatter")
+                  continue
+              block = text.split("---", 2)[1]
+              if not re.search(r"^description:\s*\S", block, re.M):
+                  failures.append(f"{skill}: no description in frontmatter")
+
+          for line in failures:
+              print(f"FAIL: {line}")
+          sys.exit(1 if failures else 0)
+          PY
+
+  scripts:
+    name: Bundled scripts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Byte-compile
+        run: python3 -m compileall -q plugins
+
+      - name: census smoke test
+        # Builds a throwaway config tree, scans it, and asserts census finds
+        # exactly what was planted. Guards the collector against silent
+        # regressions in discovery or frontmatter parsing.
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp -d)"
+          mkdir -p "$fixture/home/.claude/agents" \
+                   "$fixture/home/.claude/skills/demo" \
+                   "$fixture/repo/.claude/commands"
+          printf -- '---\nname: alpha\ndescription: an agent\n---\nbody\n' \
+            > "$fixture/home/.claude/agents/alpha.md"
+          printf -- '---\nname: demo\ndescription: a skill\n---\nbody\n' \
+            > "$fixture/home/.claude/skills/demo/SKILL.md"
+          printf -- '---\ndescription: a command\n---\nbody\n' \
+            > "$fixture/repo/.claude/commands/beta.md"
+          cat > "$fixture/census.json" <<EOF
+          {
+            "userRoots": ["$fixture/home/.claude"],
+            "projectRoots": ["$fixture/repo"],
+            "excludeOssForks": false
+          }
+          EOF
+
+          out="$(python3 plugins/census/scripts/census.py --config "$fixture/census.json" catalog)"
+          echo "$out"
+
+          for expected in "1 agents" "1 commands" "1 skills" '`alpha`' '`beta`' '`demo`'; do
+            if ! grep -qF -- "$expected" <<<"$out"; then
+              echo "FAIL: expected '$expected' in catalog output"
+              exit 1
+            fi
+          done
+          echo "PASS: census discovered the planted fixture"
+
+  ci-result:
+    name: CI Result
+    if: always()
+    needs: [manifests, consistency, scripts]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all jobs
+        run: |
+          if [ "${{ contains(needs.*.result, 'failure') }}" = "true" ] || \
+             [ "${{ contains(needs.*.result, 'cancelled') }}" = "true" ]; then
+            echo "[FAIL] Some jobs failed or were cancelled"
+            exit 1
+          fi
+          echo "[PASS] All CI jobs passed"

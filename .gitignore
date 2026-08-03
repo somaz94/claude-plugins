@@ -1,0 +1,9 @@
+# Python byte-compilation artifacts (CI runs `compileall` over plugins/)
+__pycache__/
+*.py[cod]
+
+# Local census config and generated catalogs — these name real paths on the
+# machine that produced them and must never reach this public repo.
+.census.json
+census.json
+CENSUS.md
