@@ -335,6 +335,64 @@ jobs:
           PY
           echo "PASS: hook script read for coupling, missing target reported"
 
+      - name: census sees a mirror its source has moved past
+        # The drift a shape comparison cannot see and a content comparison must
+        # not attempt: a translation is SUPPOSED to read differently, so history
+        # is the only honest answer to "did the mirror keep up?".
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp -d)"
+          mkdir -p "$fixture/repo/.claude/agents" "$fixture/repo/.claude/agents-ko"
+          cd "$fixture/repo"
+          git init -q
+          git config user.email ci@example.com
+          git config user.name ci
+          for name in stale fresh; do
+            printf -- '---\nname: %s\ndescription: an agent\n---\nbody\n' "$name" \
+              > ".claude/agents/$name.md"
+            printf -- '---\nname: %s\ndescription: translated\n---\ntranslated body\n' "$name" \
+              > ".claude/agents-ko/$name.md"
+          done
+          git add -A
+          GIT_COMMITTER_DATE="2026-01-01T00:00:00" \
+            git commit -q --date="2026-01-01T00:00:00" -m init
+
+          # Only the source moves. Both files still have the same shape.
+          printf -- '---\nname: stale\ndescription: an agent\n---\nbody, revised\n' \
+            > .claude/agents/stale.md
+          git add -A
+          GIT_COMMITTER_DATE="2026-03-01T00:00:00" \
+            git commit -q --date="2026-03-01T00:00:00" -m "revise source only"
+
+          cd "$GITHUB_WORKSPACE"
+          cat > "$fixture/census.json" <<EOF
+          {
+            "userRoots": [],
+            "projectRoots": ["$fixture/repo"],
+            "excludeOssForks": false
+          }
+          EOF
+
+          python3 plugins/census/scripts/census.py --config "$fixture/census.json" \
+            drift --json > "$fixture/drift.json"
+          python3 - "$fixture/drift.json" <<'PY'
+          import json, sys
+
+          findings = json.load(open(sys.argv[1]))["findings"]
+          stale = [f for f in findings if f["code"] == "pair-stale"]
+          failures = []
+
+          if len(stale) != 1:
+              failures.append(f"expected 1 pair-stale finding, got {len(stale)}")
+          elif "`stale`" not in stale[0]["title"]:
+              failures.append(f"wrong pair flagged: {stale[0]['title']}")
+
+          for line in failures:
+              print(f"FAIL: {line}")
+          sys.exit(1 if failures else 0)
+          PY
+          echo "PASS: stale mirror caught, co-committed pair left alone"
+
   ci-result:
     name: CI Result
     if: always()
