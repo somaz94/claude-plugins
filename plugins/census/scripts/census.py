@@ -431,7 +431,15 @@ def derive_markers(config: dict[str, Any], roots: list[dict[str, Any]]) -> list[
             relative = expanded.relative_to(home)
         except ValueError:
             relative = expanded
-        for part in relative.parts:
+        # A pattern with a glob names a CONTAINER of repos, so every part before
+        # the glob is layout. A pattern without one names a single repo, and its
+        # last segment is that repo's name — taking it as a global marker would
+        # match the name everywhere, which is the generic-word trap. Repo names
+        # are handled per-repo instead, by `origin_markers`.
+        parts = relative.parts
+        if not any(ch in str(relative) for ch in "*?["):
+            parts = parts[:-1]
+        for part in parts:
             if any(ch in part for ch in "*?["):
                 break
             if part not in (os.sep, "~", ".", ".."):
@@ -460,6 +468,33 @@ def derive_markers(config: dict[str, Any], roots: list[dict[str, Any]]) -> list[
                 add(labels[0], "host", f"git remote of {repo.name}")
 
     return sorted(found.values(), key=lambda m: (-len(m["value"]), m["value"]))
+
+
+def origin_markers(origins: list[str], global_values: set[str]) -> list[dict[str, str]]:
+    """Markers that identify the repo an item was found in.
+
+    Global markers only catch identifiers that are unique machine-wide — an
+    account name, a home-relative layout directory. They are blind to the most
+    common coupling of all: a repo-scoped agent naming its OWN repo, by a path
+    relative to it. `Reviews changes inside acme-platform/storage/` contains no
+    global identifier at all, so it scores as perfectly portable while being
+    one of the least portable items there is.
+
+    The repo name is the missing marker, but only WITHIN that repo. Applying it
+    globally would be the generic-word trap that already forced self-hosted
+    forge owners to be dropped: a repo called `docs` or `tools` would match
+    prose everywhere. Scoped to its own items, a match means what it says.
+    """
+    markers = []
+    for origin in origins:
+        if origin == "user" or origin in global_values or len(origin) < MIN_MARKER_LEN:
+            continue
+        markers.append({
+            "value": origin,
+            "category": "repo",
+            "source": f"the repo this item lives in ({origin})",
+        })
+    return markers
 
 
 def _public_forge(host: str | None) -> str | None:
@@ -588,12 +623,17 @@ def build_portability(graph: dict[str, Any], config: dict[str, Any]) -> dict[str
     markers = derive_markers(config, roots)
 
     graded: list[dict[str, Any]] = []
+    global_values = {m["value"] for m in markers}
+    scoped_seen: set[str] = set()
+
     # Graded per ASSET, not per file: identical copies in a mirrored repo pair
     # score identically, and grading both would double every tier population.
     for item in _collapse_copies(
         i for i in graph["items"] if i["kind"] != "hook"
     ):  # a hook is a settings.json registration, not a shareable unit
-        hits = find_hits(Path(item["file"]), markers)
+        scoped = origin_markers(item["origins"], global_values)
+        scoped_seen.update(m["value"] for m in scoped)
+        hits = find_hits(Path(item["file"]), markers + scoped)
         graded.append(
             {
                 "name": item["name"],
@@ -611,7 +651,12 @@ def build_portability(graph: dict[str, Any], config: dict[str, Any]) -> dict[str
     for entry in graded:
         tiers[entry["tier"]] += 1
 
-    return {"markers": markers, "items": graded, "tiers": tiers}
+    return {
+        "markers": markers,
+        "scopedMarkers": sorted(scoped_seen),
+        "items": graded,
+        "tiers": tiers,
+    }
 
 
 def render_portability(report: dict[str, Any], evidence: int) -> str:
@@ -637,6 +682,17 @@ def render_portability(report: dict[str, Any], evidence: int) -> str:
     for marker in report["markers"]:
         out.append(f"| `{marker['value']}` | {marker['category']} | {marker['source']} |")
     out.append("")
+
+    scoped = report.get("scopedMarkers") or []
+    if scoped:
+        out += [
+            f"Plus {len(scoped)} **repo-scoped** markers — each repo's own name, matched only "
+            "against items living in it. This is what catches an agent that names its own repo "
+            "by a relative path and carries no machine-wide identifier at all:",
+            "",
+            ", ".join(f"`{value}`" for value in scoped),
+            "",
+        ]
 
     for tier, emoji, note in (
         (TIER_PORTABLE, "🟢", "no machine-specific reference; promote as-is"),

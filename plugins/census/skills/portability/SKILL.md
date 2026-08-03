@@ -35,9 +35,16 @@ Nothing is hardcoded. Markers come from the environment being scanned, which is 
 | `layout` | directory names in `projectRoots` below home — the scheme the user invented to organize repos |
 | `account` | the owner segment of a **public** forge remote, which is a globally unique namespace |
 | `host` | a self-hosted forge hostname, plus its registrable label |
+| `repo` | each repo's own name, matched **only** against items living in that repo |
 | `configured` | anything in `portability.markers` in the config |
 
-On a self-hosted forge the owner is only a group name and is often a generic word (`server`, `infra`), so the host is taken instead. If the marker table looks wrong — something universal listed, or an obvious identifier missing — say so and suggest `portability.markers` in the config, because every downstream grade depends on it.
+On a self-hosted forge the owner is only a group name and is often a generic word (`server`, `infra`), so the host is taken instead.
+
+The `repo` category is scoped rather than global for the same reason. A repo-scoped agent normally names its own repo by a path relative to it — `Reviews changes inside acme-platform/storage/` — which contains no machine-wide identifier at all and would otherwise grade as perfectly portable while being one of the least portable items there is. Applied globally a repo name like `docs` or `tools` would match prose everywhere; scoped to its own repo, a match means what it says.
+
+**The known blind spot: named infrastructure.** Markers are derived from remotes and roots, so nothing supplies the name of a cluster, environment, namespace or project codename. An item whose charter is bound to `prod-eu-1` rather than to a repo will still come back 🟢. When a 🟢 item's description names an environment, say so plainly and tell the user to add that string to `portability.markers` — that is what the key is for. Do not treat the 🟢 list as safe without reading it.
+
+If the marker table looks wrong — something universal listed, or an obvious identifier missing — say so and suggest `portability.markers`, because every downstream grade depends on it.
 
 <br/>
 

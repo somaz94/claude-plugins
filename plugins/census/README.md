@@ -59,6 +59,8 @@ Grades every item by how tightly it is bound to one machine.
 
 Markers are **derived, never hardcoded** — from `$USER`, from the directory names you invented to organize repos, and from the git remotes of the repos being scanned. On a public forge the account name identifies its owner; on a self-hosted one the "owner" is just a group name and is often a generic word, so the hostname is taken instead. That is what lets the same check flag someone else's identifiers instead of yours.
 
+Each repo's own name is also a marker, but **only within that repo**. A repo-scoped agent usually names its repo by a path relative to it — `Reviews changes inside acme-platform/storage/` — which carries no machine-wide identifier and would otherwise grade as perfectly portable while being one of the least portable items there is. Applied globally a repo called `docs` would match prose everywhere; scoped to its own repo, a match means what it says.
+
 The grade comes from **where** a marker lands, not how many there are:
 
 | Tier | Rule | Remedy |
@@ -70,6 +72,8 @@ The grade comes from **where** a marker lands, not how many there are:
 The frontmatter case is the important one. A `description` naming a specific repo is what Claude routes on, so changing it changes *when the item fires*. That is a rewrite, not a setting.
 
 A low portable count is the normal result for mature personal configuration and is not a defect — it means those items were written for a real environment rather than an imagined general one.
+
+> **Blind spot: named infrastructure.** Markers come from remotes and roots, so nothing supplies the name of a cluster, environment or project codename. An item bound to `prod-eu-1` rather than to a repo will still come back 🟢. Read the 🟢 list before acting on it, and put any such string in `portability.markers`.
 
 > **Not a secret scanner.** This answers "would this work for someone else?", not "would this leak something?". A repo layout name is unportable and harmless; a password is a leak and perfectly portable. If you are about to publish, you need both checks.
 
