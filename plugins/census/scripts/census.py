@@ -346,6 +346,7 @@ def _pair_for(path: Path, mirror_root: Path) -> dict[str, Any] | None:
         "file": str(path),
         "exists": True,
         "mirrorDir": str(mirror_root),
+        "digest": hashlib.sha256(text.encode("utf-8")).hexdigest()[:16],
         **_structure(text),
     }
 
@@ -384,6 +385,11 @@ def _read_hooks(settings: Path, root: dict[str, Any], origin: str) -> list[dict[
                         "extraKeys": [],
                         "descriptionChars": 0,
                         "bodyChars": len(command),
+                        # The registration IS the hook here, so the command line
+                        # is what identifies it across mirrored settings.json.
+                        "digest": hashlib.sha256(
+                            f"{event}:{command}".encode("utf-8")
+                        ).hexdigest()[:16],
                         "pair": None,
                     }
                 )
@@ -582,16 +588,19 @@ def build_portability(graph: dict[str, Any], config: dict[str, Any]) -> dict[str
     markers = derive_markers(config, roots)
 
     graded: list[dict[str, Any]] = []
-    for item in graph["items"]:
-        if item["kind"] == "hook":
-            continue  # a hook is a settings.json registration, not a shareable unit
+    # Graded per ASSET, not per file: identical copies in a mirrored repo pair
+    # score identically, and grading both would double every tier population.
+    for item in _collapse_copies(
+        i for i in graph["items"] if i["kind"] != "hook"
+    ):  # a hook is a settings.json registration, not a shareable unit
         hits = find_hits(Path(item["file"]), markers)
         graded.append(
             {
                 "name": item["name"],
                 "kind": item["kind"],
-                "origin": item["origin"],
+                "origins": item["origins"],
                 "file": item["file"],
+                "copies": item["files"],
                 "tier": grade(hits),
                 "hits": hits,
                 "markers": sorted({h["marker"] for h in hits}),
@@ -642,7 +651,7 @@ def render_portability(report: dict[str, Any], evidence: int) -> str:
         for item in sorted(group, key=lambda i: (-len(i["hits"]), i["name"])):
             markers = ", ".join(f"`{m}`" for m in item["markers"]) or "—"
             out.append(
-                f"| `{item['name']}` | {item['kind']} | {item['origin']} "
+                f"| `{item['name']}` | {item['kind']} | {', '.join(item['origins'])} "
                 f"| {len(item['hits'])} | {markers} |"
             )
         out.append("")
@@ -686,6 +695,7 @@ def build_drift(graph: dict[str, Any]) -> dict[str, Any]:
     findings += _duplicate_findings(items)
     findings += _pair_findings(items)
     findings += _frontmatter_findings(items)
+    findings = _merge_duplicate_findings(findings)
 
     counts = {SEV_HIGH: 0, SEV_MED: 0, SEV_LOW: 0}
     for finding in findings:
@@ -693,7 +703,12 @@ def build_drift(graph: dict[str, Any]) -> dict[str, Any]:
 
     order = {SEV_HIGH: 0, SEV_MED: 1, SEV_LOW: 2}
     findings.sort(key=lambda f: (order[f["severity"]], f["axis"], f["title"]))
-    return {"findings": findings, "counts": counts, "graded": len(items)}
+    return {
+        "findings": findings,
+        "counts": counts,
+        "graded": len({logical_key(i) for i in items}),
+        "files": len(items),
+    }
 
 
 def _duplicate_findings(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -843,9 +858,41 @@ def _pair_findings(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     ),
                     "detail": "; ".join(deviations) + " — one side gained or lost content.",
                     "refs": [item["file"], pair["file"]],
+                    # A mirrored repo pair holds the same source and the same
+                    # translation twice over, so the identical deviation is
+                    # found once per tree. It is one problem with one fix.
+                    "dedupe": (
+                        "pair-structure",
+                        item["kind"],
+                        item["name"],
+                        item["digest"],
+                        pair["digest"],
+                    ),
                 })
 
     return findings
+
+
+def _merge_duplicate_findings(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Fold findings that describe the same problem into one, unioning refs."""
+    merged: list[dict[str, Any]] = []
+    by_key: dict[tuple[Any, ...], dict[str, Any]] = {}
+
+    for finding in findings:
+        key = finding.pop("dedupe", None)
+        if key is None:
+            merged.append(finding)
+            continue
+        existing = by_key.get(key)
+        if existing is None:
+            by_key[key] = finding
+            merged.append(finding)
+        else:
+            for ref in finding["refs"]:
+                if ref not in existing["refs"]:
+                    existing["refs"].append(ref)
+
+    return merged
 
 
 def _frontmatter_findings(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -912,7 +959,8 @@ def render_drift(report: dict[str, Any], limit: int) -> str:
     counts = report["counts"]
     out = ["# Drift report", ""]
     out += [
-        f"- Checked: {report['graded']} items (hooks excluded — no frontmatter, no mirror)",
+        f"- Checked: {report['graded']} assets across {report['files']} files "
+        "(hooks excluded — no frontmatter, no mirror)",
         f"- 🔴 {counts[SEV_HIGH]}  ·  🟡 {counts[SEV_MED]}  ·  🟢 {counts[SEV_LOW]}",
         "",
     ]
@@ -965,39 +1013,126 @@ def build_graph(config: dict[str, Any], origin: str) -> dict[str, Any]:
     }
 
 
+def logical_key(item: dict[str, Any]) -> tuple[str, str, str]:
+    """Identity of an ASSET, as distinct from the file that holds it.
+
+    A mirrored repo pair stores byte-identical copies of one agent in two trees.
+    That is two files but one asset, and counting each file separately inflates
+    every total downstream — the item count, the tier populations, the ranking.
+    Same kind, same name, same bytes means the same thing was found twice.
+    """
+    return (item["kind"], item["name"], item["digest"])
+
+
 def summarize(items: list[dict[str, Any]]) -> dict[str, Any]:
     """Aggregate counts and the always-on context cost.
 
     Only ``name`` + ``description`` of agents, commands and skills is resident in
-    every session's system prompt; bodies load on invocation. That resident sum
-    is the number worth watching, and nothing else surfaces it.
+    every session's system prompt; bodies load on invocation.
+
+    That resident cost is reported PER SESSION, not as a grand total. A session
+    loads the global root plus the one repo it was started in — never all of
+    them — so summing every root describes a session nobody ever has. The
+    all-roots figure is kept, clearly labelled, because it still answers "how
+    much config have I accumulated".
     """
     by_kind: dict[str, int] = {}
-    resident = 0
+    unique_by_kind: dict[str, int] = {}
+    seen: set[tuple[str, str, str]] = set()
+
+    resident_all = 0
+    resident_global = 0
+    resident_by_repo: dict[str, int] = {}
+
     for item in items:
-        by_kind[item["kind"]] = by_kind.get(item["kind"], 0) + 1
-        if item["kind"] != "hook":
-            resident += item["descriptionChars"] + len(item["name"])
+        kind = item["kind"]
+        by_kind[kind] = by_kind.get(kind, 0) + 1
+        key = logical_key(item)
+        if key not in seen:
+            seen.add(key)
+            unique_by_kind[kind] = unique_by_kind.get(kind, 0) + 1
+
+        if kind == "hook":
+            continue
+        cost = item["descriptionChars"] + len(item["name"])
+        resident_all += cost
+        if item["scope"] == "global":
+            resident_global += cost
+        else:
+            resident_by_repo[item["origin"]] = resident_by_repo.get(item["origin"], 0) + cost
+
+    heaviest_repo, heaviest_cost = (
+        max(resident_by_repo.items(), key=lambda kv: kv[1]) if resident_by_repo else (None, 0)
+    )
 
     return {
         "total": len(items),
+        "uniqueTotal": len(seen),
         "byKind": by_kind,
-        "residentChars": resident,
-        "residentTokensApprox": resident // CHARS_PER_TOKEN,
+        "uniqueByKind": unique_by_kind,
+        "residentChars": resident_all,
+        "residentTokensApprox": resident_all // CHARS_PER_TOKEN,
+        "residentGlobalChars": resident_global,
+        "residentGlobalTokensApprox": resident_global // CHARS_PER_TOKEN,
+        "residentByRepo": dict(sorted(resident_by_repo.items(), key=lambda kv: -kv[1])),
+        "heaviestRepo": heaviest_repo,
+        "sessionWorstChars": resident_global + heaviest_cost,
+        "sessionWorstTokensApprox": (resident_global + heaviest_cost) // CHARS_PER_TOKEN,
     }
+
+
+def _collapse_copies(items: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Fold identical copies of one asset into a single entry.
+
+    The entry keeps every origin it was found under, so a mirrored pair reads as
+    one row naming both repos rather than two rows that look like two assets.
+    """
+    merged: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for item in items:
+        key = logical_key(item)
+        existing = merged.get(key)
+        if existing is None:
+            merged[key] = {**item, "origins": [item["origin"]], "files": [item["file"]]}
+        else:
+            if item["origin"] not in existing["origins"]:
+                existing["origins"].append(item["origin"])
+            existing["files"].append(item["file"])
+    for entry in merged.values():
+        entry["origins"].sort()
+    return list(merged.values())
 
 
 def render_catalog(graph: dict[str, Any], top: int) -> str:
     stats = graph["stats"]
     out: list[str] = ["# Claude config census", ""]
 
-    counts = ", ".join(f"{v} {k}s" for k, v in sorted(stats["byKind"].items()))
+    counts = ", ".join(f"{v} {k}s" for k, v in sorted(stats["uniqueByKind"].items()))
+    copies = stats["total"] - stats["uniqueTotal"]
+    item_line = f"- Assets: {stats['uniqueTotal']} ({counts})"
+    if copies:
+        plural = "is an identical copy" if copies == 1 else "are identical copies"
+        item_line += (
+            f" — found in {stats['total']} files; {copies} {plural} across mirrored repos"
+        )
+
+    session = [
+        f"- Per-session context: ~{stats['residentGlobalTokensApprox']:,} tokens from the "
+        "global root"
+    ]
+    if stats["heaviestRepo"]:
+        session.append(
+            f", rising to ~{stats['sessionWorstTokensApprox']:,} in the heaviest repo "
+            f"(`{stats['heaviestRepo']}`)"
+        )
+
     out += [
         f"- Config source: `{graph['configOrigin']}`",
         f"- Roots scanned: {len(graph['roots'])}",
-        f"- Items: {stats['total']} ({counts})",
-        f"- Always-on context: ~{stats['residentTokensApprox']:,} tokens "
-        f"({stats['residentChars']:,} chars of name + description)",
+        item_line,
+        "".join(session),
+        f"- Across all roots: ~{stats['residentTokensApprox']:,} tokens "
+        f"({stats['residentChars']:,} chars) — accumulated total, **not** a session cost: "
+        "a session loads the global root plus the one repo it started in",
         "",
     ]
 
@@ -1013,21 +1148,22 @@ def render_catalog(graph: dict[str, Any], top: int) -> str:
             continue
         out += ["<br/>", "", f"## {title}", ""]
         for kind in ("command", "agent", "skill", "hook"):
-            group = [i for i in scoped if i["kind"] == kind]
+            group = _collapse_copies(i for i in scoped if i["kind"] == kind)
             if not group:
                 continue
             out += [f"### {kind.capitalize()}s ({len(group)})", ""]
             out.append("| Name | Origin | Description |")
             out.append("|---|---|---|")
-            for item in sorted(group, key=lambda i: (i["origin"], i["name"])):
+            for item in sorted(group, key=lambda i: (i["origins"][0], i["name"])):
                 desc = item["frontmatter"].get("description", "")
                 out.append(
-                    f"| `{item['name']}` | {item['origin']} | {_truncate(desc, 110)} |"
+                    f"| `{item['name']}` | {', '.join(item['origins'])} "
+                    f"| {_truncate(desc, 110)} |"
                 )
             out.append("")
 
     ranked = sorted(
-        (i for i in graph["items"] if i["kind"] != "hook"),
+        _collapse_copies(i for i in graph["items"] if i["kind"] != "hook"),
         key=lambda i: i["descriptionChars"],
         reverse=True,
     )[:top]
@@ -1048,6 +1184,32 @@ def render_catalog(graph: dict[str, Any], top: int) -> str:
 def _truncate(text: str, limit: int) -> str:
     flat = " ".join(text.split()).replace("|", "\\|")
     return flat if len(flat) <= limit else flat[: limit - 1] + "…"
+
+
+def write_out(target: str, rendered: str, graph: dict[str, Any], summary: str) -> int:
+    """Write an ``--out`` report, refusing to land inside a scanned tree.
+
+    A report names every asset it found, so writing one back into a config root
+    would make the next run inventory its own output — and, in a repo that
+    publishes its `.claude/`, would commit real machine paths. The promise not
+    to write into a scanned tree only holds if it is enforced here.
+    """
+    path = Path(target).expanduser()
+    resolved = (Path.cwd() / path).resolve() if not path.is_absolute() else path.resolve()
+
+    for root in graph["roots"]:
+        root_path = Path(root["path"]).resolve()
+        if resolved == root_path or root_path in resolved.parents:
+            print(
+                f"refusing to write {resolved}: inside the scanned config root "
+                f"{root_path}. Choose a path outside it.",
+                file=sys.stderr,
+            )
+            return 2
+
+    resolved.write_text(rendered, encoding="utf-8")
+    print(f"wrote {resolved} ({summary})")
+    return 0
 
 
 # --------------------------------------------------------------------------
@@ -1116,10 +1278,10 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         rendered = render_portability(report, args.evidence)
         if args.out:
-            Path(args.out).write_text(rendered, encoding="utf-8")
-            print(f"wrote {args.out} ({sum(report['tiers'].values())} items graded)")
-        else:
-            sys.stdout.write(rendered)
+            return write_out(
+                args.out, rendered, graph, f"{sum(report['tiers'].values())} items graded"
+            )
+        sys.stdout.write(rendered)
         return 0
 
     if args.command == "drift":
@@ -1130,18 +1292,16 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         rendered = render_drift(report, args.limit)
         if args.out:
-            Path(args.out).write_text(rendered, encoding="utf-8")
-            print(f"wrote {args.out} ({len(report['findings'])} findings)")
-        else:
-            sys.stdout.write(rendered)
+            return write_out(
+                args.out, rendered, graph, f"{len(report['findings'])} findings"
+            )
+        sys.stdout.write(rendered)
         return 0
 
     rendered = render_catalog(graph, args.top)
     if args.out:
-        Path(args.out).write_text(rendered, encoding="utf-8")
-        print(f"wrote {args.out} ({graph['stats']['total']} items)")
-    else:
-        sys.stdout.write(rendered)
+        return write_out(args.out, rendered, graph, f"{graph['stats']['total']} items")
+    sys.stdout.write(rendered)
     return 0
 
 

@@ -53,11 +53,16 @@ If the run only found one root and the user clearly has more (they mention other
 
 Lead with the numbers the script printed, then add these four readings. Keep it short; the catalog itself carries the detail.
 
-**1. Context budget — the headline.** The `name` + `description` of every agent, command and skill is resident in *every* session's system prompt; bodies load only on invocation. The script reports that total and ranks the biggest contributors. This is the one number nothing else in the ecosystem surfaces (`claude plugin details` covers a single plugin, not your whole config).
+**1. Context budget — the headline.** The `name` + `description` of every agent, command and skill is resident in *every* session's system prompt; bodies load only on invocation. This is the one number nothing else in the ecosystem surfaces (`claude plugin details` covers a single plugin, not your whole config).
 
-Calibration: under ~5k tokens is unremarkable, ~10k is worth a trim pass, past ~25k a meaningful slice of every session is spent before the user types anything. Name the top offenders and say what a trim would buy — but recommend, never edit.
+The script reports it two ways, and the difference matters:
 
-**2. Duplicate names.** If a name appears under more than one origin, the loser is silently shadowed. Say so and hand off to `/census:drift`, which owns that diagnosis — do not attempt the comparison here.
+- **Per-session** — the global root, plus the one repo the session started in. This is what a session actually pays, and it is the number to calibrate against. The report also names the heaviest repo, which is the worst case.
+- **Across all roots** — everything found anywhere. Nobody ever pays this in one session; it answers "how much config have I accumulated", not "what is this costing me". Never quote it as a session cost.
+
+Calibration, against the **per-session** figure: under ~5k tokens is unremarkable, ~10k is worth a trim pass, past ~25k a meaningful slice of every session is spent before the user types anything. Name the top offenders and say what a trim would buy — but recommend, never edit.
+
+**2. Duplicate names.** Byte-identical copies of one asset across mirrored repos are already folded into a single row naming both origins — that is a mirror working, not a finding. What is worth surfacing is a name that resolves to *different* content depending on where the session started; the loser is silently shadowed. Say so and hand off to `/census:drift`, which owns that diagnosis — do not attempt the comparison here.
 
 **3. Skipped repos.** The script lists what it excluded and why. Scan for anything skipped by accident, especially a repo excluded by pattern that the user actually wanted counted.
 

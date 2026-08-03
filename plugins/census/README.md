@@ -25,11 +25,16 @@ Once you have a user-level `~/.claude/` plus a `.claude/` directory in every rep
 
 Collects every agent, command, skill and hook across all configured roots, then reports an inventory grouped by global versus repo-scoped.
 
-Its most useful output is the one nothing else surfaces: **always-on context cost**. The `name` and `description` of every agent, command and skill is resident in *every* session's system prompt — bodies load only on invocation. `claude plugin details` reports that for a single plugin; nothing reports it for your whole configuration. `census` totals it and ranks the biggest contributors.
+Its most useful output is the one nothing else surfaces: **always-on context cost**. The `name` and `description` of every agent, command and skill is resident in *every* session's system prompt — bodies load only on invocation. `claude plugin details` reports that for a single plugin; nothing reports it for your whole configuration.
+
+The cost is reported **per session**, because that is the only version of it anyone pays. A session loads the global root plus the one repo it started in — never every repo at once — so summing all roots describes a session that does not exist. The accumulated total is still shown, labelled as what it is.
+
+Byte-identical copies of one asset across mirrored repos count once. Two files, one thing.
 
 ```
-- Items: 166 (109 agents, 44 commands, 7 hooks, 6 skills)
-- Always-on context: ~30,115 tokens (120,460 chars of name + description)
+- Assets: 126 (80 agents, 34 commands, 7 hooks, 5 skills) — found in 166 files; 40 are identical copies across mirrored repos
+- Per-session context: ~10,340 tokens from the global root, rising to ~16,511 in the heaviest repo
+- Across all roots: ~30,115 tokens — accumulated total, not a session cost
 ```
 
 <br/>
