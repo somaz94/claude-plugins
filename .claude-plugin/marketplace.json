@@ -12,7 +12,7 @@
     {
       "name": "census",
       "source": "./census",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "description": "Read-only audit of scattered .claude/ configs — catalog what you have, detect drift, and triage which items are portable enough to share with a team.",
       "category": "productivity",
       "license": "MIT",

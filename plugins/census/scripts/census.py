@@ -14,12 +14,14 @@ Subcommands:
   scan         emit the normalized asset graph as JSON
   catalog      render a Markdown catalog of everything found
   portability  grade each item by how tightly it is bound to this machine
+  drift        report duplicates, translation-pair gaps and frontmatter defects
 """
 
 from __future__ import annotations
 
 import argparse
 import fnmatch
+import hashlib
 import json
 import os
 import re
@@ -263,7 +265,9 @@ def collect_items(roots: list[dict[str, Any]], config: dict[str, Any]) -> list[d
             for path in sorted((base / subdir).glob("*.md")):
                 item = _read_item(path, kind, root, origin)
                 mirror = pairs.get(subdir)
-                item["pair"] = _pair_for(base / mirror / path.name) if mirror else None
+                item["pair"] = (
+                    _pair_for(base / mirror / path.name, base / mirror) if mirror else None
+                )
                 items.append(item)
 
         for subdir, kind in FOLDER_KINDS.items():
@@ -271,7 +275,9 @@ def collect_items(roots: list[dict[str, Any]], config: dict[str, Any]) -> list[d
                 item = _read_item(skill_md, kind, root, origin, name=skill_md.parent.name)
                 mirror = pairs.get(subdir)
                 if mirror:
-                    item["pair"] = _pair_for(base / mirror / skill_md.parent.name / "SKILL.md")
+                    item["pair"] = _pair_for(
+                        base / mirror / skill_md.parent.name / "SKILL.md", base / mirror
+                    )
                 else:
                     item["pair"] = None
                 items.append(item)
@@ -298,6 +304,7 @@ def _read_item(
         "kind": kind,
         "name": resolved,
         "declaredName": declared or None,
+        "expectedName": name or path.stem,
         "file": str(path),
         "scope": root["scope"],
         "origin": origin,
@@ -305,20 +312,41 @@ def _read_item(
         "extraKeys": sorted(k for k in fields if k not in KNOWN_KEYS),
         "descriptionChars": len(description),
         "bodyChars": len(text) - offset,
+        "digest": hashlib.sha256(text.encode("utf-8")).hexdigest()[:16],
+        "structure": _structure(text),
         "pair": None,
     }
 
 
-def _pair_for(path: Path) -> dict[str, Any] | None:
+def _structure(text: str) -> dict[str, int]:
+    """Coarse shape of a Markdown document.
+
+    Used to compare a document against its translation without reading either:
+    a mirror that lost a section, a code block or a table row has drifted even
+    when both files still look plausible on their own.
+    """
+    return {
+        "headings": len(re.findall(r"^#{1,6} ", text, re.M)),
+        "codeBlocks": text.count("```") // 2,
+        "tableRows": len(re.findall(r"^\|", text, re.M)),
+    }
+
+
+def _pair_for(path: Path, mirror_root: Path) -> dict[str, Any] | None:
+    """Describe a translation mirror.
+
+    `mirrorDir` is the mirror's own directory PATH, not just its name: house
+    style is set per directory, and the same name (`agents-ko`) is written
+    differently in different trees.
+    """
     if not path.is_file():
-        return {"file": str(path), "exists": False}
+        return {"file": str(path), "exists": False, "mirrorDir": str(mirror_root)}
     text = path.read_text(encoding="utf-8", errors="replace")
     return {
         "file": str(path),
         "exists": True,
-        "headings": len(re.findall(r"^#{1,6} ", text, re.M)),
-        "codeBlocks": text.count("```") // 2,
-        "tableRows": len(re.findall(r"^\|", text, re.M)),
+        "mirrorDir": str(mirror_root),
+        **_structure(text),
     }
 
 
@@ -635,6 +663,290 @@ def render_portability(report: dict[str, Any], evidence: int) -> str:
 
 
 # --------------------------------------------------------------------------
+# drift
+# --------------------------------------------------------------------------
+
+SEV_HIGH, SEV_MED, SEV_LOW = "high", "medium", "low"
+
+
+def _normalize_key(key: str) -> str:
+    return re.sub(r"[-_\s]", "", key).lower()
+
+
+def build_drift(graph: dict[str, Any]) -> dict[str, Any]:
+    """Find the disagreements a catalog alone cannot show.
+
+    Three axes: the same name defined more than once, a translation mirror that
+    no longer matches its source, and frontmatter that would misroute or fail
+    to route at all.
+    """
+    items = [i for i in graph["items"] if i["kind"] != "hook"]
+    findings: list[dict[str, Any]] = []
+
+    findings += _duplicate_findings(items)
+    findings += _pair_findings(items)
+    findings += _frontmatter_findings(items)
+
+    counts = {SEV_HIGH: 0, SEV_MED: 0, SEV_LOW: 0}
+    for finding in findings:
+        counts[finding["severity"]] += 1
+
+    order = {SEV_HIGH: 0, SEV_MED: 1, SEV_LOW: 2}
+    findings.sort(key=lambda f: (order[f["severity"]], f["axis"], f["title"]))
+    return {"findings": findings, "counts": counts, "graded": len(items)}
+
+
+def _duplicate_findings(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One name defined in several places.
+
+    Severity is decided by whether the copies AGREE, not by the fact that they
+    are duplicated: a mirrored repo pair holding byte-identical copies is the
+    intended state, while the same name resolving to different content is what
+    silently changes behavior depending on where you are.
+    """
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for item in items:
+        groups.setdefault((item["kind"], item["name"]), []).append(item)
+
+    findings = []
+    for (kind, name), group in sorted(groups.items()):
+        if len(group) < 2:
+            continue
+        origins = ", ".join(sorted(i["origin"] for i in group))
+        refs = sorted(i["file"] for i in group)
+        agree = len({i["digest"] for i in group}) == 1
+        shadowing = {i["scope"] for i in group} == {"global", "repo"}
+
+        if agree:
+            findings.append({
+                "severity": SEV_LOW,
+                "axis": "duplicates",
+                "code": "mirror-consistent",
+                "title": f"`{name}` ({kind}) defined in {len(group)} places, all identical",
+                "detail": f"Origins: {origins}. Copies agree byte for byte — the intended mirror state.",
+                "refs": refs,
+            })
+        elif shadowing:
+            findings.append({
+                "severity": SEV_HIGH,
+                "axis": "duplicates",
+                "code": "shadowed",
+                "title": f"`{name}` ({kind}) exists at both user and project level with different content",
+                "detail": (
+                    f"Origins: {origins}. A project-level definition overrides the user-level one "
+                    "inside that repo, so the same name behaves differently depending on where "
+                    "the session is started — and nothing reports which copy won."
+                ),
+                "refs": refs,
+            })
+        else:
+            findings.append({
+                "severity": SEV_MED,
+                "axis": "duplicates",
+                "code": "mirror-drift",
+                "title": f"`{name}` ({kind}) defined in {len(group)} places that disagree",
+                "detail": (
+                    f"Origins: {origins}. These look like a mirrored pair whose copies have "
+                    "diverged; whichever one is the source of truth, the other is stale."
+                ),
+                "refs": refs,
+            })
+    return findings
+
+
+METRICS = ("headings", "codeBlocks", "tableRows")
+
+# Below this many pairs there is not enough evidence to tell a house style from
+# an accident, so comparison falls back to requiring an exact match.
+CALIBRATION_MIN = 3
+
+
+def _pair_findings(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Translation mirrors that are absent or no longer shaped like the source.
+
+    A mirror usually differs from its source by a CONSTANT: a house style may
+    prepend a "this is a translation" banner, or show the frontmatter as a
+    fenced block so the file is not loaded as a real definition. Comparing
+    shapes naively reports that convention once per file and buries the real
+    drift underneath.
+
+    So the offset is calibrated per mirror DIRECTORY — house style is set where
+    the files are authored, and the same directory name can be written
+    differently in different trees. Whatever delta the majority of a directory's
+    pairs share is its convention, and only files that deviate from their own
+    siblings are findings. This needs no knowledge of any particular house
+    style, so it works the same for a convention this tool has never seen.
+    """
+    findings: list[dict[str, Any]] = []
+    comparisons: dict[str, list[dict[str, Any]]] = {}
+
+    for item in items:
+        pair = item.get("pair")
+        if not pair:
+            continue
+        if not pair["exists"]:
+            findings.append({
+                "severity": SEV_HIGH,
+                "axis": "pairs",
+                "code": "pair-missing",
+                "title": f"`{item['name']}` ({item['kind']}) has no translation mirror",
+                "detail": f"Expected at {pair['file']}.",
+                "refs": [item["file"]],
+            })
+            continue
+        comparisons.setdefault(pair["mirrorDir"], []).append({
+            "item": item,
+            "pair": pair,
+            "deltas": {m: pair[m] - item["structure"][m] for m in METRICS},
+        })
+
+    for mirror_dir, group in sorted(comparisons.items()):
+        baseline = {m: 0 for m in METRICS}
+        if len(group) >= CALIBRATION_MIN:
+            for metric in METRICS:
+                values = [c["deltas"][metric] for c in group]
+                # Most common delta wins; a tie resolves toward 0 so an evenly
+                # split directory is not declared to have a convention.
+                baseline[metric] = sorted(set(values), key=lambda v: (-values.count(v), abs(v)))[0]
+
+        described = ", ".join(
+            f"{m} {baseline[m]:+d}" for m in METRICS if baseline[m]
+        )
+        if described:
+            findings.append({
+                "severity": SEV_LOW,
+                "axis": "pairs",
+                "code": "pair-convention",
+                "title": f"`{mirror_dir}/` mirrors differ from their source by a constant",
+                "detail": (
+                    f"Across {len(group)} pairs the usual offset is {described}. Treated as "
+                    "house style and calibrated away; only pairs that deviate are reported."
+                ),
+                "refs": [],
+            })
+
+        for comparison in group:
+            deviations = [
+                f"{m}: {comparison['deltas'][m]:+d} where this mirror usually has "
+                f"{baseline[m]:+d}"
+                for m in METRICS
+                if comparison["deltas"][m] != baseline[m]
+            ]
+            if deviations:
+                item, pair = comparison["item"], comparison["pair"]
+                findings.append({
+                    "severity": SEV_MED,
+                    "axis": "pairs",
+                    "code": "pair-structure",
+                    "title": (
+                        f"`{item['name']}` ({item['kind']}) deviates from its mirror convention"
+                    ),
+                    "detail": "; ".join(deviations) + " — one side gained or lost content.",
+                    "refs": [item["file"], pair["file"]],
+                })
+
+    return findings
+
+
+def _frontmatter_findings(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Frontmatter that would misroute, or fail to route at all."""
+    known = {_normalize_key(k) for k in KNOWN_KEYS}
+    findings = []
+
+    for item in items:
+        if not item["frontmatter"].get("description"):
+            findings.append({
+                "severity": SEV_HIGH,
+                "axis": "frontmatter",
+                "code": "no-description",
+                "title": f"`{item['name']}` ({item['kind']}) declares no description",
+                "detail": (
+                    "The description is the only signal Claude has for when to reach for this "
+                    "item, so without one it is effectively unreachable unless named explicitly."
+                ),
+                "refs": [item["file"]],
+            })
+
+        declared = item.get("declaredName")
+        expected = item.get("expectedName")
+        if declared and expected and declared != expected:
+            findings.append({
+                "severity": SEV_MED,
+                "axis": "frontmatter",
+                "code": "name-mismatch",
+                "title": f"`{expected}` declares the name `{declared}`",
+                "detail": (
+                    "The file or folder name is what the item is invoked by; a differing "
+                    "`name:` field misleads anyone reading the frontmatter."
+                ),
+                "refs": [item["file"]],
+            })
+
+        for key in item.get("extraKeys", []):
+            normalized = _normalize_key(key)
+            if normalized in known:
+                findings.append({
+                    "severity": SEV_MED,
+                    "axis": "frontmatter",
+                    "code": "key-typo",
+                    "title": f"`{item['name']}` ({item['kind']}) uses `{key}`",
+                    "detail": (
+                        f"Normalizes to a known key but is not spelled like one, so it is read "
+                        "as an unknown field and silently ignored."
+                    ),
+                    "refs": [item["file"]],
+                })
+            else:
+                findings.append({
+                    "severity": SEV_LOW,
+                    "axis": "frontmatter",
+                    "code": "unknown-key",
+                    "title": f"`{item['name']}` ({item['kind']}) declares `{key}`",
+                    "detail": "Not a key census knows about; harmless if intentional.",
+                    "refs": [item["file"]],
+                })
+    return findings
+
+
+def render_drift(report: dict[str, Any], limit: int) -> str:
+    counts = report["counts"]
+    out = ["# Drift report", ""]
+    out += [
+        f"- Checked: {report['graded']} items (hooks excluded — no frontmatter, no mirror)",
+        f"- 🔴 {counts[SEV_HIGH]}  ·  🟡 {counts[SEV_MED]}  ·  🟢 {counts[SEV_LOW]}",
+        "",
+    ]
+
+    if not report["findings"]:
+        out.append("No drift found.")
+        return "\n".join(out)
+
+    for severity, emoji, heading in (
+        (SEV_HIGH, "🔴", "Behavior differs or routing is broken"),
+        (SEV_MED, "🟡", "Copies disagree or frontmatter misleads"),
+        (SEV_LOW, "🟢", "Informational"),
+    ):
+        group = [f for f in report["findings"] if f["severity"] == severity]
+        if not group:
+            continue
+        out += ["<br/>", "", f"## {emoji} {heading} ({len(group)})", ""]
+        shown = group if limit <= 0 else group[:limit]
+        for finding in shown:
+            out.append(f"**[{finding['code']}]** {finding['title']}")
+            out.append("")
+            out.append(f"{finding['detail']}")
+            out.append("")
+            for ref in finding["refs"]:
+                out.append(f"- `{ref}`")
+            out.append("")
+        if len(group) > len(shown):
+            out.append(f"_…and {len(group) - len(shown)} more (raise `--limit` to see them)._")
+            out.append("")
+
+    return "\n".join(out)
+
+
+# --------------------------------------------------------------------------
 # reporting
 # --------------------------------------------------------------------------
 
@@ -763,6 +1075,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     port.add_argument("--json", action="store_true", help="emit the raw report as JSON")
 
+    drift = sub.add_parser("drift", help="report duplicates, pair gaps and frontmatter defects")
+    drift.add_argument("--out", help="write to this file instead of stdout")
+    drift.add_argument(
+        "--limit", type=int, default=15, help="findings shown per severity (0 for all; default: 15)"
+    )
+    drift.add_argument("--json", action="store_true", help="emit the raw report as JSON")
+
     args = parser.parse_args(argv)
     config, origin = load_config(args.config)
     graph = build_graph(config, origin)
@@ -782,6 +1101,20 @@ def main(argv: list[str] | None = None) -> int:
         if args.out:
             Path(args.out).write_text(rendered, encoding="utf-8")
             print(f"wrote {args.out} ({sum(report['tiers'].values())} items graded)")
+        else:
+            sys.stdout.write(rendered)
+        return 0
+
+    if args.command == "drift":
+        report = build_drift(graph)
+        if args.json:
+            json.dump(report, sys.stdout, indent=2, ensure_ascii=False)
+            sys.stdout.write("\n")
+            return 0
+        rendered = render_drift(report, args.limit)
+        if args.out:
+            Path(args.out).write_text(rendered, encoding="utf-8")
+            print(f"wrote {args.out} ({len(report['findings'])} findings)")
         else:
             sys.stdout.write(rendered)
         return 0
