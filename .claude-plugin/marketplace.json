@@ -1,0 +1,31 @@
+{
+  "name": "somaz94",
+  "owner": {
+    "name": "somaz94",
+    "url": "https://github.com/somaz94"
+  },
+  "metadata": {
+    "description": "Plugins for auditing and operating Claude Code configuration at scale",
+    "pluginRoot": "./plugins"
+  },
+  "plugins": [
+    {
+      "name": "census",
+      "source": "./census",
+      "version": "0.1.0",
+      "description": "Read-only audit of scattered .claude/ configs — catalog what you have, detect drift, and triage which items are portable enough to share with a team.",
+      "category": "productivity",
+      "license": "MIT",
+      "homepage": "https://github.com/somaz94/claude-plugins/tree/main/plugins/census",
+      "repository": "https://github.com/somaz94/claude-plugins",
+      "keywords": [
+        "config",
+        "audit",
+        "inventory",
+        "drift",
+        "context-budget",
+        "portability"
+      ]
+    }
+  ]
+}
