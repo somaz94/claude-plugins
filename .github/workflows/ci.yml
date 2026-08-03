@@ -6,6 +6,10 @@ name: CI
 on:
   push:
     branches: [main]
+    # Tag builds are the only place the "Tag matches shipped version" check can
+    # run. Without this the check is dead code — which is how a v0.1.0 that
+    # nobody could install got published.
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -161,6 +165,69 @@ jobs:
             fi
           done
           echo "PASS: census discovered the planted fixture"
+
+      - name: census refuses to write into a scanned tree
+        # The README promises the tool never writes into a tree it scans. That
+        # promise is only real if the refusal is exercised.
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp -d)"
+          mkdir -p "$fixture/home/.claude/agents"
+          printf -- '---\nname: alpha\ndescription: an agent\n---\nbody\n' \
+            > "$fixture/home/.claude/agents/alpha.md"
+          cat > "$fixture/census.json" <<EOF
+          {
+            "userRoots": ["$fixture/home/.claude"],
+            "projectRoots": [],
+            "excludeOssForks": false
+          }
+          EOF
+
+          if python3 plugins/census/scripts/census.py --config "$fixture/census.json" \
+               catalog --out "$fixture/home/.claude/CENSUS.md"; then
+            echo "FAIL: wrote a report inside the scanned config root"
+            exit 1
+          fi
+          if [ -e "$fixture/home/.claude/CENSUS.md" ]; then
+            echo "FAIL: refused but the file exists anyway"
+            exit 1
+          fi
+          python3 plugins/census/scripts/census.py --config "$fixture/census.json" \
+            catalog --out "$fixture/outside.md"
+          test -s "$fixture/outside.md"
+          echo "PASS: refused inside the root, allowed outside it"
+
+      - name: census counts a mirrored copy once
+        # Two repos holding byte-identical copies of one agent are one asset.
+        # Counting the files instead inflates every total the tool reports.
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp -d)"
+          mkdir -p "$fixture/a/.claude/agents" "$fixture/b/.claude/agents"
+          printf -- '---\nname: shared\ndescription: mirrored agent\n---\nbody\n' \
+            | tee "$fixture/a/.claude/agents/shared.md" \
+            > "$fixture/b/.claude/agents/shared.md"
+          printf -- '---\nname: solo\ndescription: only here\n---\nbody\n' \
+            > "$fixture/a/.claude/agents/solo.md"
+          cat > "$fixture/census.json" <<EOF
+          {
+            "userRoots": [],
+            "projectRoots": ["$fixture/a", "$fixture/b"],
+            "excludeOssForks": false
+          }
+          EOF
+
+          out="$(python3 plugins/census/scripts/census.py --config "$fixture/census.json" catalog)"
+          echo "$out"
+          if ! grep -qF -- "Assets: 2 (2 agents)" <<<"$out"; then
+            echo "FAIL: expected 2 distinct assets from 3 files"
+            exit 1
+          fi
+          if ! grep -qF -- "found in 3 files" <<<"$out"; then
+            echo "FAIL: expected the file count to still be reported"
+            exit 1
+          fi
+          echo "PASS: mirrored copy collapsed into one asset"
 
   ci-result:
     name: CI Result
