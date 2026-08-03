@@ -25,6 +25,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -351,11 +352,40 @@ def _pair_for(path: Path, mirror_root: Path) -> dict[str, Any] | None:
     }
 
 
+def _hook_script(command: str, base: Path) -> Path | None:
+    """Resolve the script a hook registration runs, when it runs one.
+
+    A hook's real content is not the registration — it is the file the
+    registration points at. Without resolving it, everything a hook actually
+    does is invisible: the hardcoded paths inside it, and whether it is even
+    there. A command may also be inline shell with no script at all, which is
+    why this can return None.
+    """
+    if not command.strip():
+        return None
+    try:
+        token = shlex.split(command)[0]
+    except ValueError:
+        token = command.split()[0]
+
+    home = str(Path.home())
+    for variable in ("CLAUDE_PROJECT_DIR", "CLAUDE_PLUGIN_ROOT"):
+        for form in (f"${{{variable}}}", f"${variable}"):
+            token = token.replace(form, str(base.parent))
+    token = token.replace("$HOME", home).replace("${HOME}", home)
+
+    path = Path(os.path.expanduser(token))
+    if not path.is_absolute():
+        path = base.parent / path
+    return path
+
+
 def _read_hooks(settings: Path, root: dict[str, Any], origin: str) -> list[dict[str, Any]]:
     """Extract hook registrations from a settings.json.
 
     Hooks carry no frontmatter and no description, so they contribute nothing to
-    the always-on context budget — they are cataloged for completeness only.
+    the always-on context budget. They are still resolved to the script they
+    run, because that script is where a hook's machine-specific coupling lives.
     """
     if not settings.is_file():
         return []
@@ -370,12 +400,16 @@ def _read_hooks(settings: Path, root: dict[str, Any], origin: str) -> list[dict[
         for entry in entries:
             for hook in entry.get("hooks", []):
                 command = hook.get("command", "")
+                script = _hook_script(command, root["path"])
                 found.append(
                     {
                         "kind": "hook",
                         "name": Path(command.split()[0]).name if command else event,
                         "declaredName": None,
                         "file": str(settings),
+                        "script": str(script) if script else None,
+                        "scriptExists": bool(script and script.is_file()),
+                        "command": command,
                         "scope": root["scope"],
                         "origin": origin,
                         "frontmatter": {
@@ -542,16 +576,57 @@ def _remote_identities(repo: Path) -> list[tuple[str | None, str | None]]:
     return identities
 
 
-def find_hits(path: Path, markers: list[dict[str, str]]) -> list[dict[str, Any]]:
+def _command_hits(
+    command: str, file: str, markers: list[dict[str, str]]
+) -> list[dict[str, Any]]:
+    """Markers inside a hook's registered command string."""
+    hits = []
+    lowered = command.lower()
+    for marker in markers:
+        if marker["value"].lower() in lowered:
+            hits.append({
+                "line": 1,
+                "marker": marker["value"],
+                "category": marker["category"],
+                "placement": "code",
+                "text": command.strip()[:160],
+                "file": file,
+            })
+    return hits
+
+
+def find_hits(
+    path: Path, markers: list[dict[str, str]], markdown: bool = True
+) -> list[dict[str, Any]]:
     """Locate every marker occurrence, recording WHERE it lands.
 
     Placement is what separates a swappable literal from a baked-in assumption,
     so each hit is classified as frontmatter / code / prose.
+
+    With ``markdown=False`` the source is a script, not a document: there is no
+    frontmatter and no fence, and every line is code. A hardcoded path there is
+    always a literal that could be lifted into a variable.
     """
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return []
+
+    if not markdown:
+        hits: list[dict[str, Any]] = []
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            lowered = line.lower()
+            for marker in markers:
+                if marker["value"].lower() in lowered:
+                    hits.append({
+                        "line": lineno,
+                        "marker": marker["value"],
+                        "category": marker["category"],
+                        "placement": "code",
+                        "text": line.strip()[:160],
+                        "file": str(path),
+                    })
+        return hits
 
     _, offset = parse_frontmatter(text)
     frontmatter_lines = text[:offset].count("\n") if offset else 0
@@ -628,18 +703,31 @@ def build_portability(graph: dict[str, Any], config: dict[str, Any]) -> dict[str
 
     # Graded per ASSET, not per file: identical copies in a mirrored repo pair
     # score identically, and grading both would double every tier population.
-    for item in _collapse_copies(
-        i for i in graph["items"] if i["kind"] != "hook"
-    ):  # a hook is a settings.json registration, not a shareable unit
+    for item in _collapse_copies(graph["items"]):
         scoped = origin_markers(item["origins"], global_values)
         scoped_seen.update(m["value"] for m in scoped)
-        hits = find_hits(Path(item["file"]), markers + scoped)
+        every = markers + scoped
+
+        if item["kind"] == "hook":
+            # A hook's coupling lives in two places: the command recorded in
+            # settings.json, and the script it points at. Neither is Markdown,
+            # so there is no frontmatter to land in and the tier tops out at
+            # PARAMETERIZABLE — a path in a script is a literal you can lift
+            # into a variable, never a routing description you would rewrite.
+            hits = _command_hits(item.get("command", ""), item["file"], every)
+            if item.get("scriptExists"):
+                hits += find_hits(Path(item["script"]), every, markdown=False)
+            target = item.get("script") or item["file"]
+        else:
+            hits = find_hits(Path(item["file"]), every)
+            target = item["file"]
+
         graded.append(
             {
                 "name": item["name"],
                 "kind": item["kind"],
                 "origins": item["origins"],
-                "file": item["file"],
+                "file": target,
                 "copies": item["files"],
                 "tier": grade(hits),
                 "hits": hits,
@@ -666,8 +754,8 @@ def render_portability(report: dict[str, Any], evidence: int) -> str:
 
     shareable = tiers[TIER_PORTABLE]
     out += [
-        f"- Graded: {total} items (hooks excluded — a hook is a settings.json "
-        "registration, not a shareable unit)",
+        f"- Graded: {total} items — agents, commands, skills, and hooks "
+        "(graded through the script they run, where their coupling actually lives)",
         f"- 🟢 {TIER_PORTABLE}: **{shareable}**  ·  "
         f"🟡 {TIER_PARAM}: **{tiers[TIER_PARAM]}**  ·  "
         f"🔴 {TIER_PERSONAL}: **{tiers[TIER_PERSONAL]}**",
@@ -717,8 +805,10 @@ def render_portability(report: dict[str, Any], evidence: int) -> str:
             for item in sorted(group, key=lambda i: (-len(i["hits"]), i["name"])):
                 out.append(f"**`{item['name']}`** — {item['file']}")
                 for hit in item["hits"][:evidence]:
+                    # A hook's hits span two files (settings.json and the script
+                    # it runs), so each hit carries its own source.
                     out.append(
-                        f"- `{item['file']}:{hit['line']}` "
+                        f"- `{hit.get('file', item['file'])}:{hit['line']}` "
                         f"[{hit['placement']}/{hit['category']}] `{hit['marker']}` — "
                         f"{_truncate(hit['text'], 100)}"
                     )
@@ -746,11 +836,13 @@ def build_drift(graph: dict[str, Any]) -> dict[str, Any]:
     to route at all.
     """
     items = [i for i in graph["items"] if i["kind"] != "hook"]
+    hooks = [i for i in graph["items"] if i["kind"] == "hook"]
     findings: list[dict[str, Any]] = []
 
     findings += _duplicate_findings(items)
     findings += _pair_findings(items)
     findings += _frontmatter_findings(items)
+    findings += _hook_findings(hooks)
     findings = _merge_duplicate_findings(findings)
 
     counts = {SEV_HIGH: 0, SEV_MED: 0, SEV_LOW: 0}
@@ -764,6 +856,7 @@ def build_drift(graph: dict[str, Any]) -> dict[str, Any]:
         "counts": counts,
         "graded": len({logical_key(i) for i in items}),
         "files": len(items),
+        "hooks": len({logical_key(h) for h in hooks}),
     }
 
 
@@ -929,6 +1022,36 @@ def _pair_findings(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return findings
 
 
+def _hook_findings(hooks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Hook registrations that point at nothing, or at a file that cannot run.
+
+    The other axes do not apply to hooks — no frontmatter, no translation
+    mirror — but a hook has a failure mode the others do not: it is a pointer,
+    and the thing it points at can be missing. Nothing in Claude Code reports a
+    hook whose script is absent; it simply does not fire, and the guard the user
+    believes is protecting them is not there.
+    """
+    findings = []
+    for hook in hooks:
+        script = hook.get("script")
+        if not script or hook.get("scriptExists"):
+            continue
+        event = hook["frontmatter"].get("event", "?")
+        findings.append({
+            "severity": SEV_HIGH,
+            "axis": "hooks",
+            "code": "hook-missing-script",
+            "title": f"`{hook['name']}` ({event}) is registered but its script is missing",
+            "detail": (
+                f"Expected at {script}. The registration stays in settings.json, so the hook "
+                "looks configured while doing nothing on every matching event."
+            ),
+            "refs": [hook["file"]],
+            "dedupe": ("hook-missing-script", hook["name"], event, script),
+        })
+    return findings
+
+
 def _merge_duplicate_findings(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Fold findings that describe the same problem into one, unioning refs."""
     merged: list[dict[str, Any]] = []
@@ -1015,8 +1138,9 @@ def render_drift(report: dict[str, Any], limit: int) -> str:
     counts = report["counts"]
     out = ["# Drift report", ""]
     out += [
-        f"- Checked: {report['graded']} assets across {report['files']} files "
-        "(hooks excluded — no frontmatter, no mirror)",
+        f"- Checked: {report['graded']} assets across {report['files']} files, "
+        f"plus {report['hooks']} hook registrations (checked only for a missing "
+        "script — hooks have no frontmatter and no mirror)",
         f"- 🔴 {counts[SEV_HIGH]}  ·  🟡 {counts[SEV_MED]}  ·  🟢 {counts[SEV_LOW]}",
         "",
     ]
@@ -1137,6 +1261,27 @@ def summarize(items: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _describe(item: dict[str, Any]) -> str:
+    """What to show in the catalog's description column.
+
+    A hook has no frontmatter description, which used to leave its row blank —
+    the one kind of item the catalog said nothing about. Its event, matcher and
+    target are the equivalent facts, so they stand in.
+    """
+    if item["kind"] != "hook":
+        return item["frontmatter"].get("description", "")
+
+    front = item["frontmatter"]
+    parts = [f"{front.get('event', '?')} on {front.get('matcher', '*')}"]
+    script = item.get("script")
+    if script and not item.get("scriptExists"):
+        parts.append(f"SCRIPT MISSING: {script}")
+    elif script and Path(script).name != item["name"]:
+        # The name is normally the script's basename; only say it when it is not.
+        parts.append(f"runs {Path(script).name}")
+    return " — ".join(parts)
+
+
 def _collapse_copies(items: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     """Fold identical copies of one asset into a single entry.
 
@@ -1211,10 +1356,9 @@ def render_catalog(graph: dict[str, Any], top: int) -> str:
             out.append("| Name | Origin | Description |")
             out.append("|---|---|---|")
             for item in sorted(group, key=lambda i: (i["origins"][0], i["name"])):
-                desc = item["frontmatter"].get("description", "")
                 out.append(
                     f"| `{item['name']}` | {', '.join(item['origins'])} "
-                    f"| {_truncate(desc, 110)} |"
+                    f"| {_truncate(_describe(item), 110)} |"
                 )
             out.append("")
 

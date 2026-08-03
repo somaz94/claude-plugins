@@ -25,7 +25,7 @@ Report from the script's output. Do not open the files to re-verify unless a fin
 
 <br/>
 
-## The three axes
+## The four axes
 
 **Duplicates — one name, several definitions.** Severity comes from whether the copies *agree*, not from the fact that they are duplicated:
 
@@ -40,6 +40,8 @@ Report from the script's output. Do not open the files to re-verify unless a fin
 A mirror normally differs from its source by a *constant* — a house style might prepend a translation banner, or render the frontmatter as a fenced block so the file is never loaded as a real definition. Comparing shapes naively reports that convention once per file and drowns the real drift. So the offset is **calibrated per mirror directory**: whatever delta most of a directory's pairs share becomes its baseline, and only files that deviate **from their own siblings** are reported. A `pair-convention` finding names the baseline that was calibrated away.
 
 This means a deviation is meaningful in *both* directions — a file missing the banner its fifteen siblings all have is as much an outlier as one that added a section.
+
+**Hooks.** A hook is a pointer, so it has one failure the other axes cannot express: the script it points at can be absent. `hook-missing-script` is 🔴 because nothing else reports it — the registration stays in `settings.json`, so the hook looks configured while doing nothing on every matching event. Name the guard the user thinks they have.
 
 **Frontmatter.** `no-description` is the one that actually breaks something: the description is the only signal Claude has for when to reach for an item, so without it the item is unreachable unless named outright. `name-mismatch` and `key-typo` mislead readers or are silently ignored.
 

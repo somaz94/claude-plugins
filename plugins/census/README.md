@@ -41,7 +41,7 @@ Byte-identical copies of one asset across mirrored repos count once. Two files, 
 
 ## `/census:drift`
 
-Three axes, reported as 🔴 / 🟡 / 🟢.
+Four axes, reported as 🔴 / 🟡 / 🟢.
 
 **Duplicates.** Severity comes from whether the copies *agree*, not from the fact that they are duplicated. Identical copies across a mirrored repo pair are the intended state and are reported as confirmation, not as a defect. Copies that disagree are drift, and a name defined at both user and project level with different content is worse still — the project copy wins inside that repo, so the same name behaves differently depending on where the session started.
 
@@ -49,13 +49,15 @@ Three axes, reported as 🔴 / 🟡 / 🟢.
 
 So the offset is **calibrated per mirror directory** — whatever delta most of a directory's pairs share becomes its baseline, and only files that deviate from their own siblings are reported. No house style is hardcoded, so a convention this tool has never seen calibrates away just the same. Deviation counts in both directions: a file missing the banner its fifteen siblings all have is as much an outlier as one that added a section.
 
+**Hooks.** A hook is a pointer, and the file it points at can be absent — the registration stays in `settings.json`, so the hook looks configured while doing nothing. Nothing else reports this.
+
 **Frontmatter.** A missing `description` is the one that actually breaks something — it is the only signal Claude has for when to reach for an item, so without it the item is unreachable unless named outright.
 
 <br/>
 
 ## `/census:portability`
 
-Grades every item by how tightly it is bound to one machine.
+Grades every item by how tightly it is bound to one machine. Hooks are graded through the script they run — the registration is only a pointer, and the hardcoded paths live in the target file.
 
 Markers are **derived, never hardcoded** — from `$USER`, from the directory names you invented to organize repos, and from the git remotes of the repos being scanned. On a public forge the account name identifies its owner; on a self-hosted one the "owner" is just a group name and is often a generic word, so the hostname is taken instead. That is what lets the same check flag someone else's identifiers instead of yours.
 

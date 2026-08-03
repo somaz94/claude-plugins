@@ -60,6 +60,8 @@ The grade comes from **where** a marker lands, not from how many there are. The 
 
 The frontmatter case matters most: a `description` naming a specific repo is what Claude routes on, so changing it changes when the item fires. That is a rewrite, not a setting.
 
+**Hooks are graded through the script they run.** The registration in `settings.json` is only a pointer; the hardcoded paths live in the target file, and reading the registration alone sees none of them. Neither the command nor a shell script has frontmatter, so a hook tops out at 🟡 — a path in a script is always a literal you can lift into a variable. Report which hooks carry the most hits: a guard that only fires under one person's directory layout will silently do nothing for anyone else.
+
 <br/>
 
 ## What to report
