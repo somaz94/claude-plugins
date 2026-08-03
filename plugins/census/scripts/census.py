@@ -1060,22 +1060,39 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--config", help="path to a census config file")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("scan", help="emit the normalized asset graph as JSON")
+    def add_config(subparser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+        """Accept --config on either side of the subcommand.
 
-    catalog = sub.add_parser("catalog", help="render a Markdown catalog")
+        argparse only sees a top-level option before the subcommand, but that is
+        not where anyone types it. SUPPRESS is what makes both positions work:
+        without it the subparser's own default would overwrite a value already
+        parsed from the top level.
+        """
+        subparser.add_argument(
+            "--config", default=argparse.SUPPRESS, help="path to a census config file"
+        )
+        return subparser
+
+    add_config(sub.add_parser("scan", help="emit the normalized asset graph as JSON"))
+
+    catalog = add_config(sub.add_parser("catalog", help="render a Markdown catalog"))
     catalog.add_argument("--out", help="write to this file instead of stdout")
     catalog.add_argument(
         "--top", type=int, default=10, help="context-budget ranking size (default: 10)"
     )
 
-    port = sub.add_parser("portability", help="grade items by machine-specific coupling")
+    port = add_config(
+        sub.add_parser("portability", help="grade items by machine-specific coupling")
+    )
     port.add_argument("--out", help="write to this file instead of stdout")
     port.add_argument(
         "--evidence", type=int, default=3, help="hits shown per item (0 to omit; default: 3)"
     )
     port.add_argument("--json", action="store_true", help="emit the raw report as JSON")
 
-    drift = sub.add_parser("drift", help="report duplicates, pair gaps and frontmatter defects")
+    drift = add_config(
+        sub.add_parser("drift", help="report duplicates, pair gaps and frontmatter defects")
+    )
     drift.add_argument("--out", help="write to this file instead of stdout")
     drift.add_argument(
         "--limit", type=int, default=15, help="findings shown per severity (0 for all; default: 15)"
