@@ -269,6 +269,72 @@ jobs:
           PY
           echo "PASS: repo-scoped coupling detected without false-positiving a generic agent"
 
+      - name: census reads a hook through the script it runs
+        # A hook is a pointer. Its coupling lives in the target script, and its
+        # worst failure is that the target is not there at all.
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp -d)"
+          mkdir -p "$fixture/home/.claude/hooks"
+          printf '#!/usr/bin/env bash\ntest -d "$HOME/AcmeVault" && exit 1\n' \
+            > "$fixture/home/.claude/hooks/present.sh"
+          chmod +x "$fixture/home/.claude/hooks/present.sh"
+          cat > "$fixture/home/.claude/settings.json" <<EOF
+          {
+            "hooks": {
+              "PreToolUse": [
+                {
+                  "matcher": "Bash",
+                  "hooks": [
+                    {"type": "command", "command": "$fixture/home/.claude/hooks/present.sh"},
+                    {"type": "command", "command": "$fixture/home/.claude/hooks/gone.sh"}
+                  ]
+                }
+              ]
+            }
+          }
+          EOF
+          cat > "$fixture/census.json" <<EOF
+          {
+            "userRoots": ["$fixture/home/.claude"],
+            "projectRoots": [],
+            "excludeOssForks": false,
+            "portability": {"markers": ["AcmeVault"]}
+          }
+          EOF
+
+          python3 plugins/census/scripts/census.py --config "$fixture/census.json" \
+            drift --json > "$fixture/drift.json"
+          python3 plugins/census/scripts/census.py --config "$fixture/census.json" \
+            portability --json > "$fixture/port.json"
+          python3 - "$fixture/drift.json" "$fixture/port.json" <<'PY'
+          import json, sys
+
+          drift = json.load(open(sys.argv[1]))
+          port = json.load(open(sys.argv[2]))
+          failures = []
+
+          missing = [f for f in drift["findings"] if f["code"] == "hook-missing-script"]
+          if len(missing) != 1:
+              failures.append(f"expected 1 hook-missing-script finding, got {len(missing)}")
+          elif "gone.sh" not in missing[0]["title"]:
+              failures.append(f"wrong hook flagged: {missing[0]['title']}")
+
+          present = next((i for i in port["items"] if i["name"] == "present.sh"), None)
+          if present is None:
+              failures.append("hook was not graded for portability at all")
+          else:
+              if present["tier"] != "PARAMETERIZABLE":
+                  failures.append(f"present.sh: expected PARAMETERIZABLE, got {present['tier']}")
+              if "AcmeVault" not in present["markers"]:
+                  failures.append("marker inside the hook script was not found")
+
+          for line in failures:
+              print(f"FAIL: {line}")
+          sys.exit(1 if failures else 0)
+          PY
+          echo "PASS: hook script read for coupling, missing target reported"
+
   ci-result:
     name: CI Result
     if: always()
