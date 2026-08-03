@@ -229,6 +229,46 @@ jobs:
           fi
           echo "PASS: mirrored copy collapsed into one asset"
 
+      - name: census catches an agent bound to its own repo
+        # The coupling global markers cannot see: a repo-scoped agent naming its
+        # own repo by a relative path, carrying no machine-wide identifier.
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp -d)"
+          mkdir -p "$fixture/acme-platform/.claude/agents"
+          printf -- '---\nname: bound\ndescription: Reviews changes inside acme-platform/storage/.\n---\nbody\n' \
+            > "$fixture/acme-platform/.claude/agents/bound.md"
+          printf -- '---\nname: free\ndescription: Reviews shell scripts for portability.\n---\nbody\n' \
+            > "$fixture/acme-platform/.claude/agents/free.md"
+          cat > "$fixture/census.json" <<EOF
+          {
+            "userRoots": [],
+            "projectRoots": ["$fixture/acme-platform"],
+            "excludeOssForks": false
+          }
+          EOF
+
+          python3 plugins/census/scripts/census.py --config "$fixture/census.json" \
+            portability --json > "$fixture/report.json"
+          python3 - "$fixture/report.json" <<'PY'
+          import json, sys
+
+          report = json.load(open(sys.argv[1]))
+          tier = {i["name"]: i["tier"] for i in report["items"]}
+          failures = []
+          if tier.get("bound") != "PERSONAL":
+              failures.append(f"bound: expected PERSONAL, got {tier.get('bound')!r}")
+          if tier.get("free") != "PORTABLE":
+              failures.append(f"free: expected PORTABLE, got {tier.get('free')!r}")
+          if "acme-platform" not in report.get("scopedMarkers", []):
+              failures.append("acme-platform missing from scopedMarkers")
+
+          for line in failures:
+              print(f"FAIL: {line}")
+          sys.exit(1 if failures else 0)
+          PY
+          echo "PASS: repo-scoped coupling detected without false-positiving a generic agent"
+
   ci-result:
     name: CI Result
     if: always()
