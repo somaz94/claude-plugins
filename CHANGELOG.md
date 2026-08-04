@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased (2026-08-04)
+
+### Features
+
+- add the shell-portability plugin ([768abe1](https://github.com/somaz94/claude-plugins/commit/768abe1708043c8e6f519f152b61412fdb8c8148))
+
+### Continuous Integration
+
+- tag and release each plugin independently ([e88d2f4](https://github.com/somaz94/claude-plugins/commit/e88d2f48e8575b59957c207c3d3723b4004cd26d))
+- require a description and name on agents as well as skills ([3dc4a83](https://github.com/somaz94/claude-plugins/commit/3dc4a8311b5365be72fac636b8b2c2d87516b14e))
+
+### Contributors
+
+- somaz
+
+<br/>
+
 ## [v0.3.0](https://github.com/somaz94/claude-plugins/compare/v0.2.1...v0.3.0) (2026-08-04)
 
 ### Bug Fixes
