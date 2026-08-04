@@ -77,6 +77,12 @@ plan 파일만 고칩니다. 저장소 작업 트리, `CLAUDE.md`, 에이전트 
 
 <br/>
 
+## 릴리스
+
+이 마켓플레이스의 플러그인은 각자 독립적으로 버전을 매기고 릴리스합니다. `session-continuity`의 모든 변경 이력은 이 디렉터리 커밋만 담아 [session-continuity 릴리스](https://github.com/somaz94/claude-plugins/releases?q=session-continuity&expanded=true)에 있습니다.
+
+<br/>
+
 ## 라이선스
 
 MIT — [LICENSE](../../LICENSE)를 참고하세요.

@@ -275,6 +275,12 @@ python3 scripts/census.py scan          # 정규화된 자산 그래프를 JSON�
 
 <br/>
 
+## 릴리스
+
+이 마켓플레이스의 플러그인은 각자 독립적으로 버전을 매기고 릴리스합니다. `census`의 모든 변경 이력은 이 디렉터리 커밋만 담아 [census 릴리스](https://github.com/somaz94/claude-plugins/releases?q=census&expanded=true)에 있습니다.
+
+<br/>
+
 ## 라이선스
 
 MIT — [LICENSE](../../LICENSE)를 참고하세요.

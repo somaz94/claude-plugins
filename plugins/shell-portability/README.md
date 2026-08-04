@@ -96,6 +96,12 @@ Out of scope: PowerShell, fish, `.bat` / `.cmd`, and POSIX-sh rewrites — the i
 
 <br/>
 
+## Releases
+
+Each plugin in this marketplace is versioned and released on its own. Every change to `shell-portability` — with the commits scoped to this directory — is at [shell-portability releases](https://github.com/somaz94/claude-plugins/releases?q=shell-portability&expanded=true).
+
+<br/>
+
 ## License
 
 MIT — see [LICENSE](../../LICENSE).

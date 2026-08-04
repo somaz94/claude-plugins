@@ -50,6 +50,12 @@
 
 <br/>
 
+## 릴리스
+
+이 마켓플레이스의 플러그인은 각자 독립적으로 버전을 매기고 릴리스합니다. `release-guards`의 모든 변경 이력은 이 디렉터리 커밋만 담아 [release-guards 릴리스](https://github.com/somaz94/claude-plugins/releases?q=release-guards&expanded=true)에 있습니다.
+
+<br/>
+
 ## 라이선스
 
 MIT — [LICENSE](../../LICENSE)를 참고하세요.

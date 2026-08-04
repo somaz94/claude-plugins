@@ -77,6 +77,12 @@ Both write in whatever language the plan and your own messages are in. The templ
 
 <br/>
 
+## Releases
+
+Each plugin in this marketplace is versioned and released on its own. Every change to `session-continuity` — with the commits scoped to this directory — is at [session-continuity releases](https://github.com/somaz94/claude-plugins/releases?q=session-continuity&expanded=true).
+
+<br/>
+
 ## License
 
 MIT — see [LICENSE](../../LICENSE).

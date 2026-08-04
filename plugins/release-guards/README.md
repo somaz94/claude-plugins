@@ -50,6 +50,12 @@ A hook that fails — bad payload, unreadable input — **fails open**: it stays
 
 <br/>
 
+## Releases
+
+Each plugin in this marketplace is versioned and released on its own. Every change to `release-guards` — with the commits scoped to this directory — is at [release-guards releases](https://github.com/somaz94/claude-plugins/releases?q=release-guards&expanded=true).
+
+<br/>
+
 ## License
 
 MIT — see [LICENSE](../../LICENSE).

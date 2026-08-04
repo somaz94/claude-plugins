@@ -275,6 +275,12 @@ The split is deliberate: the script scans and renders, the skill interprets. Rea
 
 <br/>
 
+## Releases
+
+Each plugin in this marketplace is versioned and released on its own. Every change to `census` — with the commits scoped to this directory — is at [census releases](https://github.com/somaz94/claude-plugins/releases?q=census&expanded=true).
+
+<br/>
+
 ## License
 
 MIT — see [LICENSE](../../LICENSE).
