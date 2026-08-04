@@ -47,7 +47,7 @@
     {
       "name": "session-continuity",
       "source": "./plugins/session-continuity",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": "Carries long-running work across context resets — keeps a plan file current as you go, and generates the handoff prompt that lets a fresh session pick up exactly where this one stopped.",
       "category": "productivity",
       "license": "MIT",
