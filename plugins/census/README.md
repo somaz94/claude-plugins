@@ -2,6 +2,8 @@
 
 Read-only audit of scattered Claude Code configuration.
 
+> 한국어 문서는 [README-ko.md](README-ko.md)를 참고하세요.
+
 Once you have a user-level `~/.claude/` plus a `.claude/` directory in every repo, three questions get hard to answer and nothing built in answers them. `census` answers them and changes nothing.
 
 ```bash
@@ -21,7 +23,114 @@ Once you have a user-level `~/.claude/` plus a `.claude/` directory in every rep
 
 <br/>
 
-## `/census:catalog`
+## Usage
+
+Type a skill name in any Claude Code session. The skill runs the bundled script across your configured roots and reads the result back to you — the script scans and renders, the skill interprets.
+
+Every excerpt below comes from one small configuration, shown here so the numbers mean something:
+
+```
+~/.claude/                        ~/code/acme-platform/.claude/
+  agents/shell-reviewer.md          agents/shell-reviewer.md    ← same name as the global one,
+  agents/db-migrator.md             agents/storage-reviewer.md    different content
+  commands/ship.md
+  skills/changelog/SKILL.md       ~/code/billing-api/.claude/
+  hooks/guard.sh                    commands/deploy.md          ← no description
+  settings.json
+```
+
+<br/>
+
+### `/census:catalog` — what do I have, and what does it cost?
+
+Start here. It is the only one that needs no setup and the only one whose answer you cannot get anywhere else.
+
+```
+- Assets: 8 (4 agents, 2 commands, 1 hooks, 1 skills)
+- Per-session context: ~65 tokens from the global root, rising to ~105 in the heaviest repo (`acme-platform`)
+- Across all roots: ~106 tokens (427 chars) — accumulated total, not a session cost
+
+## Global
+### Agents (2)
+| Name | Origin | Description |
+|---|---|---|
+| `db-migrator` | user | Plans and reviews schema migrations before they are applied. |
+| `shell-reviewer` | user | Reviews shell scripts for portability between bash and zsh. |
+…
+## Context budget — top 7 by description size
+| Item | Kind | Chars | ~Tokens |
+|---|---|---|---|
+| `storage-reviewer` | agent | 67 | 16 |
+| `shell-reviewer` | agent | 64 | 16 |
+```
+
+Read the **per-session** figure, not the all-roots one. The budget table at the bottom is the actionable part: it ranks by `description` length, which is what you actually pay for on every session.
+
+<br/>
+
+### `/census:drift` — where do two things that should agree disagree?
+
+```
+- Checked: 7 assets across 7 files, plus 1 hook registrations
+- 🔴 2  ·  🟡 0  ·  🟢 0
+
+## 🔴 Behavior differs or routing is broken (2)
+
+**[shadowed]** `shell-reviewer` (agent) exists at both user and project level with different content
+
+Origins: acme-platform, user. A project-level definition overrides the user-level one inside
+that repo, so the same name behaves differently depending on where the session is started —
+and nothing reports which copy won.
+
+- `~/code/acme-platform/.claude/agents/shell-reviewer.md`
+- `~/.claude/agents/shell-reviewer.md`
+
+**[no-description]** `deploy` (command) declares no description
+```
+
+🔴 findings are the ones with a consequence you can name — one of two same-named agents silently wins, or an item can never be reached. 🟢 includes confirmations, such as mirrored copies that agree exactly; those are the intended state, not a defect.
+
+<br/>
+
+### `/census:portability` — which of this would work for someone else?
+
+```
+- 🟢 PORTABLE: 6  ·  🟡 PARAMETERIZABLE: 1  ·  🔴 PERSONAL: 1
+- Share-ready without edits: 6/8 (75%)
+
+Derived markers — strings that identify this machine or owner:
+
+| Marker | Category | Derived from |
+|---|---|---|
+| `alex` | user | $USER |
+| `code` | layout | projectRoots ~/code/* |
+
+Plus 2 repo-scoped markers: `acme-platform`, `billing-api`
+
+## 🟡 PARAMETERIZABLE (1)
+**`guard.sh`** — ~/.claude/hooks/guard.sh
+- `~/.claude/hooks/guard.sh:3` [code/layout] `code` — case "$1" in "$HOME/code/acme-platform/vendor"/*) exit 1 ;; esac
+
+## 🔴 PERSONAL (1)
+**`storage-reviewer`** — ~/code/acme-platform/.claude/agents/storage-reviewer.md
+- `…/storage-reviewer.md:3` [frontmatter/repo] `acme-platform` — description: Reviews changes inside acme-platform/storage/ for retention policy.
+```
+
+Check the marker table first — every grade below it follows from those strings, so a wrong grade is almost always a missing marker rather than a wrong verdict. Each hit cites a file, a line and where on that line it landed, so you can confirm any verdict without re-reading anything.
+
+<br/>
+
+### On your first run
+
+Two knobs decide whether the first report is signal or noise.
+
+**`projectRoots`** defaults to `["."]` — the current directory only. That gives you your global root plus whatever `.claude/` happens to sit in the directory you ran from, and nothing else. Point it at where your repos actually live (`["~/code/*"]`) to see the rest.
+
+**`pairs`** defaults to the `agents-ko` / `commands-ko` / `skills-ko` translation-mirror convention. If you do not keep translation mirrors, set `"pairs": {}` — otherwise every item without a mirror is reported as a 🔴 missing pair, which buries everything else. Both live in the config file described below.
+
+<br/>
+
+## `/census:catalog` in detail
 
 Collects every agent, command, skill and hook across all configured roots, then reports an inventory grouped by global versus repo-scoped.
 
@@ -31,6 +140,8 @@ The cost is reported **per session**, because that is the only version of it any
 
 Byte-identical copies of one asset across mirrored repos count once. Two files, one thing.
 
+At the scale of a configuration that has been growing for a while, rather than the small example above:
+
 ```
 - Assets: 126 (80 agents, 34 commands, 7 hooks, 5 skills) — found in 166 files; 40 are identical copies across mirrored repos
 - Per-session context: ~10,340 tokens from the global root, rising to ~16,511 in the heaviest repo
@@ -39,7 +150,7 @@ Byte-identical copies of one asset across mirrored repos count once. Two files, 
 
 <br/>
 
-## `/census:drift`
+## `/census:drift` in detail
 
 Four axes, reported as 🔴 / 🟡 / 🟢.
 
@@ -57,7 +168,7 @@ Shape is not the whole story, though. Two files can match structurally while the
 
 <br/>
 
-## `/census:portability`
+## `/census:portability` in detail
 
 Grades every item by how tightly it is bound to one machine. Hooks are graded through the script they run — the registration is only a pointer, and the hardcoded paths live in the target file.
 
