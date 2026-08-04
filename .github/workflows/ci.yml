@@ -160,6 +160,11 @@ jobs:
           python3 - <<'PY'
           import json, os, pathlib, sys
 
+          # Built at runtime, never written literally: a doubled brace in this
+          # file is read by GitHub Actions as an expression before the step ever
+          # runs, and an unknown one makes the whole workflow invalid.
+          PLUGIN_ROOT = "${" + "CLAUDE_PLUGIN_ROOT}"
+
           failures = []
           manifests = sorted(pathlib.Path("plugins").glob("*/hooks/hooks.json"))
           for manifest in manifests:
@@ -176,7 +181,7 @@ jobs:
                           if "${CLAUDE_PLUGIN_ROOT}" not in command:
                               failures.append(
                                   f"{manifest}: {event} command is not rooted at "
-                                  f"${{CLAUDE_PLUGIN_ROOT}}: {command!r}"
+                                  f"{PLUGIN_ROOT}: {command!r}"
                               )
                               continue
                           rel = command.split("${CLAUDE_PLUGIN_ROOT}/", 1)[1].split()[0]
