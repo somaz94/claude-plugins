@@ -48,8 +48,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
     # Skip repos with an `upstream` remote: those ship the upstream maintainers'
     # .claude/, not yours, and would pollute the catalog.
     "excludeOssForks": True,
-    # Translation mirror directories, keyed by the directory they mirror.
-    "pairs": {"agents": "agents-ko", "commands": "commands-ko", "skills": "skills-ko"},
+    # Translation mirror directories, keyed by the directory they mirror. Empty
+    # by default: keeping mirrors is one workflow among many, and assuming it
+    # reports a missing mirror for EVERY item of anyone who does not — a wall of
+    # red that buries the findings that were actually worth reading. Opt in with
+    # e.g. {"agents": "agents-ko"} and the whole pair axis switches on.
+    "pairs": {},
     # Portability markers. Empty means "derive from the environment".
     "portability": {"markers": []},
 }

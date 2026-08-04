@@ -369,7 +369,8 @@ jobs:
           {
             "userRoots": [],
             "projectRoots": ["$fixture/repo"],
-            "excludeOssForks": false
+            "excludeOssForks": false,
+            "pairs": {"agents": "agents-ko"}
           }
           EOF
 
@@ -515,6 +516,67 @@ jobs:
             fi
           done
           echo "PASS: malformed shapes skipped, surrounding config still audited"
+
+      - name: census does not invent translation mirrors by default
+        # Keeping `-ko` mirrors is one workflow among many. A default that
+        # assumes it reports a missing mirror for every item belonging to
+        # everyone who does not, burying the findings worth reading under a wall
+        # of red on the very first run. Opting in must still switch it back on.
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp -d)"
+          mkdir -p "$fixture/home/.claude/agents" "$fixture/home/.claude/agents-ko"
+          for name in alpha beta; do
+            printf -- '---\nname: %s\ndescription: an agent\n---\nbody\n' "$name" \
+              > "$fixture/home/.claude/agents/$name.md"
+          done
+          # Only `alpha` has a mirror, so opting in must report exactly one gap.
+          printf -- '---\nname: alpha\ndescription: translated\n---\nbody\n' \
+            > "$fixture/home/.claude/agents-ko/alpha.md"
+
+          emit() {
+            cat > "$fixture/census.json" <<EOF
+          {
+            "userRoots": ["$fixture/home/.claude"],
+            "projectRoots": [],
+            "excludeOssForks": false$1
+          }
+          EOF
+          }
+
+          emit ""
+          python3 plugins/census/scripts/census.py --config "$fixture/census.json" \
+            drift --json > "$fixture/default.json"
+          emit ', "pairs": {"agents": "agents-ko"}'
+          python3 plugins/census/scripts/census.py --config "$fixture/census.json" \
+            drift --json > "$fixture/opted-in.json"
+
+          python3 - "$fixture/default.json" "$fixture/opted-in.json" <<'PY'
+          import json, sys
+
+          def pair_gaps(path):
+              findings = json.load(open(path))["findings"]
+              return [f for f in findings if f["code"] == "pair-missing"]
+
+          failures = []
+          default = pair_gaps(sys.argv[1])
+          if default:
+              failures.append(
+                  f"default config invented {len(default)} missing mirrors: "
+                  f"{[f['title'] for f in default]}"
+              )
+
+          opted = pair_gaps(sys.argv[2])
+          if len(opted) != 1:
+              failures.append(f"opting in should report 1 gap, got {[f['title'] for f in opted]}")
+          elif "`beta`" not in opted[0]["title"]:
+              failures.append(f"wrong item flagged: {opted[0]['title']}")
+
+          for line in failures:
+              print(f"FAIL: {line}")
+          sys.exit(1 if failures else 0)
+          PY
+          echo "PASS: silent by default, still reports the real gap when opted in"
 
   ci-result:
     name: CI Result

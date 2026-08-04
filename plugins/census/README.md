@@ -126,7 +126,7 @@ Two knobs decide whether the first report is signal or noise.
 
 **`projectRoots`** defaults to `["."]` — the current directory only. That gives you your global root plus whatever `.claude/` happens to sit in the directory you ran from, and nothing else. Point it at where your repos actually live (`["~/code/*"]`) to see the rest.
 
-**`pairs`** defaults to the `agents-ko` / `commands-ko` / `skills-ko` translation-mirror convention. If you do not keep translation mirrors, set `"pairs": {}` — otherwise every item without a mirror is reported as a 🔴 missing pair, which buries everything else. Both live in the config file described below.
+**`pairs`** is empty by default, which switches the whole translation-pair axis off. If you do keep mirrors, name them — `{"agents": "agents-ko"}` — and `/census:drift` starts reporting mirrors that are missing, misshapen, or behind their source. Both settings live in the config file described below.
 
 <br/>
 
@@ -156,7 +156,9 @@ Four axes, reported as 🔴 / 🟡 / 🟢.
 
 **Duplicates.** Severity comes from whether the copies *agree*, not from the fact that they are duplicated. Identical copies across a mirrored repo pair are the intended state and are reported as confirmation, not as a defect. Copies that disagree are drift, and a name defined at both user and project level with different content is worse still — the project copy wins inside that repo, so the same name behaves differently depending on where the session started.
 
-**Translation pairs.** A mirror normally differs from its source by a constant: a house style might prepend a banner, or render the frontmatter as a fenced block so the file is never loaded as a real definition. Comparing shapes naively reports that convention once per file and buries the real drift.
+**Translation pairs.** Off unless `pairs` names your mirror directories — keeping mirrors is one workflow among many, and a tool that assumes it would report a missing mirror for every item you own.
+
+A mirror normally differs from its source by a constant: a house style might prepend a banner, or render the frontmatter as a fenced block so the file is never loaded as a real definition. Comparing shapes naively reports that convention once per file and buries the real drift.
 
 So the offset is **calibrated per mirror directory** — whatever delta most of a directory's pairs share becomes its baseline, and only files that deviate from their own siblings are reported. No house style is hardcoded, so a convention this tool has never seen calibrates away just the same. Deviation counts in both directions: a file missing the banner its fifteen siblings all have is as much an outlier as one that added a section.
 
@@ -221,7 +223,7 @@ Resolution order, first hit wins outright — the files are not merged:
 | `projectRoots` | globs of **repo** directories whose `.claude/` should be scanned |
 | `exclude` | repo basename patterns to skip |
 | `excludeOssForks` | skip repos with an `upstream` remote — a fork ships its maintainers' `.claude/`, not yours |
-| `pairs` | translation mirror directories, keyed by the directory they mirror |
+| `pairs` | translation mirror directories, keyed by the directory they mirror; empty turns the pair axis off |
 | `portability.markers` | extra identifying strings; leave empty to derive them |
 
 A generated config or catalog names real paths on the machine that produced it. Keep `.census.json` and any `--out` file out of published repositories.
