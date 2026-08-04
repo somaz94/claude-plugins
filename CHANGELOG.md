@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.3.0](https://github.com/somaz94/claude-plugins/compare/v0.2.1...v0.3.0) (2026-08-04)
+
+### Bug Fixes
+
+- stop assuming translation mirrors that most users do not keep ([a2cb153](https://github.com/somaz94/claude-plugins/commit/a2cb1536188e1049f812a1fb37912da02e285cf8))
+
+### Documentation
+
+- link the Korean census README from the marketplace README ([8bc4790](https://github.com/somaz94/claude-plugins/commit/8bc4790778e7dea97f5171fc58962e1529e6e5f4))
+- fix awkward Korean in the census README translation ([4d31f2d](https://github.com/somaz94/claude-plugins/commit/4d31f2db877e6cfa2289da0117ae057c1450fe2f))
+- add a usage walkthrough and a Korean README for census ([ba482a3](https://github.com/somaz94/claude-plugins/commit/ba482a344510f4040d389063831e2d0286a17e93))
+
+### Tests
+
+- cover inline-shell hooks and malformed config shapes ([47361e8](https://github.com/somaz94/claude-plugins/commit/47361e888714cd6a396369c0b6cf52bf11cf507a))
+
+### Chores
+
+- release census 0.3.0 ([b2f02e1](https://github.com/somaz94/claude-plugins/commit/b2f02e1827e74bb10415d6ccbbe34dd6fd81d9f6))
+
+### Contributors
+
+- somaz
+
+<br/>
+
 ## [v0.2.1](https://github.com/somaz94/claude-plugins/compare/v0.2.0...v0.2.1) (2026-08-04)
 
 ### Bug Fixes
