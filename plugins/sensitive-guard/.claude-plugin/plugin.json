@@ -1,0 +1,20 @@
+{
+  "name": "sensitive-guard",
+  "version": "0.1.0",
+  "description": "Stops a secret at the moment of commit — a last-mile gate that scans the lines a commit adds and blocks it, plus an on-demand scan of a whole repository before you publish.",
+  "author": {
+    "name": "somaz94",
+    "url": "https://github.com/somaz94"
+  },
+  "homepage": "https://github.com/somaz94/claude-plugins/tree/main/plugins/sensitive-guard",
+  "repository": "https://github.com/somaz94/claude-plugins",
+  "license": "MIT",
+  "keywords": [
+    "secrets",
+    "sanitize",
+    "pre-commit",
+    "guardrail",
+    "hooks",
+    "publish"
+  ]
+}
