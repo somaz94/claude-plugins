@@ -43,6 +43,24 @@
         "code-review",
         "shellcheck"
       ]
+    },
+    {
+      "name": "session-continuity",
+      "source": "./plugins/session-continuity",
+      "version": "0.1.0",
+      "description": "Carries long-running work across context resets — keeps a plan file current as you go, and generates the handoff prompt that lets a fresh session pick up exactly where this one stopped.",
+      "category": "productivity",
+      "license": "MIT",
+      "homepage": "https://github.com/somaz94/claude-plugins/tree/main/plugins/session-continuity",
+      "repository": "https://github.com/somaz94/claude-plugins",
+      "keywords": [
+        "handoff",
+        "context",
+        "plan",
+        "session",
+        "continuity",
+        "long-running"
+      ]
     }
   ]
 }
