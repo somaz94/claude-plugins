@@ -2,6 +2,8 @@
 
 Reviews shell scripts for one thing: whether they run correctly under **both bash and zsh**.
 
+> 한국어 문서는 [README-ko.md](README-ko.md)를 참고하세요.
+
 ```bash
 /plugin marketplace add somaz94/claude-plugins
 /plugin install shell-portability@somaz94

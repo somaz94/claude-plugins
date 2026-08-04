@@ -16,7 +16,7 @@ A [Claude Code](https://code.claude.com/docs) plugin marketplace.
 | [`census`](plugins/census) | Read-only audit of scattered `.claude/` configs — catalog what you have, detect drift, and triage which items are portable enough to share with a team |
 | [`shell-portability`](plugins/shell-portability) | Reviews shell scripts for bash/zsh portability — the axis `shellcheck` does not cover, because it checks the shell the shebang declares, not the one the script gets run by |
 
-`census` docs: [English](plugins/census/README.md) · [한국어](plugins/census/README-ko.md)
+Docs — `census`: [English](plugins/census/README.md) · [한국어](plugins/census/README-ko.md) · `shell-portability`: [English](plugins/shell-portability/README.md) · [한국어](plugins/shell-portability/README-ko.md)
 
 <br/>
 
