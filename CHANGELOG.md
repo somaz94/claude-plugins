@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Features
 
+- report the scripts an item shells out to ([e1e0562](https://github.com/somaz94/claude-plugins/commit/e1e05624b2d187e56856c0e109203d99200471ac))
 - add the release-guards plugin ([46764fd](https://github.com/somaz94/claude-plugins/commit/46764fd49925bc0a1a954d3bb68a0aa89d214e20))
 - ship the pre-compact handoff nudge as a plugin hook ([dd6f286](https://github.com/somaz94/claude-plugins/commit/dd6f286e2665040f753b4443e6015374ac3483c3))
 - add the session-continuity plugin ([5b99c29](https://github.com/somaz94/claude-plugins/commit/5b99c29088a3f2d982a3eb8a0648591da4341084))
@@ -22,6 +23,8 @@ All notable changes to this project will be documented in this file.
 
 ### Continuous Integration
 
+- keep the sensitive-data scan clean on the census fixture ([9a3e2c8](https://github.com/somaz94/claude-plugins/commit/9a3e2c824af26054c1185eb3806834097e964cb6))
+- cover the external-script dependency axis ([49438ef](https://github.com/somaz94/claude-plugins/commit/49438ef80548da2c4d73f75e008b4a307ed87f9a))
 - verify every plugin hook resolves to an executable script ([5ec79dc](https://github.com/somaz94/claude-plugins/commit/5ec79dc2f766a78c60931642121fd0adee152e25))
 - require a description on commands too ([c498a46](https://github.com/somaz94/claude-plugins/commit/c498a461f4eee134f00a7bf30d6102c7b9d87d65))
 - cover the named-repo and dependency blind spots ([65eb83b](https://github.com/somaz94/claude-plugins/commit/65eb83b0edab73c26dd2b384197fe71e4acf53c4))
@@ -30,6 +33,7 @@ All notable changes to this project will be documented in this file.
 
 ### Chores
 
+- release census 0.5.0 ([b7ab6ef](https://github.com/somaz94/claude-plugins/commit/b7ab6efd05904a9247e15e6604fc43c3019bde53))
 - release session-continuity 0.2.0 ([d66fcb0](https://github.com/somaz94/claude-plugins/commit/d66fcb0cb5ffc36529630a25db3db7fe938e213c))
 - release census 0.4.0 ([280f963](https://github.com/somaz94/claude-plugins/commit/280f96316b7c935c392f3c7faa46c724f3772e44))
 
