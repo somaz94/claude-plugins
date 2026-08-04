@@ -30,6 +30,16 @@ The fix is not a longer window. It is writing down the two things a fresh sessio
 
 <br/>
 
+## The nudge that fires it
+
+The plugin ships a `PreCompact` hook. When the window is about to be compacted — automatically at the limit, or because you ran `/compact` — it says so at that exact moment and offers `/session-continuity:handoff now`.
+
+That moment is the point. Compaction summarizes older turns, so the half-finished edit and the reason behind a decision are precisely what is about to blur. Claude Code exposes no hook that fires at a fixed context percentage, so an imminent compaction is the only "filling up" signal available.
+
+It is advisory: it never cancels a compaction, never opens a session, and never runs the handoff itself. A parse error fails open and stays silent — a nudge is a courtesy, not a boundary.
+
+<br/>
+
 ## `/session-continuity:handoff`
 
 Produces a single fenced block — copy once, paste once. It runs in one of two modes.
