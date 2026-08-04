@@ -6,12 +6,18 @@ All notable changes to this project will be documented in this file.
 
 ### Features
 
+- grade shareability by named repos and dependencies ([15c2b85](https://github.com/somaz94/claude-plugins/commit/15c2b85bfa465fc40d453c62085a445f1a71aa42))
 - add the shell-portability plugin ([768abe1](https://github.com/somaz94/claude-plugins/commit/768abe1708043c8e6f519f152b61412fdb8c8148))
 
 ### Continuous Integration
 
+- cover the named-repo and dependency blind spots ([65eb83b](https://github.com/somaz94/claude-plugins/commit/65eb83b0edab73c26dd2b384197fe71e4acf53c4))
 - tag and release each plugin independently ([e88d2f4](https://github.com/somaz94/claude-plugins/commit/e88d2f48e8575b59957c207c3d3723b4004cd26d))
 - require a description and name on agents as well as skills ([3dc4a83](https://github.com/somaz94/claude-plugins/commit/3dc4a8311b5365be72fac636b8b2c2d87516b14e))
+
+### Chores
+
+- release census 0.4.0 ([280f963](https://github.com/somaz94/claude-plugins/commit/280f96316b7c935c392f3c7faa46c724f3772e44))
 
 ### Contributors
 
