@@ -289,6 +289,23 @@ def discover_roots(config: dict[str, Any]) -> tuple[list[dict[str, Any]], list[d
     return roots, skipped
 
 
+def project_repo_names(config: dict[str, Any]) -> list[str]:
+    """Every repo directory `projectRoots` resolves to, by name.
+
+    Deliberately wider than `discover_roots`, which keeps only directories that
+    turned out to hold a `.claude/`. A repo identifies this machine whether or
+    not it carries Claude config — an agent written about `acme-billing-api` is
+    bound to it either way — and excluded repos count too: skipping a repo means
+    not cataloguing its config, not pretending the repo is not there.
+    """
+    names: set[str] = set()
+    for pattern in config["projectRoots"]:
+        for path in _expand(pattern):
+            if path.is_dir():
+                names.add(path.name)
+    return sorted(names)
+
+
 def _expand(pattern: str) -> list[Path]:
     """Expand ``~`` and glob metacharacters into concrete paths."""
     expanded = os.path.expanduser(pattern)
@@ -613,6 +630,44 @@ def origin_markers(origins: list[str], global_values: set[str]) -> list[dict[str
     return markers
 
 
+def _is_distinctive(name: str) -> bool:
+    """True when a repo name is specific enough to match on outside its own repo.
+
+    A single-word repo (`docs`, `tools`, `meshery`) is also an English word, or
+    close enough, and matching it across a whole config would fire on prose.
+    A multi-token name (`ansible-k8s-iac-tool`, `terraform_modules`) is one
+    nobody writes by accident. Restricting to those is why this can be applied
+    where `origin_markers` deliberately refused to go.
+    """
+    return len(name) >= MIN_MARKER_LEN and ("-" in name or "_" in name)
+
+
+def named_repo_markers(
+    repo_names: Iterable[str], global_values: set[str]
+) -> list[dict[str, str]]:
+    """Repo names as markers for items that live OUTSIDE any repo.
+
+    `origin_markers` covers a repo-scoped item naming its own repo. It cannot
+    cover the mirror image: a USER-level item — one shared by every session on
+    the machine — that is written about a handful of specific repos. Nothing
+    else supplies those names, so such an item carries no marker at all and
+    grades as perfectly portable while being useless to anyone who does not
+    have those exact repos.
+
+    Only distinctive names qualify; see `_is_distinctive` for why.
+    """
+    markers = []
+    for name in sorted(set(repo_names)):
+        if name in global_values or not _is_distinctive(name):
+            continue
+        markers.append({
+            "value": name,
+            "category": "named-repo",
+            "source": f"a repo on this machine ({name})",
+        })
+    return markers
+
+
 def _public_forge(host: str | None) -> str | None:
     """Return the public forge a host refers to, if any.
 
@@ -768,6 +823,23 @@ def grade(hits: list[dict[str, Any]]) -> str:
     return TIER_PARAM
 
 
+def _referenced_items(path: Path, names: Iterable[str], own: str) -> list[str]:
+    """Names of other catalogued items this one hands work to.
+
+    Matched only inside backticks. Every item that delegates writes the target
+    the same way — ``delegate to `md-doc-writer` `` — and requiring the code
+    span is what keeps short names (`release`, `scan`, `handoff`) from firing on
+    ordinary prose. A missed reference is a far cheaper mistake here than an
+    invented one.
+    """
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    quoted = {span.strip() for span in re.findall(r"`([^`\n]{1,80})`", text)}
+    return sorted(name for name in set(names) if name != own and name in quoted)
+
+
 def build_portability(graph: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     roots = [
         {"path": Path(r["path"]), "scope": r["scope"], "repo": r["repo"]}
@@ -778,6 +850,13 @@ def build_portability(graph: dict[str, Any], config: dict[str, Any]) -> dict[str
     graded: list[dict[str, Any]] = []
     global_values = {m["value"] for m in markers}
     scoped_seen: set[str] = set()
+    named_seen: set[str] = set()
+
+    # Not just the scanned roots — see `project_repo_names`.
+    repo_names = graph.get("repoNames") or [
+        r["repo"] for r in graph["roots"] if r["scope"] == "repo" and r["repo"]
+    ]
+    catalogued = {i["name"] for i in graph["items"] if i["kind"] != "hook"}
 
     # Graded per ASSET, not per file: identical copies in a mirrored repo pair
     # score identically, and grading both would double every tier population.
@@ -785,6 +864,15 @@ def build_portability(graph: dict[str, Any], config: dict[str, Any]) -> dict[str
         scoped = origin_markers(item["origins"], global_values)
         scoped_seen.update(m["value"] for m in scoped)
         every = markers + scoped
+
+        # A user-level item belongs to no repo, so `origin_markers` gives it
+        # nothing — yet those are exactly the items that get written about a
+        # named handful of repos. Repo-scoped items are already covered above
+        # and must not be re-matched against every OTHER repo's name.
+        if item["origins"] == ["user"]:
+            named = named_repo_markers(repo_names, global_values)
+            named_seen.update(m["value"] for m in named)
+            every = every + named
 
         if item["kind"] == "hook":
             # A hook's coupling lives in two places: the command recorded in
@@ -810,8 +898,24 @@ def build_portability(graph: dict[str, Any], config: dict[str, Any]) -> dict[str
                 "tier": grade(hits),
                 "hits": hits,
                 "markers": sorted({h["marker"] for h in hits}),
+                "dependsOn": (
+                    [] if item["kind"] == "hook"
+                    else _referenced_items(Path(item["file"]), catalogued, item["name"])
+                ),
             }
         )
+
+    # Shareability is not a property of one file. A command whose whole body is
+    # "delegate to `x`" carries no marker of its own and grades PORTABLE, while
+    # being worth nothing without `x`. Resolve that only now, once every item
+    # has a tier to look up.
+    by_name = {entry["name"]: entry for entry in graded}
+    for entry in graded:
+        entry["blockedBy"] = sorted(
+            dep for dep in entry["dependsOn"]
+            if by_name.get(dep, {}).get("tier", TIER_PORTABLE) != TIER_PORTABLE
+        )
+        entry["shareable"] = entry["tier"] == TIER_PORTABLE and not entry["blockedBy"]
 
     tiers = {t: 0 for t in (TIER_PORTABLE, TIER_PARAM, TIER_PERSONAL)}
     for entry in graded:
@@ -820,8 +924,12 @@ def build_portability(graph: dict[str, Any], config: dict[str, Any]) -> dict[str
     return {
         "markers": markers,
         "scopedMarkers": sorted(scoped_seen),
+        "namedRepoMarkers": sorted(named_seen),
         "items": graded,
         "tiers": tiers,
+        "shareable": sum(1 for e in graded if e["shareable"]),
+        "blocked": sorted(e["name"] for e in graded if e["tier"] == TIER_PORTABLE
+                          and e["blockedBy"]),
     }
 
 
@@ -830,15 +938,24 @@ def render_portability(report: dict[str, Any], evidence: int) -> str:
     total = sum(tiers.values())
     out = ["# Portability triage", ""]
 
-    shareable = tiers[TIER_PORTABLE]
+    portable = tiers[TIER_PORTABLE]
+    shareable = report["shareable"]
     out += [
         f"- Graded: {total} items — agents, commands, skills, and hooks "
         "(graded through the script they run, where their coupling actually lives)",
-        f"- 🟢 {TIER_PORTABLE}: **{shareable}**  ·  "
+        f"- 🟢 {TIER_PORTABLE}: **{portable}**  ·  "
         f"🟡 {TIER_PARAM}: **{tiers[TIER_PARAM]}**  ·  "
         f"🔴 {TIER_PERSONAL}: **{tiers[TIER_PERSONAL]}**",
         f"- Share-ready without edits: {shareable}/{total}"
         f" ({shareable * 100 // total if total else 0}%)",
+    ]
+    if report["blocked"]:
+        out.append(
+            f"- Of the {portable} 🟢 items, **{len(report['blocked'])} cannot ship alone** — "
+            "they carry no marker themselves but delegate to an item that does. "
+            "See _Blocked by a dependency_ below."
+        )
+    out += [
         "",
         "Derived markers — strings that identify this machine or owner:",
         "",
@@ -859,6 +976,40 @@ def render_portability(report: dict[str, Any], evidence: int) -> str:
             ", ".join(f"`{value}`" for value in scoped),
             "",
         ]
+
+    named = report.get("namedRepoMarkers") or []
+    if named:
+        out += [
+            f"Plus {len(named)} **named-repo** markers — repos on this machine, matched only "
+            "against USER-level items. A user-level item belongs to no repo, so nothing else "
+            "supplies these names, and one written about a specific handful of repos would "
+            "otherwise carry no marker at all. Only multi-token names qualify, so a repo "
+            "called `docs` never fires on prose:",
+            "",
+            ", ".join(f"`{value}`" for value in named),
+            "",
+        ]
+
+    blocked = [i for i in report["items"] if i["tier"] == TIER_PORTABLE and i["blockedBy"]]
+    if blocked:
+        out += [
+            "<br/>",
+            "",
+            f"## ⛔ Blocked by a dependency ({len(blocked)})",
+            "",
+            "_Graded 🟢 on their own contents, but they hand work to an item that is not "
+            "portable. Publishing one without its dependency ships a name that resolves to "
+            "nothing._",
+            "",
+            "| Item | Kind | Origin | Blocked by |",
+            "|---|---|---|---|",
+        ]
+        for item in sorted(blocked, key=lambda i: (-len(i["blockedBy"]), i["name"])):
+            deps = ", ".join(f"`{d}`" for d in item["blockedBy"])
+            out.append(
+                f"| `{item['name']}` | {item['kind']} | {', '.join(item['origins'])} | {deps} |"
+            )
+        out.append("")
 
     for tier, emoji, note in (
         (TIER_PORTABLE, "🟢", "no machine-specific reference; promote as-is"),
@@ -1370,6 +1521,7 @@ def build_graph(config: dict[str, Any], origin: str) -> dict[str, Any]:
     items = collect_items(roots, config)
     return {
         "configOrigin": origin,
+        "repoNames": project_repo_names(config),
         "roots": [
             {"path": str(r["path"]), "scope": r["scope"], "repo": r["repo"]} for r in roots
         ],

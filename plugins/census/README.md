@@ -178,6 +178,20 @@ Markers are **derived, never hardcoded** — from `$USER`, from the directory na
 
 Each repo's own name is also a marker, but **only within that repo**. A repo-scoped agent usually names its repo by a path relative to it — `Reviews changes inside acme-platform/storage/` — which carries no machine-wide identifier and would otherwise grade as perfectly portable while being one of the least portable items there is. Applied globally a repo called `docs` would match prose everywhere; scoped to its own repo, a match means what it says.
 
+A **user-level** item is the mirror image, and needs the opposite rule. It belongs to no repo, so the rule above never reaches it — yet those are exactly the items written about a named handful of repos (`Runs the migration suite for acme-billing-api`). Every repo `projectRoots` resolves to therefore becomes a marker for user-level items, whether or not that repo carries a `.claude/` of its own: a repo identifies this machine by existing. Only **multi-token** names qualify (`acme-billing-api`, not `docs`), which is what keeps the generic-word trap shut.
+
+<br/>
+
+## Shareable is not the same as portable
+
+A tier describes one file. Shipping something is not a one-file question.
+
+A thin wrapper — a command whose body is *delegate to `some-reviewer`* — contains no machine-specific string at all and grades 🟢 on its own contents, correctly. Publish it alone and you have shipped a name that resolves to nothing. So `census` reads each item for **backticked references to other catalogued items** and reports the ones whose dependency is not itself portable under **⛔ Blocked by a dependency**.
+
+Only items that are 🟢 *and* unblocked count toward *share-ready*. That number is usually much smaller than the 🟢 count, and it is the honest one.
+
+References are matched only inside backticks. Every item that delegates writes the target that way, and requiring the code span is what stops short names like `release` or `scan` from firing on ordinary prose. A missed reference is far cheaper here than an invented one.
+
 The grade comes from **where** a marker lands, not how many there are:
 
 | Tier | Rule | Remedy |
@@ -190,7 +204,9 @@ The frontmatter case is the important one. A `description` naming a specific rep
 
 A low portable count is the normal result for mature personal configuration and is not a defect — it means those items were written for a real environment rather than an imagined general one.
 
-> **Blind spot: named infrastructure.** Markers come from remotes and roots, so nothing supplies the name of a cluster, environment or project codename. An item bound to `prod-eu-1` rather than to a repo will still come back 🟢. Read the 🟢 list before acting on it, and put any such string in `portability.markers`.
+> **Blind spot: named infrastructure.** Markers come from remotes, roots and repo names, so nothing supplies the name of a cluster, environment or project codename. An item bound to `prod-eu-1` rather than to a repo will still come back 🟢. Read the 🟢 list before acting on it, and put any such string in `portability.markers`.
+
+> **Blind spot: a dependency named without backticks.** References are only detected inside code spans. An item that says *hand this to the shell reviewer* in plain prose has a real dependency that no report will show. Deliberate — matching prose would invent dependencies far more often than it found them — but it means an unblocked 🟢 is evidence, not proof.
 
 > **Not a secret scanner.** This answers "would this work for someone else?", not "would this leak something?". A repo layout name is unportable and harmless; a password is a leak and perfectly portable. If you are about to publish, you need both checks.
 
