@@ -840,6 +840,62 @@ def _referenced_items(path: Path, names: Iterable[str], own: str) -> list[str]:
     return sorted(name for name in set(names) if name != own and name in quoted)
 
 
+def config_scripts(roots: list[dict[str, Any]]) -> dict[str, str]:
+    """Every script living inside a config root, indexed by basename.
+
+    This is the lookup table that separates a real dependency from an example.
+    `find-sensitive.sh` is in it because the file is there; the `foo.sh` an agent
+    invents to illustrate its output format is not. Matching against what exists
+    is what lets the reference check stay quiet on prose.
+    """
+    index: dict[str, str] = {}
+    for root in roots:
+        base: Path = root["path"]
+        for path in sorted(base.rglob("*")):
+            if path.is_file() and path.name.endswith(SCRIPT_SUFFIXES):
+                index.setdefault(path.name, str(path))
+    return index
+
+
+def _external_scripts(
+    path: Path, index: dict[str, str], own: str, markdown: bool = True
+) -> list[dict[str, str]]:
+    """Scripts this item calls that are not part of the item.
+
+    A hook that shells out to a shared script, or an agent whose workflow runs
+    one, has a dependency that no name in the asset graph represents: the script
+    is not an agent, command, skill or hook, so it is invisible to the catalogue
+    and to `_referenced_items`. Publish the item alone and the call resolves to
+    nothing — the same failure as a missing dependency, one layer down.
+    """
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+
+    if markdown:
+        tokens = {span.strip() for span in re.findall(r"`([^`\n]{1,120})`", text)}
+    else:
+        # Comment lines are dropped before tokenizing. A script's header
+        # routinely names its siblings in prose — "the command-side sibling of
+        # pre-edit-release-automation-guard.sh" — and counting that as a call
+        # would report a dependency that does not exist at runtime.
+        code = "\n".join(
+            line for line in text.splitlines() if not line.lstrip().startswith("#")
+        )
+        tokens = set(re.findall(r"[\w./~$@{}-]+", code))
+
+    found: dict[str, str] = {}
+    for token in tokens:
+        name = token.rsplit("/", 1)[-1]
+        if name == own or name == path.name or not name.endswith(SCRIPT_SUFFIXES):
+            continue
+        target = index.get(name)
+        if target and target != str(path):
+            found.setdefault(name, target)
+    return [{"name": n, "file": found[n]} for n in sorted(found)]
+
+
 def build_portability(graph: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     roots = [
         {"path": Path(r["path"]), "scope": r["scope"], "repo": r["repo"]}
@@ -857,6 +913,7 @@ def build_portability(graph: dict[str, Any], config: dict[str, Any]) -> dict[str
         r["repo"] for r in graph["roots"] if r["scope"] == "repo" and r["repo"]
     ]
     catalogued = {i["name"] for i in graph["items"] if i["kind"] != "hook"}
+    scripts = config_scripts(roots)
 
     # Graded per ASSET, not per file: identical copies in a mirrored repo pair
     # score identically, and grading both would double every tier population.
@@ -902,6 +959,15 @@ def build_portability(graph: dict[str, Any], config: dict[str, Any]) -> dict[str
                     [] if item["kind"] == "hook"
                     else _referenced_items(Path(item["file"]), catalogued, item["name"])
                 ),
+                # A hook IS a script, so read the script it runs; everything
+                # else is Markdown and only backticked references count.
+                "externalScripts": (
+                    _external_scripts(Path(item["script"]), scripts, item["name"], markdown=False)
+                    if item["kind"] == "hook" and item.get("scriptExists")
+                    else _external_scripts(Path(item["file"]), scripts, item["name"])
+                    if item["kind"] != "hook"
+                    else []
+                ),
             }
         )
 
@@ -915,7 +981,11 @@ def build_portability(graph: dict[str, Any], config: dict[str, Any]) -> dict[str
             dep for dep in entry["dependsOn"]
             if by_name.get(dep, {}).get("tier", TIER_PORTABLE) != TIER_PORTABLE
         )
-        entry["shareable"] = entry["tier"] == TIER_PORTABLE and not entry["blockedBy"]
+        entry["shareable"] = (
+            entry["tier"] == TIER_PORTABLE
+            and not entry["blockedBy"]
+            and not entry["externalScripts"]
+        )
 
     tiers = {t: 0 for t in (TIER_PORTABLE, TIER_PARAM, TIER_PERSONAL)}
     for entry in graded:
@@ -930,6 +1000,7 @@ def build_portability(graph: dict[str, Any], config: dict[str, Any]) -> dict[str
         "shareable": sum(1 for e in graded if e["shareable"]),
         "blocked": sorted(e["name"] for e in graded if e["tier"] == TIER_PORTABLE
                           and e["blockedBy"]),
+        "callsScripts": sorted(e["name"] for e in graded if e["externalScripts"]),
     }
 
 
@@ -1009,6 +1080,26 @@ def render_portability(report: dict[str, Any], evidence: int) -> str:
             out.append(
                 f"| `{item['name']}` | {item['kind']} | {', '.join(item['origins'])} | {deps} |"
             )
+        out.append("")
+
+    calls = [i for i in report["items"] if i["externalScripts"]]
+    if calls:
+        out += [
+            "<br/>",
+            "",
+            f"## 🧩 Calls a script it does not contain ({len(calls)})",
+            "",
+            "_Each of these shells out to a script that is not part of the item and is not "
+            "catalogued as one. Publish the item alone and the call resolves to nothing — the "
+            "same failure as a missing dependency, one layer down. Only scripts that actually "
+            "exist in a config root are counted, so an example filename never appears here._",
+            "",
+            "| Item | Kind | Calls |",
+            "|---|---|---|",
+        ]
+        for item in sorted(calls, key=lambda i: (-len(i["externalScripts"]), i["name"])):
+            names = ", ".join(f"`{s['name']}`" for s in item["externalScripts"])
+            out.append(f"| `{item['name']}` | {item['kind']} | {names} |")
         out.append("")
 
     for tier, emoji, note in (

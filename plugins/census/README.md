@@ -192,6 +192,10 @@ Only items that are 🟢 *and* unblocked count toward *share-ready*. That number
 
 References are matched only inside backticks. Every item that delegates writes the target that way, and requiring the code span is what stops short names like `release` or `scan` from firing on ordinary prose. A missed reference is far cheaper here than an invented one.
 
+There is a second kind of dependency the asset graph cannot name. A helper script is not an agent, command, skill or hook, so nothing in the catalogue represents it — yet a hook that shells out to one, or an agent whose workflow runs one, is just as broken when published alone. Those are reported under **🧩 Calls a script it does not contain**.
+
+Only scripts that **actually exist in a config root** count. An example filename in prose never matches, and comment lines are dropped before a script is read, so a sibling merely *named* in a header comment is not mistaken for a call.
+
 The grade comes from **where** a marker lands, not how many there are:
 
 | Tier | Rule | Remedy |
