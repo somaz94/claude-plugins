@@ -6,11 +6,17 @@ All notable changes to this project will be documented in this file.
 
 ### Features
 
+- add the session-continuity plugin ([5b99c29](https://github.com/somaz94/claude-plugins/commit/5b99c29088a3f2d982a3eb8a0648591da4341084))
 - grade shareability by named repos and dependencies ([15c2b85](https://github.com/somaz94/claude-plugins/commit/15c2b85bfa465fc40d453c62085a445f1a71aa42))
 - add the shell-portability plugin ([768abe1](https://github.com/somaz94/claude-plugins/commit/768abe1708043c8e6f519f152b61412fdb8c8148))
 
+### Documentation
+
+- add a Korean README for shell-portability ([fb6b6ab](https://github.com/somaz94/claude-plugins/commit/fb6b6ab2d60163e54ad2ac06d6a28cab352272c2))
+
 ### Continuous Integration
 
+- require a description on commands too ([c498a46](https://github.com/somaz94/claude-plugins/commit/c498a461f4eee134f00a7bf30d6102c7b9d87d65))
 - cover the named-repo and dependency blind spots ([65eb83b](https://github.com/somaz94/claude-plugins/commit/65eb83b0edab73c26dd2b384197fe71e4acf53c4))
 - tag and release each plugin independently ([e88d2f4](https://github.com/somaz94/claude-plugins/commit/e88d2f48e8575b59957c207c3d3723b4004cd26d))
 - require a description and name on agents as well as skills ([3dc4a83](https://github.com/somaz94/claude-plugins/commit/3dc4a8311b5365be72fac636b8b2c2d87516b14e))
