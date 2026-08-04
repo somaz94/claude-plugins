@@ -100,6 +100,28 @@ TIER_PERSONAL = "PERSONAL"
 
 
 # --------------------------------------------------------------------------
+# tolerant readers
+# --------------------------------------------------------------------------
+#
+# census reads config it did not write, by hand-edited JSON whose shape nothing
+# validates. A file in an unexpected shape must degrade to "nothing found here"
+# — never take down the audit of every OTHER root along with it. These coerce
+# at the boundary so no reader downstream has to re-check.
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _as_str(value: Any) -> str:
+    return value if isinstance(value, str) else ""
+
+
+# --------------------------------------------------------------------------
 # config
 # --------------------------------------------------------------------------
 
@@ -131,8 +153,12 @@ def load_config(explicit: str | None) -> tuple[dict[str, Any], str]:
             # One level of nesting needs an explicit merge.
             merged["portability"] = {
                 **DEFAULT_CONFIG["portability"],
-                **loaded.get("portability", {}),
+                **_as_dict(loaded.get("portability")),
             }
+            for key in ("userRoots", "projectRoots", "exclude"):
+                merged[key] = _as_list(merged[key])
+            merged["pairs"] = _as_dict(merged["pairs"])
+            merged["portability"]["markers"] = _as_list(merged["portability"].get("markers"))
             return merged, str(path)
 
     if explicit:
@@ -439,10 +465,11 @@ def _read_hooks(settings: Path, root: dict[str, Any], origin: str) -> list[dict[
         return []
 
     found: list[dict[str, Any]] = []
-    for event, entries in (data.get("hooks") or {}).items():
-        for entry in entries:
-            for hook in entry.get("hooks", []):
-                command = hook.get("command", "")
+    for event, entries in _as_dict(data.get("hooks")).items():
+        for raw_entry in _as_list(entries):
+            entry = _as_dict(raw_entry)
+            for raw_hook in _as_list(entry.get("hooks")):
+                command = _as_str(_as_dict(raw_hook).get("command"))
                 script = _hook_script(command, root["path"])
                 tokens = _hook_tokens(command)
                 # Named after the script it runs, falling back to the command
