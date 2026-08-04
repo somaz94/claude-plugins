@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Features
 
+- add the release-guards plugin ([46764fd](https://github.com/somaz94/claude-plugins/commit/46764fd49925bc0a1a954d3bb68a0aa89d214e20))
 - ship the pre-compact handoff nudge as a plugin hook ([dd6f286](https://github.com/somaz94/claude-plugins/commit/dd6f286e2665040f753b4443e6015374ac3483c3))
 - add the session-continuity plugin ([5b99c29](https://github.com/somaz94/claude-plugins/commit/5b99c29088a3f2d982a3eb8a0648591da4341084))
 - grade shareability by named repos and dependencies ([15c2b85](https://github.com/somaz94/claude-plugins/commit/15c2b85bfa465fc40d453c62085a445f1a71aa42))
