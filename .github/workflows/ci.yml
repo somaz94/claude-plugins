@@ -101,21 +101,32 @@ jobs:
               sys.exit(1)
           PY
 
-      - name: Every skill declares a description
+      - name: Every skill and agent declares a description
+        # The description is the only thing Claude routes on. A skill or agent
+        # without one ships as dead weight: installed, listed, never reached.
         run: |
           python3 - <<'PY'
           import pathlib, re, sys
 
+          plugins = pathlib.Path("plugins")
+          targets = sorted(plugins.glob("*/skills/*/SKILL.md")) + sorted(plugins.glob("*/agents/*.md"))
+          if not targets:
+              print("FAIL: no skills or agents found — the glob is wrong")
+              sys.exit(1)
+
           failures = []
-          for skill in sorted(pathlib.Path("plugins").glob("*/skills/*/SKILL.md")):
-              text = skill.read_text(encoding="utf-8")
+          for target in targets:
+              text = target.read_text(encoding="utf-8")
               if not text.startswith("---"):
-                  failures.append(f"{skill}: no frontmatter")
+                  failures.append(f"{target}: no frontmatter")
                   continue
               block = text.split("---", 2)[1]
               if not re.search(r"^description:\s*\S", block, re.M):
-                  failures.append(f"{skill}: no description in frontmatter")
+                  failures.append(f"{target}: no description in frontmatter")
+              if not re.search(r"^name:\s*\S", block, re.M):
+                  failures.append(f"{target}: no name in frontmatter")
 
+          print(f"checked {len(targets)} items")
           for line in failures:
               print(f"FAIL: {line}")
           sys.exit(1 if failures else 0)
