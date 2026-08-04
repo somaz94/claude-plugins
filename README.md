@@ -45,7 +45,9 @@ plugins/<name>/                   one directory per plugin
   scripts/                        bundled executables, referenced via ${CLAUDE_PLUGIN_ROOT}
 ```
 
-Every plugin here is versioned in **two** places that must agree — its own `plugin.json` and its entry in `marketplace.json`. The marketplace entry is the version users actually receive, so CI fails the build when the two disagree, and again when a release tag does not match either.
+Every plugin here is versioned in **two** places that must agree — its own `plugin.json` and its entry in `marketplace.json`. The marketplace entry is the version users actually receive, so CI fails the build when the two disagree.
+
+Plugins version **independently**, and so do their releases: a tag is `<plugin>-v<X.Y.Z>` — `census-v0.3.1`, `shell-portability-v0.1.0`. Pushing one releases that plugin alone, with notes built from the commits under its own directory since its own previous tag. A repo-wide tag would drag every plugin's version up whenever any one of them shipped. Tags of the retired repo-wide form (`v0.3.0` and earlier) remain in history.
 
 <br/>
 
