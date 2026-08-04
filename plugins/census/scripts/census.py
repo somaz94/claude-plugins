@@ -29,7 +29,7 @@ import shlex
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 # Config file names, searched in this order. The first hit wins outright; the
 # files are not merged, so a project-local config is a complete override.
@@ -69,6 +69,10 @@ KNOWN_KEYS = (
     "argument-hint",
     "disable-model-invocation",
 )
+
+# A hook command word ending in one of these is a script even when it is
+# written without a directory, which is what separates `guard.sh` from `jq`.
+SCRIPT_SUFFIXES = (".sh", ".bash", ".zsh", ".py", ".js", ".mjs", ".ts", ".rb", ".pl")
 
 # Rough chars-per-token ratio for English prose. Used only for order-of-magnitude
 # context-budget reporting, never for anything that must be exact.
@@ -113,8 +117,16 @@ def load_config(explicit: str | None) -> tuple[dict[str, Any], str]:
 
     for path in candidates:
         if path.is_file():
-            with path.open(encoding="utf-8") as fh:
-                loaded = json.load(fh)
+            # A config this tool cannot parse is a user error, not a crash: a
+            # traceback here would read as a bug in census rather than a typo in
+            # the file it was told to load.
+            try:
+                with path.open(encoding="utf-8") as fh:
+                    loaded = json.load(fh)
+            except (json.JSONDecodeError, OSError) as exc:
+                raise SystemExit(f"census: cannot read config {path}: {exc}") from exc
+            if not isinstance(loaded, dict):
+                raise SystemExit(f"census: config {path} must hold a JSON object")
             merged = {**DEFAULT_CONFIG, **loaded}
             # One level of nesting needs an explicit merge.
             merged["portability"] = {
@@ -188,19 +200,29 @@ def is_excluded(name: str, patterns: Iterable[str]) -> bool:
     return any(fnmatch.fnmatch(name, pat) for pat in patterns)
 
 
-def has_upstream_remote(repo: Path) -> bool:
-    """True when the repo has an `upstream` remote (the `gh repo fork` shape)."""
+def git_output(directory: str | Path, *args: str, timeout: int = 10) -> str:
+    """Stdout of a read-only git command, or ``""`` when it cannot be run.
+
+    Every git call census makes is optional enrichment — a repo may not be a
+    repo, git may not be installed, a huge history may time out. None of that is
+    a reason to fail an audit, so a failure is indistinguishable from no answer.
+    """
     try:
         out = subprocess.run(
-            ["git", "-C", str(repo), "remote"],
+            ["git", "-C", str(directory), *args],
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=timeout,
             check=False,
         )
     except (OSError, subprocess.SubprocessError):
-        return False
-    return "upstream" in out.stdout.split()
+        return ""
+    return out.stdout
+
+
+def has_upstream_remote(repo: Path) -> bool:
+    """True when the repo has an `upstream` remote (the `gh repo fork` shape)."""
+    return "upstream" in git_output(repo, "remote").split()
 
 
 def discover_roots(config: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
@@ -254,6 +276,11 @@ def _expand(pattern: str) -> list[Path]:
 # --------------------------------------------------------------------------
 
 
+def _digest(text: str) -> str:
+    """Short content fingerprint. Identity of a document, never a security claim."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
 def collect_items(roots: list[dict[str, Any]], config: dict[str, Any]) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     pairs = config["pairs"]
@@ -262,25 +289,22 @@ def collect_items(roots: list[dict[str, Any]], config: dict[str, Any]) -> list[d
         base: Path = root["path"]
         origin = root["repo"] or "user"
 
-        for subdir, kind in FLAT_KINDS.items():
-            for path in sorted((base / subdir).glob("*.md")):
-                item = _read_item(path, kind, root, origin)
-                mirror = pairs.get(subdir)
-                item["pair"] = (
-                    _pair_for(base / mirror / path.name, base / mirror) if mirror else None
+        # Flat and folder layouts differ only in what they glob and what names
+        # an item: the mirror path is the same subpath under the mirror root
+        # either way (`alpha.md`, or `demo/SKILL.md`).
+        for subdir, kind in {**FLAT_KINDS, **FOLDER_KINDS}.items():
+            source = base / subdir
+            foldered = subdir in FOLDER_KINDS
+            mirror = pairs.get(subdir)
+            for path in sorted(source.glob("*/SKILL.md" if foldered else "*.md")):
+                item = _read_item(
+                    path, kind, root, origin, name=path.parent.name if foldered else None
                 )
-                items.append(item)
-
-        for subdir, kind in FOLDER_KINDS.items():
-            for skill_md in sorted((base / subdir).glob("*/SKILL.md")):
-                item = _read_item(skill_md, kind, root, origin, name=skill_md.parent.name)
-                mirror = pairs.get(subdir)
-                if mirror:
-                    item["pair"] = _pair_for(
-                        base / mirror / skill_md.parent.name / "SKILL.md", base / mirror
-                    )
-                else:
-                    item["pair"] = None
+                item["pair"] = (
+                    _pair_for(base / mirror / path.relative_to(source), base / mirror)
+                    if mirror
+                    else None
+                )
                 items.append(item)
 
         items.extend(_read_hooks(base / "settings.json", root, origin))
@@ -313,7 +337,7 @@ def _read_item(
         "extraKeys": sorted(k for k in fields if k not in KNOWN_KEYS),
         "descriptionChars": len(description),
         "bodyChars": len(text) - offset,
-        "digest": hashlib.sha256(text.encode("utf-8")).hexdigest()[:16],
+        "digest": _digest(text),
         "structure": _structure(text),
         "pair": None,
     }
@@ -347,9 +371,28 @@ def _pair_for(path: Path, mirror_root: Path) -> dict[str, Any] | None:
         "file": str(path),
         "exists": True,
         "mirrorDir": str(mirror_root),
-        "digest": hashlib.sha256(text.encode("utf-8")).hexdigest()[:16],
+        "digest": _digest(text),
         **_structure(text),
     }
+
+
+def _hook_tokens(command: str) -> list[str]:
+    """Split a hook command into words, tolerating shell it cannot lex."""
+    if not command.strip():
+        return []
+    try:
+        return shlex.split(command)
+    except ValueError:
+        return command.split()
+
+
+def _expand_hook_token(token: str, base: Path) -> str:
+    """Substitute the variables a hook command may be written in terms of."""
+    home = str(Path.home())
+    for variable in ("CLAUDE_PROJECT_DIR", "CLAUDE_PLUGIN_ROOT"):
+        for form in (f"${{{variable}}}", f"${variable}"):
+            token = token.replace(form, str(base.parent))
+    return token.replace("$HOME", home).replace("${HOME}", home)
 
 
 def _hook_script(command: str, base: Path) -> Path | None:
@@ -358,26 +401,26 @@ def _hook_script(command: str, base: Path) -> Path | None:
     A hook's real content is not the registration — it is the file the
     registration points at. Without resolving it, everything a hook actually
     does is invisible: the hardcoded paths inside it, and whether it is even
-    there. A command may also be inline shell with no script at all, which is
-    why this can return None.
+    there.
+
+    A command may also be inline shell (`echo …`, `jq …`) that runs no script at
+    all, which is why this can return None. Taking the first word regardless
+    would invent a file that was never meant to exist and report every such hook
+    as broken. So a word only counts as a script when it is written like a path
+    or carries a script suffix — which also finds the script behind an
+    interpreter prefix (`python3 guard.py`), where the first word never was one.
     """
-    if not command.strip():
-        return None
-    try:
-        token = shlex.split(command)[0]
-    except ValueError:
-        token = command.split()[0]
-
-    home = str(Path.home())
-    for variable in ("CLAUDE_PROJECT_DIR", "CLAUDE_PLUGIN_ROOT"):
-        for form in (f"${{{variable}}}", f"${variable}"):
-            token = token.replace(form, str(base.parent))
-    token = token.replace("$HOME", home).replace("${HOME}", home)
-
-    path = Path(os.path.expanduser(token))
-    if not path.is_absolute():
-        path = base.parent / path
-    return path
+    for token in _hook_tokens(command):
+        if token.startswith("-"):
+            continue
+        expanded = _expand_hook_token(token, base)
+        if "/" not in expanded and not expanded.endswith(SCRIPT_SUFFIXES):
+            continue
+        path = Path(os.path.expanduser(expanded))
+        if not path.is_absolute():
+            path = base.parent / path
+        return path
+    return None
 
 
 def _read_hooks(settings: Path, root: dict[str, Any], origin: str) -> list[dict[str, Any]]:
@@ -401,10 +444,20 @@ def _read_hooks(settings: Path, root: dict[str, Any], origin: str) -> list[dict[
             for hook in entry.get("hooks", []):
                 command = hook.get("command", "")
                 script = _hook_script(command, root["path"])
+                tokens = _hook_tokens(command)
+                # Named after the script it runs, falling back to the command
+                # itself and then to the event — a command may be nothing but
+                # whitespace, and there is still a registration to report.
+                if script is not None:
+                    name = script.name
+                elif tokens:
+                    name = Path(tokens[0]).name
+                else:
+                    name = event
                 found.append(
                     {
                         "kind": "hook",
-                        "name": Path(command.split()[0]).name if command else event,
+                        "name": name,
                         "declaredName": None,
                         "file": str(settings),
                         "script": str(script) if script else None,
@@ -421,9 +474,7 @@ def _read_hooks(settings: Path, root: dict[str, Any], origin: str) -> list[dict[
                         "bodyChars": len(command),
                         # The registration IS the hook here, so the command line
                         # is what identifies it across mirrored settings.json.
-                        "digest": hashlib.sha256(
-                            f"{event}:{command}".encode("utf-8")
-                        ).hexdigest()[:16],
+                        "digest": _digest(f"{event}:{command}"),
                         "pair": None,
                     }
                 )
@@ -548,19 +599,8 @@ def _public_forge(host: str | None) -> str | None:
 
 def _remote_identities(repo: Path) -> list[tuple[str | None, str | None]]:
     """Return (owner, host) pairs parsed from the repo's git remotes."""
-    try:
-        out = subprocess.run(
-            ["git", "-C", str(repo), "remote", "-v"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return []
-
     identities: list[tuple[str | None, str | None]] = []
-    for line in out.stdout.splitlines():
+    for line in git_output(repo, "remote", "-v").splitlines():
         parts = line.split()
         if len(parts) < 2:
             continue
@@ -576,23 +616,48 @@ def _remote_identities(repo: Path) -> list[tuple[str | None, str | None]]:
     return identities
 
 
+def _always_code(_marker: str) -> str:
+    """Placement resolver for a source that is code end to end."""
+    return "code"
+
+
+def _line_hits(
+    line: str,
+    lineno: int,
+    markers: list[dict[str, str]],
+    placement: Callable[[str], str],
+    file: str | None = None,
+) -> list[dict[str, Any]]:
+    """Every marker occurring in one line, each recorded with where it landed.
+
+    Placement is resolved per MARKER rather than per line: two markers on the
+    same line of Markdown can land differently, one inside backticks and one in
+    the surrounding prose.
+    """
+    lowered = line.lower()
+    hits: list[dict[str, Any]] = []
+    for marker in markers:
+        value = marker["value"]
+        if value.lower() not in lowered:
+            continue
+        hit = {
+            "line": lineno,
+            "marker": value,
+            "category": marker["category"],
+            "placement": placement(value),
+            "text": line.strip()[:160],
+        }
+        if file is not None:
+            hit["file"] = file
+        hits.append(hit)
+    return hits
+
+
 def _command_hits(
     command: str, file: str, markers: list[dict[str, str]]
 ) -> list[dict[str, Any]]:
     """Markers inside a hook's registered command string."""
-    hits = []
-    lowered = command.lower()
-    for marker in markers:
-        if marker["value"].lower() in lowered:
-            hits.append({
-                "line": 1,
-                "marker": marker["value"],
-                "category": marker["category"],
-                "placement": "code",
-                "text": command.strip()[:160],
-                "file": file,
-            })
-    return hits
+    return _line_hits(command, 1, markers, _always_code, file)
 
 
 def find_hits(
@@ -612,50 +677,32 @@ def find_hits(
     except OSError:
         return []
 
+    hits: list[dict[str, Any]] = []
+
     if not markdown:
-        hits: list[dict[str, Any]] = []
         for lineno, line in enumerate(text.splitlines(), start=1):
-            lowered = line.lower()
-            for marker in markers:
-                if marker["value"].lower() in lowered:
-                    hits.append({
-                        "line": lineno,
-                        "marker": marker["value"],
-                        "category": marker["category"],
-                        "placement": "code",
-                        "text": line.strip()[:160],
-                        "file": str(path),
-                    })
+            hits += _line_hits(line, lineno, markers, _always_code, str(path))
         return hits
 
     _, offset = parse_frontmatter(text)
     frontmatter_lines = text[:offset].count("\n") if offset else 0
 
-    hits: list[dict[str, Any]] = []
     in_fence = False
     for lineno, line in enumerate(text.splitlines(), start=1):
         if line.lstrip().startswith("```"):
             in_fence = not in_fence
             continue
-        lowered = line.lower()
-        for marker in markers:
-            if marker["value"].lower() not in lowered:
-                continue
+
+        # Closes over this iteration's line state, and is consumed inside the
+        # same iteration — there is no later call to bind stale values.
+        def placement(value: str) -> str:
             if lineno <= frontmatter_lines:
-                placement = "frontmatter"
-            elif in_fence or _in_inline_code(line, marker["value"]):
-                placement = "code"
-            else:
-                placement = "prose"
-            hits.append(
-                {
-                    "line": lineno,
-                    "marker": marker["value"],
-                    "category": marker["category"],
-                    "placement": placement,
-                    "text": line.strip()[:160],
-                }
-            )
+                return "frontmatter"
+            if in_fence or _in_inline_code(line, value):
+                return "code"
+            return "prose"
+
+        hits += _line_hits(line, lineno, markers, placement)
     return hits
 
 
@@ -790,9 +837,12 @@ def render_portability(report: dict[str, Any], evidence: int) -> str:
         group = [i for i in report["items"] if i["tier"] == tier]
         if not group:
             continue
+        # Worst-coupled first, and the same order for the evidence below.
+        group.sort(key=lambda i: (-len(i["hits"]), i["name"]))
+
         out += ["<br/>", "", f"## {emoji} {tier} ({len(group)})", "", f"_{note}_", ""]
         out += ["| Item | Kind | Origin | Hits | Markers |", "|---|---|---|---|---|"]
-        for item in sorted(group, key=lambda i: (-len(i["hits"]), i["name"])):
+        for item in group:
             markers = ", ".join(f"`{m}`" for m in item["markers"]) or "—"
             out.append(
                 f"| `{item['name']}` | {item['kind']} | {', '.join(item['origins'])} "
@@ -802,7 +852,7 @@ def render_portability(report: dict[str, Any], evidence: int) -> str:
 
         if tier != TIER_PORTABLE and evidence:
             out += [f"### Evidence (first {evidence} hits per item)", ""]
-            for item in sorted(group, key=lambda i: (-len(i["hits"]), i["name"])):
+            for item in group:
                 out.append(f"**`{item['name']}`** — {item['file']}")
                 for hit in item["hits"][:evidence]:
                     # A hook's hits span two files (settings.json and the script
@@ -822,6 +872,44 @@ def render_portability(report: dict[str, Any], evidence: int) -> str:
 # --------------------------------------------------------------------------
 
 SEV_HIGH, SEV_MED, SEV_LOW = "high", "medium", "low"
+
+# Structural metrics compared between a document and its translation mirror.
+METRICS = ("headings", "codeBlocks", "tableRows")
+
+# A source edited at least this long after its mirror is treated as having moved
+# on without it. Below a day the two are almost always the same editing session.
+STALE_PAIR_DAYS = 1
+
+# Below this many pairs there is not enough evidence to tell a house style from
+# an accident, so comparison falls back to requiring an exact match.
+CALIBRATION_MIN = 3
+
+
+def _finding(
+    severity: str,
+    axis: str,
+    code: str,
+    title: str,
+    detail: str,
+    refs: list[str],
+    dedupe: tuple[Any, ...] | None = None,
+) -> dict[str, Any]:
+    """One drift finding.
+
+    ``dedupe``, when given, is the identity under which findings describing the
+    same problem are folded together — see ``_merge_duplicate_findings``.
+    """
+    finding: dict[str, Any] = {
+        "severity": severity,
+        "axis": axis,
+        "code": code,
+        "title": title,
+        "detail": detail,
+        "refs": refs,
+    }
+    if dedupe is not None:
+        finding["dedupe"] = dedupe
+    return finding
 
 
 def _normalize_key(key: str) -> str:
@@ -885,47 +973,36 @@ def _duplicate_findings(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         shadowing = {i["scope"] for i in group} == {"global", "repo"}
 
         if agree:
-            findings.append({
-                "severity": SEV_LOW,
-                "axis": "duplicates",
-                "code": "mirror-consistent",
-                "title": f"`{name}` ({kind}) defined in {len(group)} places, all identical",
-                "detail": f"Origins: {origins}. Copies agree byte for byte — the intended mirror state.",
-                "refs": refs,
-            })
+            findings.append(_finding(
+                SEV_LOW,
+                "duplicates",
+                "mirror-consistent",
+                f"`{name}` ({kind}) defined in {len(group)} places, all identical",
+                f"Origins: {origins}. Copies agree byte for byte — the intended mirror state.",
+                refs,
+            ))
         elif shadowing:
-            findings.append({
-                "severity": SEV_HIGH,
-                "axis": "duplicates",
-                "code": "shadowed",
-                "title": f"`{name}` ({kind}) exists at both user and project level with different content",
-                "detail": (
-                    f"Origins: {origins}. A project-level definition overrides the user-level one "
-                    "inside that repo, so the same name behaves differently depending on where "
-                    "the session is started — and nothing reports which copy won."
-                ),
-                "refs": refs,
-            })
+            findings.append(_finding(
+                SEV_HIGH,
+                "duplicates",
+                "shadowed",
+                f"`{name}` ({kind}) exists at both user and project level with different content",
+                f"Origins: {origins}. A project-level definition overrides the user-level one "
+                "inside that repo, so the same name behaves differently depending on where "
+                "the session is started — and nothing reports which copy won.",
+                refs,
+            ))
         else:
-            findings.append({
-                "severity": SEV_MED,
-                "axis": "duplicates",
-                "code": "mirror-drift",
-                "title": f"`{name}` ({kind}) defined in {len(group)} places that disagree",
-                "detail": (
-                    f"Origins: {origins}. These look like a mirrored pair whose copies have "
-                    "diverged; whichever one is the source of truth, the other is stale."
-                ),
-                "refs": refs,
-            })
+            findings.append(_finding(
+                SEV_MED,
+                "duplicates",
+                "mirror-drift",
+                f"`{name}` ({kind}) defined in {len(group)} places that disagree",
+                f"Origins: {origins}. These look like a mirrored pair whose copies have "
+                "diverged; whichever one is the source of truth, the other is stale.",
+                refs,
+            ))
     return findings
-
-
-METRICS = ("headings", "codeBlocks", "tableRows")
-
-# A source edited at least this long after its mirror is treated as having moved
-# on without it. Below a day the two are almost always the same editing session.
-STALE_PAIR_DAYS = 1
 
 
 def git_commit_times(files: Iterable[str]) -> dict[str, int]:
@@ -960,29 +1037,16 @@ def _resolved(path: str) -> str:
 
 
 def _git_toplevel(directory: str) -> str | None:
-    try:
-        out = subprocess.run(
-            ["git", "-C", directory, "rev-parse", "--show-toplevel"],
-            capture_output=True, text=True, timeout=10, check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return out.stdout.strip() or None
+    return git_output(directory, "rev-parse", "--show-toplevel").strip() or None
 
 
 def _git_log_times(toplevel: str) -> dict[str, int]:
     """One `git log` per repo, newest first, so the first sighting wins."""
-    try:
-        out = subprocess.run(
-            ["git", "-C", toplevel, "log", "--format=%ct", "--name-only"],
-            capture_output=True, text=True, timeout=60, check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return {}
+    log = git_output(toplevel, "log", "--format=%ct", "--name-only", timeout=60)
 
     times: dict[str, int] = {}
     stamp = 0
-    for line in out.stdout.splitlines():
+    for line in log.splitlines():
         line = line.strip()
         if not line:
             continue
@@ -992,9 +1056,23 @@ def _git_log_times(toplevel: str) -> dict[str, int]:
         times.setdefault(_resolved(str(Path(toplevel) / line)), stamp)
     return times
 
-# Below this many pairs there is not enough evidence to tell a house style from
-# an accident, so comparison falls back to requiring an exact match.
-CALIBRATION_MIN = 3
+
+def _baseline_deltas(group: list[dict[str, Any]]) -> dict[str, int]:
+    """The structural offset a mirror directory's pairs share by convention.
+
+    Most common delta per metric wins; a tie resolves toward 0 so an evenly
+    split directory is not declared to have a convention at all. Under
+    ``CALIBRATION_MIN`` pairs there is no majority to read, and the baseline
+    stays at zero — an exact match.
+    """
+    if len(group) < CALIBRATION_MIN:
+        return {metric: 0 for metric in METRICS}
+
+    baseline: dict[str, int] = {}
+    for metric in METRICS:
+        values = [comparison["deltas"][metric] for comparison in group]
+        baseline[metric] = sorted(set(values), key=lambda v: (-values.count(v), abs(v)))[0]
+    return baseline
 
 
 def _pair_findings(
@@ -1023,14 +1101,14 @@ def _pair_findings(
         if not pair:
             continue
         if not pair["exists"]:
-            findings.append({
-                "severity": SEV_HIGH,
-                "axis": "pairs",
-                "code": "pair-missing",
-                "title": f"`{item['name']}` ({item['kind']}) has no translation mirror",
-                "detail": f"Expected at {pair['file']}.",
-                "refs": [item["file"]],
-            })
+            findings.append(_finding(
+                SEV_HIGH,
+                "pairs",
+                "pair-missing",
+                f"`{item['name']}` ({item['kind']}) has no translation mirror",
+                f"Expected at {pair['file']}.",
+                [item["file"]],
+            ))
             continue
         comparisons.setdefault(pair["mirrorDir"], []).append({
             "item": item,
@@ -1039,29 +1117,21 @@ def _pair_findings(
         })
 
     for mirror_dir, group in sorted(comparisons.items()):
-        baseline = {m: 0 for m in METRICS}
-        if len(group) >= CALIBRATION_MIN:
-            for metric in METRICS:
-                values = [c["deltas"][metric] for c in group]
-                # Most common delta wins; a tie resolves toward 0 so an evenly
-                # split directory is not declared to have a convention.
-                baseline[metric] = sorted(set(values), key=lambda v: (-values.count(v), abs(v)))[0]
+        baseline = _baseline_deltas(group)
 
         described = ", ".join(
             f"{m} {baseline[m]:+d}" for m in METRICS if baseline[m]
         )
         if described:
-            findings.append({
-                "severity": SEV_LOW,
-                "axis": "pairs",
-                "code": "pair-convention",
-                "title": f"`{mirror_dir}/` mirrors differ from their source by a constant",
-                "detail": (
-                    f"Across {len(group)} pairs the usual offset is {described}. Treated as "
-                    "house style and calibrated away; only pairs that deviate are reported."
-                ),
-                "refs": [],
-            })
+            findings.append(_finding(
+                SEV_LOW,
+                "pairs",
+                "pair-convention",
+                f"`{mirror_dir}/` mirrors differ from their source by a constant",
+                f"Across {len(group)} pairs the usual offset is {described}. Treated as "
+                "house style and calibrated away; only pairs that deviate are reported.",
+                [],
+            ))
 
         for comparison in group:
             item, pair = comparison["item"], comparison["pair"]
@@ -1071,25 +1141,21 @@ def _pair_findings(
             if source_at and mirror_at:
                 behind = (source_at - mirror_at) // 86400
                 if behind >= STALE_PAIR_DAYS:
-                    findings.append({
-                        "severity": SEV_MED,
-                        "axis": "pairs",
-                        "code": "pair-stale",
-                        "title": (
-                            f"`{item['name']}` ({item['kind']}) mirror is {behind} day(s) "
-                            "behind its source"
-                        ),
-                        "detail": (
-                            "The source has been committed since the mirror last was. Shapes can "
-                            "still match — this is the drift a structural comparison cannot see, "
-                            "and content cannot answer it because a translation is meant to differ."
-                        ),
-                        "refs": [item["file"], pair["file"]],
-                        "dedupe": (
+                    findings.append(_finding(
+                        SEV_MED,
+                        "pairs",
+                        "pair-stale",
+                        f"`{item['name']}` ({item['kind']}) mirror is {behind} day(s) "
+                        "behind its source",
+                        "The source has been committed since the mirror last was. Shapes can "
+                        "still match — this is the drift a structural comparison cannot see, "
+                        "and content cannot answer it because a translation is meant to differ.",
+                        [item["file"], pair["file"]],
+                        dedupe=(
                             "pair-stale", item["kind"], item["name"],
                             item["digest"], pair["digest"],
                         ),
-                    })
+                    ))
 
             deviations = [
                 f"{m}: {comparison['deltas'][m]:+d} where this mirror usually has "
@@ -1098,26 +1164,24 @@ def _pair_findings(
                 if comparison["deltas"][m] != baseline[m]
             ]
             if deviations:
-                findings.append({
-                    "severity": SEV_MED,
-                    "axis": "pairs",
-                    "code": "pair-structure",
-                    "title": (
-                        f"`{item['name']}` ({item['kind']}) deviates from its mirror convention"
-                    ),
-                    "detail": "; ".join(deviations) + " — one side gained or lost content.",
-                    "refs": [item["file"], pair["file"]],
+                findings.append(_finding(
+                    SEV_MED,
+                    "pairs",
+                    "pair-structure",
+                    f"`{item['name']}` ({item['kind']}) deviates from its mirror convention",
+                    "; ".join(deviations) + " — one side gained or lost content.",
+                    [item["file"], pair["file"]],
                     # A mirrored repo pair holds the same source and the same
                     # translation twice over, so the identical deviation is
                     # found once per tree. It is one problem with one fix.
-                    "dedupe": (
+                    dedupe=(
                         "pair-structure",
                         item["kind"],
                         item["name"],
                         item["digest"],
                         pair["digest"],
                     ),
-                })
+                ))
 
     return findings
 
@@ -1137,18 +1201,16 @@ def _hook_findings(hooks: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not script or hook.get("scriptExists"):
             continue
         event = hook["frontmatter"].get("event", "?")
-        findings.append({
-            "severity": SEV_HIGH,
-            "axis": "hooks",
-            "code": "hook-missing-script",
-            "title": f"`{hook['name']}` ({event}) is registered but its script is missing",
-            "detail": (
-                f"Expected at {script}. The registration stays in settings.json, so the hook "
-                "looks configured while doing nothing on every matching event."
-            ),
-            "refs": [hook["file"]],
-            "dedupe": ("hook-missing-script", hook["name"], event, script),
-        })
+        findings.append(_finding(
+            SEV_HIGH,
+            "hooks",
+            "hook-missing-script",
+            f"`{hook['name']}` ({event}) is registered but its script is missing",
+            f"Expected at {script}. The registration stays in settings.json, so the hook "
+            "looks configured while doing nothing on every matching event.",
+            [hook["file"]],
+            dedupe=("hook-missing-script", hook["name"], event, script),
+        ))
     return findings
 
 
@@ -1181,56 +1243,49 @@ def _frontmatter_findings(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
     for item in items:
         if not item["frontmatter"].get("description"):
-            findings.append({
-                "severity": SEV_HIGH,
-                "axis": "frontmatter",
-                "code": "no-description",
-                "title": f"`{item['name']}` ({item['kind']}) declares no description",
-                "detail": (
-                    "The description is the only signal Claude has for when to reach for this "
-                    "item, so without one it is effectively unreachable unless named explicitly."
-                ),
-                "refs": [item["file"]],
-            })
+            findings.append(_finding(
+                SEV_HIGH,
+                "frontmatter",
+                "no-description",
+                f"`{item['name']}` ({item['kind']}) declares no description",
+                "The description is the only signal Claude has for when to reach for this "
+                "item, so without one it is effectively unreachable unless named explicitly.",
+                [item["file"]],
+            ))
 
         declared = item.get("declaredName")
         expected = item.get("expectedName")
         if declared and expected and declared != expected:
-            findings.append({
-                "severity": SEV_MED,
-                "axis": "frontmatter",
-                "code": "name-mismatch",
-                "title": f"`{expected}` declares the name `{declared}`",
-                "detail": (
-                    "The file or folder name is what the item is invoked by; a differing "
-                    "`name:` field misleads anyone reading the frontmatter."
-                ),
-                "refs": [item["file"]],
-            })
+            findings.append(_finding(
+                SEV_MED,
+                "frontmatter",
+                "name-mismatch",
+                f"`{expected}` declares the name `{declared}`",
+                "The file or folder name is what the item is invoked by; a differing "
+                "`name:` field misleads anyone reading the frontmatter.",
+                [item["file"]],
+            ))
 
         for key in item.get("extraKeys", []):
-            normalized = _normalize_key(key)
-            if normalized in known:
-                findings.append({
-                    "severity": SEV_MED,
-                    "axis": "frontmatter",
-                    "code": "key-typo",
-                    "title": f"`{item['name']}` ({item['kind']}) uses `{key}`",
-                    "detail": (
-                        f"Normalizes to a known key but is not spelled like one, so it is read "
-                        "as an unknown field and silently ignored."
-                    ),
-                    "refs": [item["file"]],
-                })
+            if _normalize_key(key) in known:
+                findings.append(_finding(
+                    SEV_MED,
+                    "frontmatter",
+                    "key-typo",
+                    f"`{item['name']}` ({item['kind']}) uses `{key}`",
+                    "Normalizes to a known key but is not spelled like one, so it is read "
+                    "as an unknown field and silently ignored.",
+                    [item["file"]],
+                ))
             else:
-                findings.append({
-                    "severity": SEV_LOW,
-                    "axis": "frontmatter",
-                    "code": "unknown-key",
-                    "title": f"`{item['name']}` ({item['kind']}) declares `{key}`",
-                    "detail": "Not a key census knows about; harmless if intentional.",
-                    "refs": [item["file"]],
-                })
+                findings.append(_finding(
+                    SEV_LOW,
+                    "frontmatter",
+                    "unknown-key",
+                    f"`{item['name']}` ({item['kind']}) declares `{key}`",
+                    "Not a key census knows about; harmless if intentional.",
+                    [item["file"]],
+                ))
     return findings
 
 
@@ -1486,6 +1541,13 @@ def _truncate(text: str, limit: int) -> str:
     return flat if len(flat) <= limit else flat[: limit - 1] + "…"
 
 
+def emit_json(payload: dict[str, Any]) -> int:
+    """Write a report to stdout as JSON. Always succeeds, so the exit code is 0."""
+    json.dump(payload, sys.stdout, indent=2, ensure_ascii=False)
+    sys.stdout.write("\n")
+    return 0
+
+
 def write_out(target: str, rendered: str, graph: dict[str, Any], summary: str) -> int:
     """Write an ``--out`` report, refusing to land inside a scanned tree.
 
@@ -1494,8 +1556,8 @@ def write_out(target: str, rendered: str, graph: dict[str, Any], summary: str) -
     publishes its `.claude/`, would commit real machine paths. The promise not
     to write into a scanned tree only holds if it is enforced here.
     """
-    path = Path(target).expanduser()
-    resolved = (Path.cwd() / path).resolve() if not path.is_absolute() else path.resolve()
+    # `resolve()` already anchors a relative path to the working directory.
+    resolved = Path(target).expanduser().resolve()
 
     for root in graph["roots"]:
         root_path = Path(root["path"]).resolve()
@@ -1566,41 +1628,28 @@ def main(argv: list[str] | None = None) -> int:
     graph = build_graph(config, origin)
 
     if args.command == "scan":
-        json.dump(graph, sys.stdout, indent=2, ensure_ascii=False)
-        sys.stdout.write("\n")
-        return 0
+        return emit_json(graph)
 
+    # Each report decides only what it renders and how to summarize itself; the
+    # three ways of emitting it are the same for all of them and stated once.
     if args.command == "portability":
         report = build_portability(graph, config)
         if args.json:
-            json.dump(report, sys.stdout, indent=2, ensure_ascii=False)
-            sys.stdout.write("\n")
-            return 0
+            return emit_json(report)
         rendered = render_portability(report, args.evidence)
-        if args.out:
-            return write_out(
-                args.out, rendered, graph, f"{sum(report['tiers'].values())} items graded"
-            )
-        sys.stdout.write(rendered)
-        return 0
-
-    if args.command == "drift":
+        summary = f"{sum(report['tiers'].values())} items graded"
+    elif args.command == "drift":
         report = build_drift(graph)
         if args.json:
-            json.dump(report, sys.stdout, indent=2, ensure_ascii=False)
-            sys.stdout.write("\n")
-            return 0
+            return emit_json(report)
         rendered = render_drift(report, args.limit)
-        if args.out:
-            return write_out(
-                args.out, rendered, graph, f"{len(report['findings'])} findings"
-            )
-        sys.stdout.write(rendered)
-        return 0
+        summary = f"{len(report['findings'])} findings"
+    else:
+        rendered = render_catalog(graph, args.top)
+        summary = f"{graph['stats']['total']} items"
 
-    rendered = render_catalog(graph, args.top)
     if args.out:
-        return write_out(args.out, rendered, graph, f"{graph['stats']['total']} items")
+        return write_out(args.out, rendered, graph, summary)
     sys.stdout.write(rendered)
     return 0
 
