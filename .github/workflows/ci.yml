@@ -122,13 +122,19 @@ jobs:
           import pathlib, re, sys
 
           plugins = pathlib.Path("plugins")
-          targets = sorted(plugins.glob("*/skills/*/SKILL.md")) + sorted(plugins.glob("*/agents/*.md"))
+          # A command is invoked by its FILENAME, so it needs no `name:` field.
+          # A skill and an agent are both addressed by a declared name.
+          targets = (
+              [(p, True) for p in sorted(plugins.glob("*/skills/*/SKILL.md"))]
+              + [(p, True) for p in sorted(plugins.glob("*/agents/*.md"))]
+              + [(p, False) for p in sorted(plugins.glob("*/commands/*.md"))]
+          )
           if not targets:
-              print("FAIL: no skills or agents found — the glob is wrong")
+              print("FAIL: nothing found — the globs are wrong")
               sys.exit(1)
 
           failures = []
-          for target in targets:
+          for target, needs_name in targets:
               text = target.read_text(encoding="utf-8")
               if not text.startswith("---"):
                   failures.append(f"{target}: no frontmatter")
@@ -136,7 +142,7 @@ jobs:
               block = text.split("---", 2)[1]
               if not re.search(r"^description:\s*\S", block, re.M):
                   failures.append(f"{target}: no description in frontmatter")
-              if not re.search(r"^name:\s*\S", block, re.M):
+              if needs_name and not re.search(r"^name:\s*\S", block, re.M):
                   failures.append(f"{target}: no name in frontmatter")
 
           print(f"checked {len(targets)} items")
