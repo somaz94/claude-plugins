@@ -783,6 +783,88 @@ jobs:
           PY
           echo "PASS: blocked wrapper flagged, clean wrapper still share-ready"
 
+      - name: census sees a script an item shells out to
+        # The dependency the asset graph cannot name: a helper script is not an
+        # agent, command, skill or hook, so nothing in the catalogue represents
+        # it. Only scripts that really exist are counted — an example filename
+        # in prose, and a sibling merely named in a comment, must stay quiet.
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp -d)"
+          mkdir -p "$fixture/home/.claude/agents" "$fixture/home/.claude/scripts" \
+                   "$fixture/home/.claude/hooks"
+          printf '#!/usr/bin/env bash\necho shared\n' > "$fixture/home/.claude/scripts/shared-helper.sh"
+          chmod +x "$fixture/home/.claude/scripts/shared-helper.sh"
+
+          printf -- '---\nname: caller\ndescription: Runs the shared helper.\n---\nRun `shared-helper.sh` before reporting.\n' \
+            > "$fixture/home/.claude/agents/caller.md"
+          # `missing-helper.sh` does not exist anywhere, so it is an example.
+          printf -- '---\nname: illustrator\ndescription: Shows example output.\n---\nOutput looks like `missing-helper.sh: 3 issues`.\n' \
+            > "$fixture/home/.claude/agents/illustrator.md"
+
+          # A hook that only NAMES a sibling in a comment calls nothing.
+          printf '#!/usr/bin/env bash\n# sibling of shared-helper.sh, which it does not run\nexit 0\n' \
+            > "$fixture/home/.claude/hooks/commenter.sh"
+          chmod +x "$fixture/home/.claude/hooks/commenter.sh"
+          cat > "$fixture/home/.claude/settings.json" <<EOF
+          {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [
+            {"type": "command", "command": "$fixture/home/.claude/hooks/commenter.sh"}]}]}}
+          EOF
+          cat > "$fixture/census.json" <<EOF
+          {
+            "userRoots": ["$fixture/home/.claude"],
+            "projectRoots": [],
+            "excludeOssForks": false,
+            "pairs": {}
+          }
+          EOF
+
+          python3 plugins/census/scripts/census.py --config "$fixture/census.json" \
+            portability --json > "$fixture/port.json"
+          python3 - "$fixture/port.json" <<'PY'
+          import json, sys
+
+          report = json.load(open(sys.argv[1]))
+          items = {i["name"]: i for i in report["items"]}
+          failures = []
+
+          caller = items.get("caller")
+          if caller is None:
+              failures.append("caller was not graded")
+          else:
+              names = [s["name"] for s in caller.get("externalScripts", [])]
+              if names != ["shared-helper.sh"]:
+                  failures.append(f"caller: expected [shared-helper.sh], got {names!r}")
+              if caller.get("shareable", True):
+                  failures.append("caller: share-ready despite calling a script it does not carry")
+
+          illustrator = items.get("illustrator")
+          if illustrator is None:
+              failures.append("illustrator was not graded")
+          elif illustrator.get("externalScripts"):
+              failures.append(
+                  f"illustrator: an example filename was counted: "
+                  f"{illustrator['externalScripts']!r}"
+              )
+
+          commenter = items.get("commenter.sh")
+          if commenter is None:
+              failures.append("the hook was not graded")
+          elif commenter.get("externalScripts"):
+              failures.append(
+                  f"commenter.sh: a sibling named only in a comment was counted: "
+                  f"{commenter['externalScripts']!r}"
+              )
+
+          if report.get("callsScripts") != ["caller"]:
+              failures.append(f"expected exactly ['caller'], got {report.get('callsScripts')!r}")
+
+          for line in failures:
+              print(f"FAIL: {line}")
+          sys.exit(1 if failures else 0)
+          PY
+          echo "PASS: real call flagged, example and comment left alone"
+
   ci-result:
     name: CI Result
     if: always()
