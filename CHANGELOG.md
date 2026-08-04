@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.2.1](https://github.com/somaz94/claude-plugins/compare/v0.2.0...v0.2.1) (2026-08-04)
+
+### Bug Fixes
+
+- survive a malformed settings.json instead of aborting the audit ([e6cdd57](https://github.com/somaz94/claude-plugins/commit/e6cdd57dfc44d010de03bb054cdf3509dff6b455))
+- stop reporting inline-shell hooks as missing scripts ([ac2f7bc](https://github.com/somaz94/claude-plugins/commit/ac2f7bc2adea469eda368ce6d19c2ca9d51cf7f8))
+
+### Chores
+
+- release census 0.2.1 ([34bdfb9](https://github.com/somaz94/claude-plugins/commit/34bdfb929b012c69c12d6d7a7a98ddb6feae6d5e))
+
+### Contributors
+
+- somaz
+
+<br/>
+
 ## [v0.2.0](https://github.com/somaz94/claude-plugins/compare/v0.1.1...v0.2.0) (2026-08-03)
 
 ### Features
