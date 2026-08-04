@@ -6,9 +6,14 @@ All notable changes to this project will be documented in this file.
 
 ### Features
 
+- ship the pre-compact handoff nudge as a plugin hook ([dd6f286](https://github.com/somaz94/claude-plugins/commit/dd6f286e2665040f753b4443e6015374ac3483c3))
 - add the session-continuity plugin ([5b99c29](https://github.com/somaz94/claude-plugins/commit/5b99c29088a3f2d982a3eb8a0648591da4341084))
 - grade shareability by named repos and dependencies ([15c2b85](https://github.com/somaz94/claude-plugins/commit/15c2b85bfa465fc40d453c62085a445f1a71aa42))
 - add the shell-portability plugin ([768abe1](https://github.com/somaz94/claude-plugins/commit/768abe1708043c8e6f519f152b61412fdb8c8148))
+
+### Bug Fixes
+
+- stop GitHub Actions parsing a python literal as an expression ([69a3846](https://github.com/somaz94/claude-plugins/commit/69a3846353c994f4c0370e2f509928763b9bec1a))
 
 ### Documentation
 
@@ -16,6 +21,7 @@ All notable changes to this project will be documented in this file.
 
 ### Continuous Integration
 
+- verify every plugin hook resolves to an executable script ([5ec79dc](https://github.com/somaz94/claude-plugins/commit/5ec79dc2f766a78c60931642121fd0adee152e25))
 - require a description on commands too ([c498a46](https://github.com/somaz94/claude-plugins/commit/c498a461f4eee134f00a7bf30d6102c7b9d87d65))
 - cover the named-repo and dependency blind spots ([65eb83b](https://github.com/somaz94/claude-plugins/commit/65eb83b0edab73c26dd2b384197fe71e4acf53c4))
 - tag and release each plugin independently ([e88d2f4](https://github.com/somaz94/claude-plugins/commit/e88d2f48e8575b59957c207c3d3723b4004cd26d))
@@ -23,6 +29,7 @@ All notable changes to this project will be documented in this file.
 
 ### Chores
 
+- release session-continuity 0.2.0 ([d66fcb0](https://github.com/somaz94/claude-plugins/commit/d66fcb0cb5ffc36529630a25db3db7fe938e213c))
 - release census 0.4.0 ([280f963](https://github.com/somaz94/claude-plugins/commit/280f96316b7c935c392f3c7faa46c724f3772e44))
 
 ### Contributors
