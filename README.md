@@ -14,6 +14,7 @@ A [Claude Code](https://code.claude.com/docs) plugin marketplace.
 | Plugin | What it does |
 |---|---|
 | [`census`](plugins/census) | Read-only audit of scattered `.claude/` configs — catalog what you have, detect drift, and triage which items are portable enough to share with a team |
+| [`shell-portability`](plugins/shell-portability) | Reviews shell scripts for bash/zsh portability — the axis `shellcheck` does not cover, because it checks the shell the shebang declares, not the one the script gets run by |
 
 `census` docs: [English](plugins/census/README.md) · [한국어](plugins/census/README-ko.md)
 
@@ -40,6 +41,7 @@ What it does not do is help you get *to* that point. Once your configuration is 
 plugins/<name>/                   one directory per plugin
   .claude-plugin/plugin.json      plugin manifest (name, version)
   skills/<skill>/SKILL.md         skills, invoked as /<plugin>:<skill>
+  agents/<agent>.md               subagents, dispatched by their description
   scripts/                        bundled executables, referenced via ${CLAUDE_PLUGIN_ROOT}
 ```
 
