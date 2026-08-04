@@ -15,6 +15,8 @@ A [Claude Code](https://code.claude.com/docs) plugin marketplace.
 |---|---|
 | [`census`](plugins/census) | Read-only audit of scattered `.claude/` configs — catalog what you have, detect drift, and triage which items are portable enough to share with a team |
 
+`census` docs: [English](plugins/census/README.md) · [한국어](plugins/census/README-ko.md)
+
 <br/>
 
 ## Why these exist
