@@ -602,6 +602,135 @@ jobs:
           PY
           echo "PASS: silent by default, still reports the real gap when opted in"
 
+      - name: census grades a user-level item by the repos it names
+        # A user-level item belongs to no repo, so repo-scoped markers never
+        # reach it — and those are exactly the items written about a named
+        # handful of repos. Deleting the path prefix would otherwise be enough
+        # to score a perfect 🟢 while the item stays useless to anyone else.
+        # The repos need not carry .claude/ themselves; existing is enough.
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp -d)"
+          mkdir -p "$fixture/home/.claude/agents" \
+                   "$fixture/code/acme-billing-api" \
+                   "$fixture/code/docs" \
+                   "$fixture/code/carrier/.claude/agents"
+          printf -- '---\nname: bound\ndescription: Runs the migration suite for acme-billing-api.\n---\nbody\n' \
+            > "$fixture/home/.claude/agents/bound.md"
+          printf -- '---\nname: free\ndescription: Reviews shell scripts for portability.\n---\nRefer to the docs when unsure.\n' \
+            > "$fixture/home/.claude/agents/free.md"
+          printf -- '---\nname: local\ndescription: A repo-scoped agent.\n---\nbody\n' \
+            > "$fixture/code/carrier/.claude/agents/local.md"
+          cat > "$fixture/census.json" <<EOF
+          {
+            "userRoots": ["$fixture/home/.claude"],
+            "projectRoots": ["$fixture/code/*"],
+            "excludeOssForks": false,
+            "pairs": {}
+          }
+          EOF
+
+          python3 plugins/census/scripts/census.py --config "$fixture/census.json" \
+            portability --json > "$fixture/port.json"
+          python3 - "$fixture/port.json" <<'PY'
+          import json, sys
+
+          report = json.load(open(sys.argv[1]))
+          tier = {i["name"]: i for i in report["items"]}
+          failures = []
+
+          bound = tier.get("bound")
+          if bound is None:
+              failures.append("the bound agent was not graded at all")
+          else:
+              if bound["tier"] != "PERSONAL":
+                  failures.append(f"bound: expected PERSONAL, got {bound['tier']}")
+              if "acme-billing-api" not in bound["markers"]:
+                  failures.append(f"bound: repo name not matched, markers={bound['markers']}")
+
+          # `docs` is a real directory here. A single-word repo name is also an
+          # ordinary word, and matching it would fire on the prose in `free`.
+          free = tier.get("free")
+          if free is None:
+              failures.append("the free agent was not graded at all")
+          elif free["tier"] != "PORTABLE":
+              failures.append(f"free: expected PORTABLE, got {free['tier']} ({free['markers']})")
+          if "docs" in report.get("namedRepoMarkers", []):
+              failures.append("a single-word repo name became a marker — generic-word trap")
+
+          for line in failures:
+              print(f"FAIL: {line}")
+          sys.exit(1 if failures else 0)
+          PY
+          echo "PASS: named repo caught, single-word repo name left alone"
+
+      - name: census reports a portable item blocked by its dependency
+        # A wrapper whose whole body is "delegate to X" carries no marker and
+        # grades 🟢 on its own contents. Shipping it without X publishes a name
+        # that resolves to nothing, so 🟢 alone must not read as share-ready.
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp -d)"
+          mkdir -p "$fixture/home/.claude/agents" "$fixture/home/.claude/commands" \
+                   "$fixture/code/acme-billing-api"
+          printf -- '---\nname: bound-helper\ndescription: Reviews acme-billing-api migrations.\n---\nbody\n' \
+            > "$fixture/home/.claude/agents/bound-helper.md"
+          printf -- '---\nname: free-helper\ndescription: Reviews shell scripts.\n---\nbody\n' \
+            > "$fixture/home/.claude/agents/free-helper.md"
+          printf -- '---\nname: wrapper\ndescription: Thin wrapper.\n---\nDelegate to `bound-helper` for the review.\n' \
+            > "$fixture/home/.claude/commands/wrapper.md"
+          printf -- '---\nname: clean\ndescription: Thin wrapper.\n---\nDelegate to `free-helper` for the review.\n' \
+            > "$fixture/home/.claude/commands/clean.md"
+          cat > "$fixture/census.json" <<EOF
+          {
+            "userRoots": ["$fixture/home/.claude"],
+            "projectRoots": ["$fixture/code/*"],
+            "excludeOssForks": false,
+            "pairs": {}
+          }
+          EOF
+
+          python3 plugins/census/scripts/census.py --config "$fixture/census.json" \
+            portability --json > "$fixture/port.json"
+          python3 - "$fixture/port.json" <<'PY'
+          import json, sys
+
+          report = json.load(open(sys.argv[1]))
+          items = {i["name"]: i for i in report["items"]}
+          failures = []
+
+          # .get() throughout: a build that predates the dependency axis has no
+          # such keys, and "the field is missing" is the finding — worth saying
+          # in one line rather than as a KeyError traceback.
+          wrapper = items.get("wrapper")
+          if wrapper is None:
+              failures.append("wrapper was not graded")
+          else:
+              if wrapper.get("tier") != "PORTABLE":
+                  failures.append(f"wrapper: own contents should grade PORTABLE, got {wrapper.get('tier')}")
+              if wrapper.get("blockedBy") != ["bound-helper"]:
+                  failures.append(f"wrapper: expected blockedBy [bound-helper], got {wrapper.get('blockedBy')!r}")
+              if wrapper.get("shareable", True):
+                  failures.append("wrapper: counted as share-ready despite a blocked dependency")
+
+          clean = items.get("clean")
+          if clean is None:
+              failures.append("clean was not graded")
+          else:
+              if clean.get("dependsOn") != ["free-helper"]:
+                  failures.append(f"clean: dependency not detected, got {clean.get('dependsOn')!r}")
+              if not clean.get("shareable", False):
+                  failures.append(f"clean: should be share-ready, blockedBy={clean.get('blockedBy')!r}")
+
+          if report.get("blocked") != ["wrapper"]:
+              failures.append(f"expected exactly ['wrapper'] blocked, got {report.get('blocked')!r}")
+
+          for line in failures:
+              print(f"FAIL: {line}")
+          sys.exit(1 if failures else 0)
+          PY
+          echo "PASS: blocked wrapper flagged, clean wrapper still share-ready"
+
   ci-result:
     name: CI Result
     if: always()
