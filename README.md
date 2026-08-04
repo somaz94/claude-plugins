@@ -25,15 +25,17 @@ Docs — `census`: [English](plugins/census/README.md) · [한국어](plugins/ce
 
 ## Why these exist
 
-Claude Code already distributes plugins well: a marketplace hosts them, `.claude/settings.json` can prompt a whole team to install one, and versions are pinned per entry.
+Every plugin here addresses something that goes wrong **quietly** while an assistant works at speed. Not the failures that stop you — those announce themselves. The ones that pass every check and are wrong anyway:
 
-What it does not do is help you get *to* that point. Once your configuration is spread across a user-level `~/.claude/` and a `.claude/` directory in every repo, nothing answers the questions that decide what you can publish:
+- Your config drifts. The same agent exists twice with different content, and nothing reports which copy won. — [`census`](plugins/census)
+- A script runs under the other shell. `shellcheck` cleared it, because it checked the shell the shebang declares, not the one it got run by. — [`shell-portability`](plugins/shell-portability)
+- The context window compacts. Older turns are summarized, and the half-finished edit and the reason behind a decision blur away. — [`session-continuity`](plugins/session-continuity)
+- A tag gets pushed because it looked like the next step after a green build. — [`release-guards`](plugins/release-guards)
+- A secret rides along in a diff nobody re-read. — [`sensitive-guard`](plugins/sensitive-guard)
 
-- What do I actually have, and what does it cost me in context on every single session?
-- Is the same agent defined in two places with different content?
-- Which of these would work for anyone other than me?
+Each is a gate or a report at the point the mistake is cheap to catch, not a summary delivered after it landed. Where a better tool already exists — `gitleaks` for secret detection, `shellcheck` for shell linting — these do not replace it; they run where it does not, which is inside the session, before the commit returns.
 
-`census` answers those three. It reads; it never moves, edits, or deletes anything.
+Nothing here edits your work without asking. `census` is read-only by contract, the guards ask rather than block, and every hook fails open: a guard that breaks the workflow when it malfunctions gets switched off, and then it guards nothing.
 
 <br/>
 

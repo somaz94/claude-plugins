@@ -5,7 +5,7 @@
     "url": "https://github.com/somaz94"
   },
   "metadata": {
-    "description": "Plugins for auditing and operating Claude Code configuration at scale"
+    "description": "Guardrails and audits for the mistakes that pass every check — config drift, shell portability, lost context, accidental releases, leaked secrets"
   },
   "plugins": [
     {
