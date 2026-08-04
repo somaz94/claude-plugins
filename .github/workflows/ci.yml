@@ -393,6 +393,129 @@ jobs:
           PY
           echo "PASS: stale mirror caught, co-committed pair left alone"
 
+      - name: census tells an inline-shell hook from a missing script
+        # A hook command need not run a script at all. Resolving its first word
+        # as a path regardless invents a file nobody meant to exist and reports
+        # every such hook as broken — burying the one hook that really is. The
+        # same first-word assumption misses the script behind an interpreter.
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp -d)"
+          mkdir -p "$fixture/home/.claude/hooks"
+          printf '#!/usr/bin/env python3\nprint("guard")\n' \
+            > "$fixture/home/.claude/hooks/guard.py"
+          cat > "$fixture/home/.claude/settings.json" <<EOF
+          {
+            "hooks": {
+              "PreToolUse": [
+                {
+                  "matcher": "Bash",
+                  "hooks": [
+                    {"type": "command", "command": "echo inline-shell-guard"},
+                    {"type": "command", "command": "jq -r .tool_name"},
+                    {"type": "command", "command": "python3 $fixture/home/.claude/hooks/guard.py --strict"},
+                    {"type": "command", "command": "$fixture/home/.claude/hooks/gone.sh"}
+                  ]
+                }
+              ]
+            }
+          }
+          EOF
+          cat > "$fixture/census.json" <<EOF
+          {
+            "userRoots": ["$fixture/home/.claude"],
+            "projectRoots": [],
+            "excludeOssForks": false
+          }
+          EOF
+
+          python3 plugins/census/scripts/census.py --config "$fixture/census.json" \
+            drift --json > "$fixture/drift.json"
+          python3 plugins/census/scripts/census.py --config "$fixture/census.json" \
+            scan > "$fixture/scan.json"
+          python3 - "$fixture/drift.json" "$fixture/scan.json" <<'PY'
+          import json, sys
+
+          drift = json.load(open(sys.argv[1]))
+          hooks = {h["name"]: h for h in json.load(open(sys.argv[2]))["items"]
+                   if h["kind"] == "hook"}
+          failures = []
+
+          # Every registration is still catalogued; only the verdict changed.
+          if len(hooks) != 4:
+              failures.append(f"expected 4 hook registrations, got {sorted(hooks)}")
+
+          for inline in ("echo", "jq"):
+              hook = hooks.get(inline)
+              if hook is None:
+                  failures.append(f"{inline}: inline-shell hook was dropped entirely")
+              elif hook["script"] is not None:
+                  failures.append(f"{inline}: resolved a script it never had: {hook['script']}")
+
+          behind = hooks.get("guard.py")
+          if behind is None:
+              failures.append("script behind an interpreter prefix was not found")
+          elif not behind["scriptExists"]:
+              failures.append(f"guard.py resolved to a missing file: {behind['script']}")
+
+          missing = [f for f in drift["findings"] if f["code"] == "hook-missing-script"]
+          if len(missing) != 1:
+              failures.append(
+                  f"expected exactly 1 hook-missing-script, got "
+                  f"{[f['title'] for f in missing]}"
+              )
+          elif "gone.sh" not in missing[0]["title"]:
+              failures.append(f"wrong hook flagged: {missing[0]['title']}")
+
+          for line in failures:
+              print(f"FAIL: {line}")
+          sys.exit(1 if failures else 0)
+          PY
+          echo "PASS: inline shell left alone, interpreter prefix followed, real gap reported"
+
+      - name: census survives a malformed config
+        # census reads config it did not write, in files whose shape nothing
+        # validates. One hand-edited settings.json in an unexpected shape must
+        # not take down the audit of every other root along with it.
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp -d)"
+          mkdir -p "$fixture/home/.claude/agents"
+          printf -- '---\nname: alpha\ndescription: an agent\n---\nbody\n' \
+            > "$fixture/home/.claude/agents/alpha.md"
+          cat > "$fixture/census.json" <<EOF
+          {
+            "userRoots": ["$fixture/home/.claude"],
+            "projectRoots": [],
+            "excludeOssForks": false,
+            "portability": []
+          }
+          EOF
+
+          for shape in \
+            '{"hooks": {"PreToolUse": "not-a-list"}}' \
+            '{"hooks": {"PreToolUse": [{"hooks": "not-a-list"}]}}' \
+            '{"hooks": {"PreToolUse": [{"hooks": ["not-an-object"]}]}}' \
+            '{"hooks": [1, 2]}' \
+            '{"hooks": {"PreToolUse": [{"matcher": 5, "hooks": [{"command": 123}]}]}}'
+          do
+            echo "$shape" > "$fixture/home/.claude/settings.json"
+            for command in catalog drift portability; do
+              if ! out="$(python3 plugins/census/scripts/census.py \
+                   --config "$fixture/census.json" "$command" 2>&1)"; then
+                echo "FAIL: $command aborted on settings.json shape $shape"
+                echo "$out" | tail -3
+                exit 1
+              fi
+            done
+            # The agent alongside the broken file must still be found.
+            if ! grep -qF -- '`alpha`' <<<"$out"; then
+              echo "FAIL: a malformed settings.json suppressed the rest of the root"
+              exit 1
+            fi
+          done
+          echo "PASS: malformed shapes skipped, surrounding config still audited"
+
   ci-result:
     name: CI Result
     if: always()
