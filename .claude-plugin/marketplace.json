@@ -61,6 +61,24 @@
         "continuity",
         "long-running"
       ]
+    },
+    {
+      "name": "release-guards",
+      "source": "./plugins/release-guards",
+      "version": "0.1.0",
+      "description": "Puts a confirmation in front of the release actions you cannot take back — creating or deleting a tag, publishing a release, and editing the automation that generates them.",
+      "category": "productivity",
+      "license": "MIT",
+      "homepage": "https://github.com/somaz94/claude-plugins/tree/main/plugins/release-guards",
+      "repository": "https://github.com/somaz94/claude-plugins",
+      "keywords": [
+        "release",
+        "tag",
+        "guardrail",
+        "hooks",
+        "changelog",
+        "safety"
+      ]
     }
   ]
 }

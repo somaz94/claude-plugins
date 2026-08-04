@@ -16,8 +16,9 @@ A [Claude Code](https://code.claude.com/docs) plugin marketplace.
 | [`census`](plugins/census) | Read-only audit of scattered `.claude/` configs — catalog what you have, detect drift, and triage which items are portable enough to share with a team |
 | [`shell-portability`](plugins/shell-portability) | Reviews shell scripts for bash/zsh portability — the axis `shellcheck` does not cover, because it checks the shell the shebang declares, not the one the script gets run by |
 | [`session-continuity`](plugins/session-continuity) | Carries long-running work across a context reset — keeps a plan file current as you go, and generates the handoff prompt a fresh session starts from |
+| [`release-guards`](plugins/release-guards) | Puts a confirmation in front of the release actions you cannot take back — tag create/delete, release publish, and edits to the automation that generates them |
 
-Docs — `census`: [English](plugins/census/README.md) · [한국어](plugins/census/README-ko.md) · `shell-portability`: [English](plugins/shell-portability/README.md) · [한국어](plugins/shell-portability/README-ko.md) · `session-continuity`: [English](plugins/session-continuity/README.md) · [한국어](plugins/session-continuity/README-ko.md)
+Docs — `census`: [English](plugins/census/README.md) · [한국어](plugins/census/README-ko.md) · `shell-portability`: [English](plugins/shell-portability/README.md) · [한국어](plugins/shell-portability/README-ko.md) · `session-continuity`: [English](plugins/session-continuity/README.md) · [한국어](plugins/session-continuity/README-ko.md) · `release-guards`: [English](plugins/release-guards/README.md) · [한국어](plugins/release-guards/README-ko.md)
 
 <br/>
 
@@ -44,6 +45,7 @@ plugins/<name>/                   one directory per plugin
   skills/<skill>/SKILL.md         skills, invoked as /<plugin>:<skill>
   agents/<agent>.md               subagents, dispatched by their description
   commands/<command>.md           slash commands, invoked as /<plugin>:<command>
+  hooks/hooks.json                hook registrations, rooted at ${CLAUDE_PLUGIN_ROOT}
   scripts/                        bundled executables, referenced via ${CLAUDE_PLUGIN_ROOT}
 ```
 
