@@ -295,6 +295,68 @@ PY
 echo "PASS: mirror paired by path, not counted, not charged for"
 )
 
+step 'atlas pairs a mirror of an agent that lives in a subdirectory'
+(
+set -euo pipefail
+# A regression guard. Agents and commands were collected by two near-identical
+# loops, and their keys drifted apart: a command joined its path parts with a
+# colon and an agent joined them with a slash, but the mirror walk keyed BOTH
+# with the colon. A flat `reviewer.md` is one part either way, so the whole
+# suite passed while every nested agent's mirror silently failed to pair.
+fixture="$(mktemp -d)"
+mkdir -p "$fixture/home/.claude/agents/team" "$fixture/home/.claude/agents-ko/team" \
+         "$fixture/home/.claude/commands/ops" "$fixture/home/.claude/commands-ko/ops" \
+         "$fixture/repo"
+printf -- '---\nname: nested-reviewer\ndescription: Reviews things.\n---\nsource body\n' \
+  > "$fixture/home/.claude/agents/team/nested-reviewer.md"
+printf -- '---\nname: nested-reviewer\ndescription: 이것저것 검토합니다.\n---\n번역된 본문\n' \
+  > "$fixture/home/.claude/agents-ko/team/nested-reviewer.md"
+printf -- '---\ndescription: Deploys things.\n---\nsource body\n' \
+  > "$fixture/home/.claude/commands/ops/deploy.md"
+printf -- '---\ndescription: 배포합니다.\n---\n번역된 본문\n' \
+  > "$fixture/home/.claude/commands-ko/ops/deploy.md"
+
+python3 plugins/atlas/scripts/atlas.py --project "$fixture/repo" \
+  --user-root "$fixture/home/.claude" scan > "$fixture/graph.json"
+python3 - "$fixture/graph.json" <<'PY'
+import json, sys
+
+graph = json.load(open(sys.argv[1]))
+by_kind = {i["kind"]: i for i in graph["items"] if i["kind"] in ("agent", "command")}
+failures = []
+
+agent = by_kind.get("agent")
+if agent is None:
+    failures.append("the nested agent was not collected")
+else:
+    # The key is the path, so a subdirectory shows in it — and it is a slash
+    # for an agent, which is addressed by name rather than typed as a path.
+    if agent["key"] != "team/nested-reviewer":
+        failures.append(f"agent key is {agent['key']!r}, expected 'team/nested-reviewer'")
+    if agent["translations"].get("ko", {}).get("description") != "이것저것 검토합니다.":
+        failures.append(
+            f"a nested agent's mirror did not pair: {agent['translations']!r}"
+        )
+
+command = by_kind.get("command")
+if command is None:
+    failures.append("the nested command was not collected")
+else:
+    # A command's subdirectory namespaces it, and the colon is how it is typed.
+    if command["key"] != "ops:deploy":
+        failures.append(f"command key is {command['key']!r}, expected 'ops:deploy'")
+    if command["translations"].get("ko", {}).get("description") != "배포합니다.":
+        failures.append(
+            f"a nested command's mirror did not pair: {command['translations']!r}"
+        )
+
+for line in failures:
+    print(f"FAIL: {line}")
+sys.exit(1 if failures else 0)
+PY
+echo "PASS: a nested agent and a nested command both pair with their mirrors"
+)
+
 step 'atlas renders Markdown without letting a scanned file inject markup'
 (
 set -euo pipefail

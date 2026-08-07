@@ -70,6 +70,15 @@ HOOK_EVENT_ORDER = (
 
 KIND_ORDER = ("command", "agent", "skill", "hook", "mcp", "memory", "plugin")
 
+# The Markdown-defined kinds and the directory each is collected from, in the
+# order they are collected. Everything else about them differs only in how an
+# item is named and addressed — see `_item_key` and `Collector._collect_kind`.
+KIND_DIRS = {"agent": "agents", "command": "commands", "skill": "skills"}
+
+# A hook command word ending in one of these is a script even when it is
+# written without a directory, which is what separates `guard.sh` from `jq`.
+SCRIPT_SUFFIXES = (".sh", ".bash", ".zsh", ".py", ".js", ".mjs", ".ts", ".rb", ".pl")
+
 # The three scopes an item can come from, in resolution order. The JSON keeps
 # `user` — it is the name Claude Code's own docs use for the config directory —
 # but everywhere a person reads it, it is labelled "Global", which is what it
@@ -223,6 +232,50 @@ class _Origin(NamedTuple):
 Mirrors = dict[tuple[str, str], dict[str, Any]]
 
 
+def _registered_hooks(hooks: Any) -> Iterable[tuple[str, str, dict[str, Any]]]:
+    """Walk a settings hooks block, yielding (event, matcher, registration).
+
+    Defensive at every level, and that is the whole reason it is its own
+    function: this is hand-edited JSON in a three-deep shape, so one entry
+    written wrongly must cost that entry rather than the map it appears in.
+    """
+    if not isinstance(hooks, dict):
+        return
+    for event, entries in hooks.items():
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            matcher = entry.get("matcher") or "*"
+            for hook in entry.get("hooks", []) or []:
+                if isinstance(hook, dict):
+                    yield event, matcher, hook
+
+
+def _glob_for(kind: str) -> str:
+    """What a kind's files are called. A skill is a folder holding a SKILL.md;
+    an agent and a command are each a single Markdown file."""
+    return "SKILL.md" if kind == "skill" else "*.md"
+
+
+def _item_key(kind: str, path: Path, directory: Path) -> str:
+    """How an item is addressed inside its own directory.
+
+    A skill IS its folder, so the folder is what identifies it. A command's
+    subdirectory namespaces it with a colon, because that is how it is typed.
+    An agent is selected by name and keeps its path only so a mirror in the
+    matching position can be paired with it.
+
+    The same function serves the mirror directories, which is the point: pairing
+    is by path, so both sides must be keyed the same way.
+    """
+    if kind == "skill":
+        return path.parent.relative_to(directory).as_posix()
+    relative = path.relative_to(directory).with_suffix("")
+    return ":".join(relative.parts) if kind == "command" else relative.as_posix()
+
+
 class Collector:
     """Builds the flat item list. One instance per run."""
 
@@ -275,15 +328,9 @@ class Collector:
             if not match:
                 continue
             kind_dir, lang = match.group(1), match.group(2)
-            kind = {"agents": "agent", "commands": "command", "skills": "skill"}[kind_dir]
-            paths = (
-                directory.rglob("SKILL.md") if kind == "skill" else directory.rglob("*.md")
-            )
-            for path in sorted(paths):
-                if kind == "skill":
-                    key = path.parent.relative_to(directory).as_posix()
-                else:
-                    key = ":".join(path.relative_to(directory).with_suffix("").parts)
+            kind = {directory: k for k, directory in KIND_DIRS.items()}[kind_dir]
+            for path in sorted(directory.rglob(_glob_for(kind))):
+                key = _item_key(kind, path, directory)
                 meta, body = parse_frontmatter(read_text(path))
                 text, _ = self._body(body)
                 entry = found.setdefault((kind, key), {})
@@ -305,7 +352,7 @@ class Collector:
         makes them unable to collide with a user's own.
         """
         if not config_dir.is_dir():
-            return {"agent": 0, "command": 0, "skill": 0}
+            return {kind: 0 for kind in KIND_DIRS}
 
         mirrors = self.collect_translations(config_dir)
         # Which languages this directory keeps mirrors in at all. An item here
@@ -314,106 +361,77 @@ class Collector:
         where = _Origin(layer=layer, origin=origin, namespace=namespace or "")
 
         return {
-            "agent": self._collect_agents(config_dir, where, mirrors, here),
-            "command": self._collect_commands(config_dir, where, mirrors, here),
-            "skill": self._collect_skills(config_dir, where, mirrors, here),
+            kind: self._collect_kind(config_dir, kind, where, mirrors, here)
+            for kind in KIND_DIRS
         }
 
-    def _collect_agents(
-        self, config_dir: Path, where: _Origin, mirrors: Mirrors, langs: list[str]
+    def _collect_kind(
+        self, config_dir: Path, kind: str, where: _Origin, mirrors: Mirrors, langs: list[str]
     ) -> int:
-        directory = config_dir / "agents"
-        count = 0
-        for path in sorted(directory.rglob("*.md")):
-            meta, body = parse_frontmatter(read_text(path))
-            key = path.relative_to(directory).with_suffix("").as_posix()
-            text, truncated = self._body(body)
-            self.add(
-                kind="agent",
-                name=meta.get("name") or path.stem,
-                key=key,
-                translations=mirrors.get(("agent", key), {}),
-                mirrorLangs=langs,
-                # An agent is not typed as a slash command; it is selected by
-                # its description. Showing a fake invocation would teach the
-                # wrong thing, so the field stays empty and the viewer says so.
-                invocation="",
-                description=meta.get("description", ""),
-                **where.fields(),
-                path=collapse_home(path),
-                body=text,
-                truncated=truncated,
-                extra=self._extra(meta),
-            )
-            count += 1
-        return count
+        """Collect one Markdown-defined kind out of its directory.
 
-    def _collect_commands(
-        self, config_dir: Path, where: _Origin, mirrors: Mirrors, langs: list[str]
-    ) -> int:
-        directory = config_dir / "commands"
+        The three kinds were three near-identical loops that differed in four
+        lines each, which is how their key derivation quietly drifted apart —
+        a nested agent's mirror was keyed one way at the source and another at
+        the mirror, so it never paired. What actually varies is only how an item
+        is named, how it is invoked, and whether it can ship bundled files.
+        """
+        directory = config_dir / KIND_DIRS[kind]
         count = 0
-        for path in sorted(directory.rglob("*.md")):
+        for path in sorted(directory.rglob(_glob_for(kind))):
             meta, body = parse_frontmatter(read_text(path))
-            # A subdirectory namespaces the command; the file name is the last
-            # segment. A command has no `name:` field — the path IS the name.
-            local = ":".join(path.relative_to(directory).with_suffix("").parts)
+            key = _item_key(kind, path, directory)
             text, truncated = self._body(body)
-            self.add(
-                kind="command",
-                name=local,
-                key=local,
-                translations=mirrors.get(("command", local), {}),
-                mirrorLangs=langs,
-                invocation=f"/{where.namespace}:{local}" if where.namespace else f"/{local}",
-                description=meta.get("description", ""),
-                **where.fields(),
-                path=collapse_home(path),
-                body=text,
-                truncated=truncated,
-                extra=self._extra(meta),
-            )
-            count += 1
-        return count
-
-    def _collect_skills(
-        self, config_dir: Path, where: _Origin, mirrors: Mirrors, langs: list[str]
-    ) -> int:
-        directory = config_dir / "skills"
-        count = 0
-        for path in sorted(directory.rglob("SKILL.md")):
-            meta, body = parse_frontmatter(read_text(path))
-            name = meta.get("name") or path.parent.name
-            key = path.parent.relative_to(directory).as_posix() if directory.is_dir() else name
-            text, truncated = self._body(body)
+            extra = self._extra(meta)
+            name, invocation = self._identify(kind, path, meta, key, where.namespace)
             # A skill can ship references, scripts and templates beside its
             # SKILL.md. They are not separate resources, but their number says
             # whether this is a prompt or a small program.
-            bundled = sorted(
-                collapse_home(p)
-                for p in path.parent.rglob("*")
-                if p.is_file() and p.name != "SKILL.md"
-            )
-            extra = self._extra(meta)
+            bundled = self._bundled(path) if kind == "skill" else None
             if bundled:
                 extra["bundled files"] = f"{len(bundled)}"
             self.add(
-                kind="skill",
+                kind=kind,
                 name=name,
                 key=key,
-                translations=mirrors.get(("skill", key), {}),
+                translations=mirrors.get((kind, key), {}),
                 mirrorLangs=langs,
-                invocation=f"/{where.namespace}:{name}" if where.namespace else f"/{name}",
+                invocation=invocation,
                 description=meta.get("description", ""),
                 **where.fields(),
                 path=collapse_home(path),
                 body=text,
                 truncated=truncated,
                 extra=extra,
-                bundled=bundled,
+                **({"bundled": bundled} if bundled is not None else {}),
             )
             count += 1
         return count
+
+    @staticmethod
+    def _identify(
+        kind: str, path: Path, meta: dict[str, str], key: str, namespace: str
+    ) -> tuple[str, str]:
+        """An item's display name and the string a user would type to reach it.
+
+        An agent is not typed at all: it is selected by its description, and
+        showing a fake slash command would teach the wrong thing — so its
+        invocation stays empty and the viewer says why. A command has no `name:`
+        field, because its path IS its name.
+        """
+        if kind == "agent":
+            return meta.get("name") or path.stem, ""
+        name = key if kind == "command" else (meta.get("name") or path.parent.name)
+        addressed = key if kind == "command" else name
+        return name, f"/{namespace}:{addressed}" if namespace else f"/{addressed}"
+
+    @staticmethod
+    def _bundled(path: Path) -> list[str]:
+        return sorted(
+            collapse_home(p)
+            for p in path.parent.rglob("*")
+            if p.is_file() and p.name != "SKILL.md"
+        )
 
     @staticmethod
     def _extra(meta: dict[str, str]) -> dict[str, str]:
@@ -436,55 +454,44 @@ class Collector:
         there: the registration still ships, the hook never fires, and nothing
         says so. So each item carries whether its script resolves.
         """
-        if not isinstance(hooks, dict):
-            return 0
         count = 0
-        for event, entries in hooks.items():
-            if not isinstance(entries, list):
+        for event, matcher, hook in _registered_hooks(hooks):
+            command = str(hook.get("command", "")).strip()
+            if not command:
                 continue
-            for entry in entries:
-                if not isinstance(entry, dict):
-                    continue
-                matcher = entry.get("matcher") or "*"
-                for hook in entry.get("hooks", []) or []:
-                    if not isinstance(hook, dict):
-                        continue
-                    command = str(hook.get("command", "")).strip()
-                    if not command:
-                        continue
-                    script, exists = self._resolve_hook_target(command, base)
-                    name = Path(script).name if script else command.split()[0]
-                    extra = {
-                        "event": event,
-                        "matcher": matcher,
-                        "type": str(hook.get("type", "command")),
-                    }
-                    if script:
-                        extra["script"] = collapse_home(Path(script))
-                        extra["resolves"] = "yes" if exists else "NO — the file is not there"
-                    if hook.get("timeout"):
-                        extra["timeout"] = str(hook["timeout"])
-                    self.add(
-                        kind="hook",
-                        name=name,
-                        invocation=f"{event}:{matcher}",
-                        # Home-collapsed so the viewer stays handable to someone
-                        # else; the hook's own text is unchanged on disk.
-                        description=command.replace(str(Path.home()), "~"),
-                        layer=layer,
-                        origin=origin,
-                        namespace=namespace,
-                        path=collapse_home(source),
-                        body=read_text(Path(script).expanduser()) if script and exists else "",
-                        truncated=False,
-                        extra=extra,
-                        event=event,
-                        matcher=matcher,
-                        command=command,
-                        script=collapse_home(Path(script)) if script else "",
-                        resolves=exists,
-                    )
-                    count += 1
+            script, exists = self._resolve_hook_target(command, base)
+            name = Path(script).name if script else command.split()[0]
+            extra = {
+                "event": event,
+                "matcher": matcher,
+                "type": str(hook.get("type", "command")),
+            }
+            if script:
+                extra["script"] = collapse_home(Path(script))
+                extra["resolves"] = "yes" if exists else "NO — the file is not there"
+            if hook.get("timeout"):
+                extra["timeout"] = str(hook["timeout"])
+            self.add(
+                kind="hook",
+                name=name,
+                invocation=f"{event}:{matcher}",
+                # Home-collapsed so the viewer stays handable to someone
+                # else; the hook's own text is unchanged on disk.
+                description=command.replace(str(Path.home()), "~"),
+                layer=layer,
+                origin=origin,
+                namespace=namespace,
+                path=collapse_home(source),
+                body=read_text(Path(script).expanduser()) if script and exists else "",
+                truncated=False,
+                extra=extra,
+                event=event,
+                matcher=matcher,
+                command=command,
+                script=collapse_home(Path(script)) if script else "",
+                resolves=exists,
+            )
+            count += 1
         return count
 
     @staticmethod
@@ -503,17 +510,7 @@ class Collector:
         )
         expanded = os.path.expandvars(expanded)
         looks_like_path = "/" in expanded or expanded.startswith("~")
-        has_script_suffix = Path(expanded).suffix in (
-            ".sh",
-            ".bash",
-            ".zsh",
-            ".py",
-            ".js",
-            ".mjs",
-            ".ts",
-            ".rb",
-            ".pl",
-        )
+        has_script_suffix = Path(expanded).suffix in SCRIPT_SUFFIXES
         if not (looks_like_path or has_script_suffix):
             return "", True
         target = Path(expanded).expanduser()
@@ -784,18 +781,7 @@ def build_graph(
             }
         )
 
-    items = collector.items
-    # Hooks read best in the order a session encounters them, not the order the
-    # settings files happened to list them in. Only the hook rows move; every
-    # other kind keeps its collection order.
-    rank = {event: index for index, event in enumerate(HOOK_EVENT_ORDER)}
-    hooks = sorted(
-        (item for item in items if item["kind"] == "hook"),
-        key=lambda i: (rank.get(i.get("event", ""), len(rank)), i.get("event", ""), i["name"]),
-    )
-    ordered = iter(hooks)
-    items = [next(ordered) if item["kind"] == "hook" else item for item in items]
-
+    items = _order_hooks(collector.items)
     conflicts = detect_conflicts(items)
     return {
         "generatedAt": datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M %Z"),
@@ -816,6 +802,24 @@ def build_graph(
         "notes": collector.notes,
         "stats": summarize(items),
     }
+
+
+def _order_hooks(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Reseat the hook rows into the order a session encounters their events.
+
+    Only the hook rows move. Every other kind keeps the order it was collected
+    in, so a plugin's agents still read the way its directory does — the hooks
+    are sorted among themselves and dropped back into the seats hooks already
+    held.
+    """
+    rank = {event: index for index, event in enumerate(HOOK_EVENT_ORDER)}
+    ordered = iter(
+        sorted(
+            (item for item in items if item["kind"] == "hook"),
+            key=lambda i: (rank.get(i.get("event", ""), len(rank)), i.get("event", ""), i["name"]),
+        )
+    )
+    return [next(ordered) if item["kind"] == "hook" else item for item in items]
 
 
 def detect_conflicts(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -860,6 +864,41 @@ def detect_conflicts(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return conflicts
 
 
+# What a session pays for before you type: the name and description of every
+# routable item, and every CLAUDE.md in full.
+RESIDENT_KINDS = ("agent", "command", "skill")
+
+
+def is_resident(item: dict[str, Any]) -> bool:
+    """Whether this kind is paid for before anything is typed.
+
+    A separate question from a non-zero `item_chars`: an empty CLAUDE.md costs
+    nothing and is still part of its layer's bill, so the two must not be
+    collapsed into one truth test.
+    """
+    return item["kind"] in RESIDENT_KINDS or item["kind"] == "memory"
+
+
+def item_chars(item: dict[str, Any]) -> int:
+    """This item's share of the always-on bill, in characters.
+
+    Characters rather than tokens because characters are the quantity that adds
+    up exactly. Tokens are an estimate produced by a division, and flooring each
+    item before summing gives a total that disagrees with flooring once at the
+    end — a one-token discrepancy that reads as a bug in the arithmetic.
+    """
+    if item["kind"] in RESIDENT_KINDS:
+        return int(item.get("descriptionChars", 0))
+    if item["kind"] == "memory":
+        return int(item.get("residentChars", 0))
+    return 0
+
+
+def item_tokens(item: dict[str, Any]) -> int:
+    """The same share, estimated in tokens. For display and ranking only."""
+    return item_chars(item) // CHARS_PER_TOKEN
+
+
 def summarize(items: list[dict[str, Any]]) -> dict[str, Any]:
     by_kind: dict[str, int] = {}
     by_layer: dict[str, int] = {}
@@ -870,18 +909,13 @@ def summarize(items: list[dict[str, Any]]) -> dict[str, Any]:
     for item in items:
         by_kind[item["kind"]] = by_kind.get(item["kind"], 0) + 1
         by_layer[item["layer"]] = by_layer.get(item["layer"], 0) + 1
-        # What a session pays before you type anything: the name and description
-        # of every routable item, plus every CLAUDE.md in full.
-        if item["kind"] in ("agent", "command", "skill"):
-            cost = item["descriptionChars"]
-        elif item["kind"] == "memory":
-            cost = item.get("residentChars", 0)
-        else:
+        if not is_resident(item):
             continue
+        cost = item_chars(item)
         resident += cost
         resident_by_layer[item["layer"]] = resident_by_layer.get(item["layer"], 0) + cost
     return {
-        "total": sum(v for k, v in by_kind.items()),
+        "total": sum(by_kind.values()),
         "byKind": by_kind,
         "byLayer": by_layer,
         "residentChars": resident,
@@ -1102,35 +1136,11 @@ def print_report(graph: dict[str, Any], out: Path | None) -> None:
 # budget
 # --------------------------------------------------------------------------
 
-# What a session pays for before you type: the name and description of every
-# routable item, and every CLAUDE.md in full.
-RESIDENT_KINDS = ("agent", "command", "skill")
-
 BUDGET_AXES = {
     "kind": lambda i: KIND_PLURAL.get(i["kind"], i["kind"]),
     "scope": lambda i: LAYER_LABEL.get(i["layer"], i["layer"]),
     "origin": lambda i: i["origin"],
 }
-
-
-def item_chars(item: dict[str, Any]) -> int:
-    """This item's share of the always-on bill, in characters.
-
-    Characters rather than tokens because characters are the quantity that adds
-    up exactly. Tokens are an estimate produced by a division, and flooring each
-    item before summing gives a total that disagrees with flooring once at the
-    end — a one-token discrepancy that reads as a bug in the arithmetic.
-    """
-    if item["kind"] in RESIDENT_KINDS:
-        return int(item.get("descriptionChars", 0))
-    if item["kind"] == "memory":
-        return int(item.get("residentChars", 0))
-    return 0
-
-
-def item_tokens(item: dict[str, Any]) -> int:
-    """The same share, estimated in tokens. For display and ranking only."""
-    return item_chars(item) // CHARS_PER_TOKEN
 
 
 def budget_report(graph: dict[str, Any], axis: str, top: int, over: int) -> dict[str, Any]:
