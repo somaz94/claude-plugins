@@ -27,6 +27,24 @@
       ]
     },
     {
+      "name": "atlas",
+      "source": "./plugins/atlas",
+      "version": "0.1.0",
+      "description": "A browsable HTML map of every Claude Code resource a project can reach — commands, agents, skills, hooks, MCP servers and memory across your user config, this repo, and every installed plugin.",
+      "category": "productivity",
+      "license": "MIT",
+      "homepage": "https://github.com/somaz94/claude-plugins/tree/main/plugins/atlas",
+      "repository": "https://github.com/somaz94/claude-plugins",
+      "keywords": [
+        "inventory",
+        "html",
+        "viewer",
+        "discovery",
+        "plugins",
+        "context-budget"
+      ]
+    },
+    {
       "name": "shell-portability",
       "source": "./plugins/shell-portability",
       "version": "0.1.0",

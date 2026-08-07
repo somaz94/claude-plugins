@@ -865,6 +865,238 @@ jobs:
           PY
           echo "PASS: real call flagged, example and comment left alone"
 
+      - name: atlas maps all four layers
+        # The whole premise is that a session resolves user, project and plugin
+        # config at once and nothing shows them together. If any one layer stops
+        # being collected, the map is quietly wrong rather than obviously broken.
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp -d)"
+          mkdir -p "$fixture/home/.claude/agents" \
+                   "$fixture/home/.claude/commands/git" \
+                   "$fixture/home/.claude/skills/tidy" \
+                   "$fixture/home/.claude/plugins" \
+                   "$fixture/repo/.claude/commands" \
+                   "$fixture/plug/commands" \
+                   "$fixture/plug/skills/demo" \
+                   "$fixture/plug/.claude-plugin"
+          printf -- '---\nname: reviewer\ndescription: A user agent\n---\nbody\n' \
+            > "$fixture/home/.claude/agents/reviewer.md"
+          printf -- '---\ndescription: Ships it\n---\nbody\n' \
+            > "$fixture/home/.claude/commands/git/ship.md"
+          printf -- '---\nname: tidy\ndescription: Tidies up\n---\nbody\n' \
+            > "$fixture/home/.claude/skills/tidy/SKILL.md"
+          printf '# Global memory\n' > "$fixture/home/.claude/CLAUDE.md"
+          printf -- '---\n---\nno description\n' > "$fixture/repo/.claude/commands/nodesc.md"
+          printf -- '---\ndescription: A plugin command\n---\nbody\n' \
+            > "$fixture/plug/commands/ship.md"
+          printf -- '---\nname: demo\ndescription: A plugin skill\n---\nbody\n' \
+            > "$fixture/plug/skills/demo/SKILL.md"
+          printf '{"name":"demoplug","version":"1.2.3","description":"a demo plugin"}' \
+            > "$fixture/plug/.claude-plugin/plugin.json"
+          cat > "$fixture/home/.claude/plugins/installed_plugins.json" <<EOF
+          {"version":2,"plugins":{"demoplug@acme":[
+            {"scope":"user","installPath":"$fixture/plug","version":"1.2.3"}]}}
+          EOF
+
+          python3 plugins/atlas/scripts/atlas.py --project "$fixture/repo" \
+            --user-root "$fixture/home/.claude" scan > "$fixture/graph.json"
+          python3 - "$fixture/graph.json" <<'PY'
+          import json, sys
+
+          graph = json.load(open(sys.argv[1]))
+          items = graph["items"]
+          failures = []
+
+          layers = {i["layer"] for i in items}
+          for layer in ("user", "project", "plugin"):
+              if layer not in layers:
+                  failures.append(f"nothing collected from the {layer} layer")
+
+          def one(kind, name):
+              hits = [i for i in items if i["kind"] == kind and i["name"] == name]
+              if len(hits) != 1:
+                  failures.append(f"expected exactly one {kind} named {name!r}, got {len(hits)}")
+                  return None
+              return hits[0]
+
+          # A subdirectory namespaces a command, and the map must report the
+          # name actually typed rather than the file stem.
+          nested = one("command", "git:ship")
+          if nested and nested["invocation"] != "/git:ship":
+              failures.append(f"nested command invocation is {nested['invocation']!r}")
+
+          # A plugin's command carries its plugin namespace, which is exactly
+          # why it can never collide with the user's own.
+          plugged = one("command", "ship")
+          if plugged and plugged["invocation"] != "/demoplug:ship":
+              failures.append(f"plugin command invocation is {plugged['invocation']!r}")
+
+          skill = one("skill", "demo")
+          if skill and skill["invocation"] != "/demoplug:demo":
+              failures.append(f"plugin skill invocation is {skill['invocation']!r}")
+
+          if not any(i["kind"] == "memory" for i in items):
+              failures.append("CLAUDE.md was not collected")
+          if graph["stats"]["missingDescriptions"] != 1:
+              failures.append(
+                  f"expected 1 item with no description, got "
+                  f"{graph['stats']['missingDescriptions']}"
+              )
+
+          for line in failures:
+              print(f"FAIL: {line}")
+          sys.exit(1 if failures else 0)
+          PY
+          echo "PASS: user, project and plugin layers all collected with the right invocations"
+
+      - name: atlas names the definition that wins
+        # An agent name defined at both user and project level resolves
+        # differently depending on where the session started, and nothing else
+        # reports which copy answered.
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp -d)"
+          mkdir -p "$fixture/home/.claude/agents" "$fixture/repo/.claude/agents"
+          printf -- '---\nname: reviewer\ndescription: The user copy\n---\nbody\n' \
+            > "$fixture/home/.claude/agents/reviewer.md"
+          printf -- '---\nname: reviewer\ndescription: The project copy\n---\nother body\n' \
+            > "$fixture/repo/.claude/agents/reviewer.md"
+          printf -- '---\nname: solo\ndescription: Only here\n---\nbody\n' \
+            > "$fixture/repo/.claude/agents/solo.md"
+
+          python3 plugins/atlas/scripts/atlas.py --project "$fixture/repo" \
+            --user-root "$fixture/home/.claude" scan > "$fixture/graph.json"
+          python3 - "$fixture/graph.json" <<'PY'
+          import json, sys
+
+          graph = json.load(open(sys.argv[1]))
+          failures = []
+
+          conflicts = graph["conflicts"]
+          if len(conflicts) != 1:
+              failures.append(f"expected 1 conflict, got {len(conflicts)}")
+          else:
+              conflict = conflicts[0]
+              if conflict["name"] != "reviewer":
+                  failures.append(f"wrong name flagged: {conflict['name']!r}")
+              if "project" not in conflict["verdict"]:
+                  failures.append(f"winner not named: {conflict['verdict']!r}")
+              if len(conflict["where"]) != 2:
+                  failures.append(f"expected 2 origins, got {len(conflict['where'])}")
+
+          solo = next(i for i in graph["items"] if i["name"] == "solo")
+          if solo.get("conflicted"):
+              failures.append("an agent defined once was reported as shadowed")
+
+          for line in failures:
+              print(f"FAIL: {line}")
+          sys.exit(1 if failures else 0)
+          PY
+          echo "PASS: the shadowed name is reported and the winner is named"
+
+      - name: atlas tells an inline hook from a missing script
+        # A hook registration is a pointer, and its quietest failure is that the
+        # target is gone: it loads, never fires, and says nothing. An inline
+        # one-liner has no file to find and must not be reported as broken.
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp -d)"
+          mkdir -p "$fixture/home/.claude/hooks" "$fixture/repo"
+          printf '#!/usr/bin/env bash\ntrue\n' > "$fixture/home/.claude/hooks/present.sh"
+          chmod +x "$fixture/home/.claude/hooks/present.sh"
+          cat > "$fixture/home/.claude/settings.json" <<EOF
+          {"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[
+            {"type":"command","command":"$fixture/home/.claude/hooks/present.sh"},
+            {"type":"command","command":"$fixture/home/.claude/hooks/gone.sh"},
+            {"type":"command","command":"jq -r .tool_name"}]}]}}
+          EOF
+
+          python3 plugins/atlas/scripts/atlas.py --project "$fixture/repo" \
+            --user-root "$fixture/home/.claude" scan > "$fixture/graph.json"
+          python3 - "$fixture/graph.json" <<'PY'
+          import json, sys
+
+          graph = json.load(open(sys.argv[1]))
+          hooks = {i["name"]: i for i in graph["items"] if i["kind"] == "hook"}
+          failures = []
+
+          if len(hooks) != 3:
+              failures.append(f"expected 3 hooks, got {sorted(hooks)}")
+          if hooks.get("present.sh", {}).get("resolves") is not True:
+              failures.append("a hook whose script exists was reported as missing")
+          if hooks.get("gone.sh", {}).get("resolves") is not False:
+              failures.append("a hook pointing at a deleted script was not flagged")
+          if hooks.get("jq", {}).get("resolves") is not True:
+              failures.append("an inline hook was reported as a missing script")
+          if graph["stats"]["unresolvedHooks"] != 1:
+              failures.append(f"unresolvedHooks is {graph['stats']['unresolvedHooks']}")
+
+          for line in failures:
+              print(f"FAIL: {line}")
+          sys.exit(1 if failures else 0)
+          PY
+          echo "PASS: missing script flagged, inline hook left alone"
+
+      - name: atlas ships a self-contained viewer that leaks no MCP values
+        # Two promises the README makes, both of which are only real if they are
+        # exercised: the page makes no network request, and an MCP server's env
+        # block is reported by variable NAME and never by value.
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp -d)"
+          mkdir -p "$fixture/home/.claude" "$fixture/repo"
+          cat > "$fixture/repo/.mcp.json" <<'EOF'
+          {"mcpServers":{"gh":{"command":"npx","args":["-y","gh-mcp"],
+            "env":{"GH_TOKEN":"do-not-ship-this"}}}}
+          EOF
+
+          python3 plugins/atlas/scripts/atlas.py --project "$fixture/repo" \
+            --user-root "$fixture/home/.claude" view --out "$fixture/out.html"
+          test -s "$fixture/out.html"
+
+          if grep -qF 'do-not-ship-this' "$fixture/out.html"; then
+            echo "FAIL: an MCP env VALUE reached the viewer"
+            exit 1
+          fi
+          if ! grep -qF 'GH_TOKEN' "$fixture/out.html"; then
+            echo "FAIL: the MCP env variable name was not reported at all"
+            exit 1
+          fi
+          # A strict CSP is not available for a file:// page, so the guarantee
+          # has to be that no external reference is emitted in the first place.
+          if grep -qE '<script[^>]+src=|<link |@import|url\(' "$fixture/out.html"; then
+            echo "FAIL: the viewer references something outside itself"
+            grep -nE '<script[^>]+src=|<link |@import|url\(' "$fixture/out.html" | head
+            exit 1
+          fi
+          echo "PASS: no external reference, env reported by name only"
+
+      - name: atlas refuses to write into a scanned tree
+        # A tool that reports on your config must not become part of what it
+        # reports — and a viewer committed by accident names real paths.
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp -d)"
+          mkdir -p "$fixture/home/.claude/agents" "$fixture/repo/.claude"
+          printf -- '---\nname: alpha\ndescription: an agent\n---\nbody\n' \
+            > "$fixture/home/.claude/agents/alpha.md"
+
+          if python3 plugins/atlas/scripts/atlas.py --project "$fixture/repo" \
+               --user-root "$fixture/home/.claude" \
+               view --out "$fixture/home/.claude/atlas.html"; then
+            echo "FAIL: wrote the viewer inside the scanned config root"
+            exit 1
+          fi
+          if [ -e "$fixture/home/.claude/atlas.html" ]; then
+            echo "FAIL: refused but the file exists anyway"
+            exit 1
+          fi
+          python3 plugins/atlas/scripts/atlas.py --project "$fixture/repo" \
+            --user-root "$fixture/home/.claude" view --out "$fixture/outside.html"
+          test -s "$fixture/outside.html"
+          echo "PASS: refused inside the root, allowed outside it"
+
   ci-result:
     name: CI Result
     if: always()

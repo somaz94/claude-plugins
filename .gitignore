@@ -7,3 +7,8 @@ __pycache__/
 .census.json
 census.json
 CENSUS.md
+
+# Generated atlas viewers — same reason. atlas writes to the temp directory by
+# default, so one landing here means someone passed --out on purpose.
+claude-atlas*.html
+atlas.html
