@@ -1,6 +1,6 @@
 ---
 name: shell-portability-reviewer
-description: Reviews shell scripts (`*.sh`, files with `#!/...bash|sh|zsh` shebang, or Bash invoked from CI YAML) to ensure they run safely under **both bash and zsh**. Enforces one invariant — *every shell script must work under both bash and zsh*. Catches BASH_SOURCE/array indexing/glob nomatch/shebang/word-splitting differences, plus the usual shell quality checks (`set -euo pipefail`, quoted expansions, trap cleanup, shellcheck-class issues, macOS bash 3.2 vs Homebrew bash 5 split). Use PROACTIVELY before committing any new or modified shell script. Read-only by default — suggests minimal patches with file:line citations; does not run the script under review or modify it without confirmation.
+description: 'Reviews shell scripts (`*.sh`, files with `#!/...bash|sh|zsh` shebang, or Bash invoked from CI YAML) to ensure they run safely under **both bash and zsh**. Enforces one invariant — *every shell script must work under both bash and zsh*. Catches BASH_SOURCE/array indexing/glob nomatch/shebang/word-splitting differences, plus the usual shell quality checks (`set -euo pipefail`, quoted expansions, trap cleanup, shellcheck-class issues, macOS bash 3.2 vs Homebrew bash 5 split). Use PROACTIVELY before committing any new or modified shell script. Read-only by default — suggests minimal patches with file:line citations; does not run the script under review or modify it without confirmation.'
 tools: Read, Grep, Glob, Edit, Bash
 ---
 

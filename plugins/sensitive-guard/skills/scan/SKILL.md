@@ -1,6 +1,6 @@
 ---
 name: scan
-description: Scan a repository for values that must be sanitized before it goes public — private IPs, cloud keys, tokens, SSH private keys, and any markers you defined yourself. Use before pushing or publishing, when asked "is this safe to publish?", "scan for secrets", "check before I push", or after sanitizing to confirm the fix.
+description: 'Scan a repository for values that must be sanitized before it goes public — private IPs, cloud keys, tokens, SSH private keys, and any markers you defined yourself. Use before pushing or publishing, when asked "is this safe to publish?", "scan for secrets", "check before I push", or after sanitizing to confirm the fix.'
 argument-hint: "[path | --all [ROOT]]"
 allowed-tools: Bash, Read
 ---

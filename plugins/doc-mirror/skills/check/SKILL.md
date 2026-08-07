@@ -1,6 +1,6 @@
 ---
 name: check
-description: Check a repository's translated documentation pairs for drift — the README whose mirror was never written, the mirror whose source moved on without it, the half that lost a section, and links that resolve in one language but not the other. Use when asked "are my translations in sync", "check the docs pairs", "did I update both READMEs", or before publishing a repo that ships more than one language.
+description: 'Check a repository''s translated documentation pairs for drift — the README whose mirror was never written, the mirror whose source moved on without it, the half that lost a section, and links that resolve in one language but not the other. Use when asked "are my translations in sync", "check the docs pairs", "did I update both READMEs", or before publishing a repo that ships more than one language.'
 argument-hint: "[path] [--strict] [--spacer on|off]"
 allowed-tools: Bash, Read
 ---

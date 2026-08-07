@@ -1,5 +1,5 @@
 ---
-description: Update ~/.claude/plans/<name>.md in place via plan-progress-updater after a meaningful chunk of work
+description: 'Update ~/.claude/plans/<name>.md in place via plan-progress-updater after a meaningful chunk of work'
 argument-hint: "[plan-name | free-form what-changed summary]"
 allowed-tools: Read, Grep, Glob, Bash
 ---

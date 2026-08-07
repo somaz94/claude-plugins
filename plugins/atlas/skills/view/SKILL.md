@@ -1,6 +1,6 @@
 ---
 name: view
-description: Build a browsable HTML map of every Claude Code resource this project can reach — commands, agents, skills, hooks, MCP servers and memory files, from your user config, this repo, and every installed plugin, with the name conflicts and dead hooks marked. Use when asked "what commands do I have here", "show my setup", "what does this plugin actually add", "open my config in a browser", "compare this repo's setup with another", or after installing a plugin.
+description: 'Build a browsable HTML map of every Claude Code resource this project can reach — commands, agents, skills, hooks, MCP servers and memory files, from your user config, this repo, and every installed plugin, with the name conflicts and dead hooks marked. Use when asked "what commands do I have here", "show my setup", "what does this plugin actually add", "open my config in a browser", "compare this repo''s setup with another", or after installing a plugin.'
 argument-hint: "[PROJECT…] [--open] [--out FILE] [--no-bodies]"
 allowed-tools: Bash, Read
 ---

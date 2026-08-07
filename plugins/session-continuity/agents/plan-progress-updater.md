@@ -1,6 +1,6 @@
 ---
 name: plan-progress-updater
-description: Keeps `~/.claude/plans/*.md` plan files current as work progresses. After a meaningful chunk of work tied to a plan completes (phase done, blocker resolved, scope changed, decision overridden), update the plan's progress table, "what changed" / status section, and lessons-learned tail so the **next session** (after context reset) can resume cleanly without re-deriving context. Use PROACTIVELY when the user finishes a phase, when a long task wraps up, or when the user says "plan reflect this". Edits `~/.claude/plans/` files in place — does NOT create new plan files (that is plan-mode's job) or touch repo code.
+description: 'Keeps `~/.claude/plans/*.md` plan files current as work progresses. After a meaningful chunk of work tied to a plan completes (phase done, blocker resolved, scope changed, decision overridden), update the plan''s progress table, "what changed" / status section, and lessons-learned tail so the **next session** (after context reset) can resume cleanly without re-deriving context. Use PROACTIVELY when the user finishes a phase, when a long task wraps up, or when the user says "plan reflect this". Edits `~/.claude/plans/` files in place — does NOT create new plan files (that is plan-mode''s job) or touch repo code.'
 tools: Read, Edit, Write
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: portability
-description: Grade every Claude Code agent, command and skill by how tightly it is bound to your machine, and report which ones are safe to share with a team. Use when asked "can I share this agent", "which of my config is portable", "what can I publish as a plugin", or before promoting personal config into a team marketplace.
+description: 'Grade every Claude Code agent, command and skill by how tightly it is bound to your machine, and report which ones are safe to share with a team. Use when asked "can I share this agent", "which of my config is portable", "what can I publish as a plugin", or before promoting personal config into a team marketplace.'
 argument-hint: "[--evidence N] [--out FILE] [--config PATH]"
 allowed-tools: Bash, Read
 ---

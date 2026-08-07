@@ -1,6 +1,6 @@
 ---
 name: catalog
-description: Take a full inventory of every Claude Code agent, command, skill and hook across your user-level ~/.claude and all project-level .claude/ directories, then report what you have and what it costs you in always-on context. Use when asked to "catalog my config", "what agents do I have", "inventory my .claude", or "why is my context so full".
+description: 'Take a full inventory of every Claude Code agent, command, skill and hook across your user-level ~/.claude and all project-level .claude/ directories, then report what you have and what it costs you in always-on context. Use when asked to "catalog my config", "what agents do I have", "inventory my .claude", or "why is my context so full".'
 argument-hint: "[--out FILE] [--top N] [--config PATH]"
 allowed-tools: Bash, Read
 ---

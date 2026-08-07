@@ -1,6 +1,6 @@
 ---
 name: drift
-description: Find disagreements across your Claude Code config — the same agent or command defined in several places with different content, translation mirrors that no longer match their source, and frontmatter that would misroute or fail to route at all. Use when asked "check my config for drift", "are my agents out of sync", "did the mirror fall behind", or after syncing config between repos.
+description: 'Find disagreements across your Claude Code config — the same agent or command defined in several places with different content, translation mirrors that no longer match their source, and frontmatter that would misroute or fail to route at all. Use when asked "check my config for drift", "are my agents out of sync", "did the mirror fall behind", or after syncing config between repos.'
 argument-hint: "[--limit N] [--out FILE] [--config PATH]"
 allowed-tools: Bash, Read
 ---

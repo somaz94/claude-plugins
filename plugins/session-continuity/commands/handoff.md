@@ -1,5 +1,5 @@
 ---
-description: Generate a self-contained handoff prompt for the NEXT Claude Code session via session-handoff-prompter
+description: 'Generate a self-contained handoff prompt for the NEXT Claude Code session via session-handoff-prompter'
 argument-hint: "[plan-name | now/mid-session | free-form context]"
 allowed-tools: Read, Grep, Glob, Bash
 ---
