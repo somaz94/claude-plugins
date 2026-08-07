@@ -301,3 +301,41 @@ for bad in 'not json at all .md' '{"tool_input":{}}' '{".md":1}' \
 done
 echo "PASS: nudges when stale, silent when in sync, silent when unsure"
 )
+step 'doc-mirror does not audit somebody else vendored documentation'
+(
+set -euo pipefail
+fixture="$(mktemp -d)/repo"
+mkdir -p "$fixture/docs" "$fixture/node_modules/pkg" "$fixture/plugins/cache/acme/thing/0.1.0"
+printf '# a\n' > "$fixture/docs/a.md"
+printf '# a\n' > "$fixture/docs/a-ko.md"
+printf '# b\n' > "$fixture/docs/b.md"
+printf '# b\n' > "$fixture/docs/b-ko.md"
+printf '# c\n' > "$fixture/docs/c.md"
+printf '# c\n' > "$fixture/docs/c-ko.md"
+
+# Vendored trees: a dependency, and an installed plugin's own copy. Both ship
+# their own README pairs, and neither is this repository's problem. A Claude
+# Code config directory hits the second case — plugins/cache/ holds every
+# installed plugin at every version ever installed.
+printf '# dep\n\n## One\n\n## Two\n' > "$fixture/node_modules/pkg/README.md"
+printf '# dep\n' > "$fixture/node_modules/pkg/README-ko.md"
+printf '# plug\n\n## One\n\n## Two\n' > "$fixture/plugins/cache/acme/thing/0.1.0/README.md"
+printf '# plug\n' > "$fixture/plugins/cache/acme/thing/0.1.0/README-ko.md"
+printf '# orphan\n' > "$fixture/plugins/cache/acme/thing/0.1.0/GUIDE-ko.md"
+
+$DM "$fixture" --json > "$fixture/out.json"
+python3 - "$fixture/out.json" <<'PY'
+import json, sys
+r = json.load(open(sys.argv[1]))
+strays = [f["file"] for f in r["findings"]
+          if f["file"].startswith(("node_modules/", "plugins/cache/"))]
+failures = []
+if strays:
+    failures.append(f"audited vendored documentation: {strays}")
+if r["pairs"] != 3:
+    failures.append(f"vendored pairs were counted as this repo's: {r['pairs']}")
+for line in failures: print(f"FAIL: {line}")
+sys.exit(1 if failures else 0)
+PY
+echo "PASS: node_modules and plugins/cache are left to their owners"
+)

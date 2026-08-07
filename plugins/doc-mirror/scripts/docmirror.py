@@ -57,6 +57,13 @@ SKIP_DIRS = {
     "dist", "build", "target", ".next", ".tox", "site-packages",
 }
 
+# The same idea, for trees that are only recognisable by more than one segment.
+# `plugins/cache/` under a Claude Code config directory holds a full copy of
+# every installed plugin, at every version ever installed — somebody else's
+# documentation, vendored. Auditing it produced 26 findings about old releases
+# of a plugin in this very marketplace.
+SKIP_PATHS = ("plugins/cache",)
+
 # Documents that live beside a README and are almost never translated, because
 # a machine writes them. Reporting a missing `RELEASE-ko.md` next to a
 # `README-ko.md` is the fastest way to teach someone to ignore this tool.
@@ -213,7 +220,11 @@ def discover(root: Path) -> tuple[dict[Path, Pair], dict[Path, set[str]], list[P
     """
     by_dir: dict[Path, dict[str, Path]] = {}
     for path in sorted(root.rglob("*.md")):
-        if any(part in SKIP_DIRS for part in path.relative_to(root).parts):
+        rel = path.relative_to(root)
+        if any(part in SKIP_DIRS for part in rel.parts):
+            continue
+        posix = rel.as_posix()
+        if any(f"{skip}/" in f"{posix}" for skip in SKIP_PATHS):
             continue
         by_dir.setdefault(path.parent, {})[path.stem] = path
 

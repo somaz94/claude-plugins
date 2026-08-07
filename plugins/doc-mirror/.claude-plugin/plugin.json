@@ -1,6 +1,6 @@
 {
   "name": "doc-mirror",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Keeps translated documentation pairs from drifting apart — finds the README whose mirror was never written, the mirror whose source moved on without it, and the half that lost a section, without ever guessing at translation quality.",
   "author": {
     "name": "somaz94",

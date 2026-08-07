@@ -65,6 +65,8 @@ That cuts both ways, and the second direction is what keeps the report usable:
 
 **It has no opinion on meaning.** Whether the Korean says what the English says is a human judgment involving terminology, tone and accuracy. A tool that guesses at it is worse than no tool, so this one measures only what survives translation unchanged: a heading is still a heading, a table still has the same number of rows, a fenced block still holds the same command. Word counts and character counts do not survive, which is exactly why they are not measured.
 
+**It does not see directory-based mirrors.** `agents/x.md` beside `agents-ko/x.md` is a real convention — Claude Code configuration uses it — but it is a *configured* pairing rather than one visible in a file name, and [`census`](../census) already takes a `pairs` map for exactly that. This plugin pairs on file names only.
+
 **It does not answer "which half is stale".** Two files with identical shape can both be a year out of date. Answering that needs commit history, and [`census`](../census) already does it — its `drift` command compares when each half was last touched. This one compares what they contain. Run both; they disagree in useful ways.
 
 **It never writes.** No missing mirror is created, no orphan is deleted, no file is renamed. Creating a mirror means writing prose in a language, and that is a decision for a person.
