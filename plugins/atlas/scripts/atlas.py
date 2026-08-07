@@ -12,8 +12,9 @@ resolves four layers at once and reports none of them together:
   4. project MCP servers            (.mcp.json)
 
 Design contract:
-  - This script SCANS and RENDERS. It never edits a scanned tree, and the only
-    file it writes is the viewer it was asked to produce.
+  - This script SCANS and RENDERS. It never edits a scanned tree. The only files
+    it touches are the viewers it produces — which includes deleting its own
+    stale ones out of the temp directory, since nothing else ever would.
   - stdlib only. A tool you reach for to understand your setup must not need a
     setup of its own.
   - The viewer is one self-contained file. No server, no CDN, no build step:
@@ -21,7 +22,9 @@ Design contract:
     to someone else as a single attachment.
 
 Subcommands:
-  view   build the HTML viewer and optionally open it in a browser
+  view   build the HTML viewer and optionally open it in a browser. Name other
+         projects to get one file each, plus a global-only map to compare them
+         against.
   scan   emit the same graph as JSON, for piping somewhere else
 """
 
@@ -63,6 +66,13 @@ HOOK_EVENT_ORDER = (
 )
 
 KIND_ORDER = ("command", "agent", "skill", "hook", "mcp", "memory", "plugin")
+
+# The three scopes an item can come from, in resolution order. The JSON keeps
+# `user` — it is the name Claude Code's own docs use for the config directory —
+# but everywhere a person reads it, it is labelled "Global", which is what it
+# actually is next to a repo's own `.claude/`.
+LAYER_ORDER = ("user", "project", "plugin")
+LAYER_LABEL = {"user": "Global", "project": "Project", "plugin": "Plugins"}
 
 # A translation mirror directory: `agents-ko`, `commands-ja`, `skills-zh`. The
 # language is whatever suffix is there — no list of known codes, because the
@@ -623,7 +633,15 @@ def build_graph(
     plugins_root: Path,
     max_body: int,
     include_bodies: bool,
+    include_project: bool = True,
 ) -> dict[str, Any]:
+    """Map the layers a session resolves.
+
+    With `include_project` false the project layer is skipped entirely: the map
+    becomes the global one — the user config and the installed plugins, the part
+    that is the same in every repository. Useful as its own file to compare a
+    repo against, which is why `view` can emit both at once.
+    """
     collector = Collector(max_body=max_body, include_bodies=include_bodies)
     roots: list[dict[str, Any]] = []
 
@@ -641,7 +659,12 @@ def build_graph(
 
     # Layer 2 — this project.
     project_config = project / ".claude"
-    if project_config.is_dir() or (project / "CLAUDE.md").is_file():
+    if not include_project:
+        collector.notes.append(
+            "global view — the user config and installed plugins only. "
+            "No project layer was scanned, so nothing here is repo-specific."
+        )
+    elif project_config.is_dir() or (project / "CLAUDE.md").is_file():
         counts = collector.collect_config_dir(project_config, "project", project.name)
         collector.collect_settings(
             project_config / "settings.json", "project", "settings.json", project_config
@@ -662,14 +685,15 @@ def build_graph(
         )
         collector.collect_mcp(project / ".mcp.json", "project", project.name)
 
-    # Layer 3 — installed plugins.
-    state = enabled_state(
-        [
-            user_root / "settings.json",
+    # Layer 3 — installed plugins. A global view resolves enablement from the
+    # user settings alone; a project's override is part of the layer it skipped.
+    settings_chain = [user_root / "settings.json"]
+    if include_project:
+        settings_chain += [
             project_config / "settings.json",
             project_config / "settings.local.json",
         ]
-    )
+    state = enabled_state(settings_chain)
     for plugin in installed_plugins(plugins_root):
         path = plugin["path"]
         label = plugin["name"]
@@ -739,8 +763,12 @@ def build_graph(
     conflicts = detect_conflicts(items)
     return {
         "generatedAt": datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M %Z"),
-        "project": collapse_home(project),
-        "projectName": project.name,
+        # What this map is OF. A global build is not a map of a project that
+        # happens to be empty, so it names itself rather than borrowing the
+        # directory the command was run from.
+        "scope": "project" if include_project else "global",
+        "project": collapse_home(project if include_project else user_root),
+        "projectName": project.name if include_project else "global",
         "userRoot": collapse_home(user_root),
         "roots": roots,
         "items": items,
@@ -800,21 +828,32 @@ def summarize(items: list[dict[str, Any]]) -> dict[str, Any]:
     by_kind: dict[str, int] = {}
     by_layer: dict[str, int] = {}
     resident = 0
+    # The same resident total, split by where it comes from. One number for the
+    # whole session says the bill is large; this says which scope to go edit.
+    resident_by_layer: dict[str, int] = {}
     for item in items:
         by_kind[item["kind"]] = by_kind.get(item["kind"], 0) + 1
         by_layer[item["layer"]] = by_layer.get(item["layer"], 0) + 1
         # What a session pays before you type anything: the name and description
         # of every routable item, plus every CLAUDE.md in full.
         if item["kind"] in ("agent", "command", "skill"):
-            resident += item["descriptionChars"]
+            cost = item["descriptionChars"]
         elif item["kind"] == "memory":
-            resident += item.get("residentChars", 0)
+            cost = item.get("residentChars", 0)
+        else:
+            continue
+        resident += cost
+        resident_by_layer[item["layer"]] = resident_by_layer.get(item["layer"], 0) + cost
     return {
         "total": sum(v for k, v in by_kind.items()),
         "byKind": by_kind,
         "byLayer": by_layer,
         "residentChars": resident,
         "residentTokens": resident // CHARS_PER_TOKEN,
+        "residentByLayer": resident_by_layer,
+        "residentTokensByLayer": {
+            layer: chars // CHARS_PER_TOKEN for layer, chars in resident_by_layer.items()
+        },
         "unresolvedHooks": sum(
             1 for i in items if i["kind"] == "hook" and not i.get("resolves", True)
         ),
@@ -886,6 +925,18 @@ h2.kind {
   font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted);
   margin: 26px 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line);
 }
+/* A scope heading outranks a kind heading on purpose: when you group by scope,
+   "where does this come from" is the question being asked, and the kind is the
+   subdivision inside the answer. */
+h2.scope {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  font-size: 16px; letter-spacing: -0.01em; color: var(--ink);
+  margin: 36px 0 2px; padding-bottom: 8px; border-bottom: 2px solid var(--accent);
+}
+h2.scope:first-child { margin-top: 8px; }
+h2.scope .where { font: inherit; font-size: 12.5px; font-weight: 400; color: var(--muted); }
+h2.scope .tally { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--muted); }
+h2.scope + h2.kind { margin-top: 14px; }
 details.card {
   background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
   margin-bottom: 7px; overflow: hidden;
@@ -970,7 +1021,7 @@ footer code { background: var(--code); padding: 1px 5px; border-radius: 4px; }
 <div class="wrap">
 <header>
   <h1>__HEADING__</h1>
-  <div class="sub">Everything reachable from <code>__PROJECT__</code> · generated __GENERATED__</div>
+  <div class="sub">__LEAD__ <code>__PROJECT__</code> · generated __GENERATED__</div>
 </header>
 <div id="summary"></div>
 <div class="toolbar">
@@ -991,7 +1042,36 @@ const KIND_LABEL = {
   hook: 'Hooks', mcp: 'MCP servers', memory: 'Memory', plugin: 'Plugins'
 };
 const KIND_ORDER = ['command', 'agent', 'skill', 'hook', 'mcp', 'memory', 'plugin'];
-const state = { q: '', kinds: new Set(), layers: new Set(), issuesOnly: false, lang: 'source', raw: false };
+// `user` is the key on disk; "Global" is what it is next to a repo's own
+// .claude/, and what people call it. The data keeps the key, the page shows the
+// word — so a scan piped somewhere else still matches the documented shape.
+const LAYER_ORDER = ['user', 'project', 'plugin'];
+const LAYER_LABEL = { user: 'Global', project: 'Project', plugin: 'Plugins' };
+const CHARS_PER_TOKEN = 4;
+const state = {
+  q: '', kinds: new Set(), layers: new Set(),
+  issuesOnly: false, lang: 'source', raw: false, group: 'scope'
+};
+
+// Resident cost of an arbitrary subset, recomputed rather than read off DATA so
+// the per-scope tally tracks whatever is currently filtered in.
+function residentTokens(items) {
+  let chars = 0;
+  for (const item of items) {
+    if (['agent', 'command', 'skill'].includes(item.kind)) chars += item.descriptionChars || 0;
+    else if (item.kind === 'memory') chars += item.residentChars || 0;
+  }
+  return Math.floor(chars / CHARS_PER_TOKEN);
+}
+
+// Where a scope physically is. For plugins that is not one path, so it says how
+// many contributed instead.
+function scopeWhere(layer, items) {
+  if (layer === 'user') return DATA.userRoot;
+  if (layer === 'project') return DATA.project;
+  const origins = new Set(items.map(i => i.origin));
+  return origins.size + (origins.size === 1 ? ' plugin' : ' plugins');
+}
 
 // A description is stored as one unbroken line. Breaking at sentence ends is
 // the only reformatting done to it — the text itself is never altered.
@@ -1118,6 +1198,13 @@ function renderSummary() {
     ['Hooks', s.byKind.hook || 0],
     ['~Tokens always on', s.residentTokens.toLocaleString()],
   ];
+  // The same bill, split by scope. A total tells you it is large; this tells
+  // you which directory to go open.
+  const perLayer = s.residentTokensByLayer || {};
+  for (const layer of LAYER_ORDER) {
+    if (!perLayer[layer]) continue;
+    cards.push(['↳ ' + LAYER_LABEL[layer], perLayer[layer].toLocaleString()]);
+  }
   let html = '<div class="stats">' + cards.map(([k, v]) =>
     `<div class="stat"><b>${esc(v)}</b><span>${esc(k)}</span></div>`).join('') + '</div>';
 
@@ -1145,7 +1232,7 @@ function renderSummary() {
 
 function renderFilters() {
   const kinds = KIND_ORDER.filter(k => DATA.items.some(i => i.kind === k));
-  const layers = ['user', 'project', 'plugin'].filter(l => DATA.items.some(i => i.layer === l));
+  const layers = LAYER_ORDER.filter(l => DATA.items.some(i => i.layer === l));
   const el = document.getElementById('filters');
   // Language is a radio, not a toggle — you read in one language at a time.
   const langs = DATA.languages.length
@@ -1153,10 +1240,17 @@ function renderFilters() {
       ['source'].concat(DATA.languages).map(l =>
         `<button class="chip" data-lang="${esc(l)}" aria-pressed="${l === 'source'}">${esc(l)}</button>`).join('')
     : '';
+  // Grouping is a radio too: one axis at a time, scope or kind. The layer chips
+  // beside it stay additive — they narrow what is listed, this decides how the
+  // survivors are sectioned.
+  const groups = ['scope', 'kind'].map(g =>
+    `<button class="chip" data-group="${g}" aria-pressed="${g === state.group}">group: ${g}</button>`).join('');
   el.innerHTML =
     kinds.map(k => `<button class="chip" data-kind="${k}" aria-pressed="false">${esc(KIND_LABEL[k] || k)}</button>`).join('') +
     '<span class="sep"></span>' +
-    layers.map(l => `<button class="chip" data-layer="${l}" aria-pressed="false">${esc(l)}</button>`).join('') +
+    layers.map(l => `<button class="chip" data-layer="${l}" aria-pressed="false">${esc(LAYER_LABEL[l] || l)}</button>`).join('') +
+    '<span class="sep"></span>' +
+    groups +
     '<span class="sep"></span>' +
     '<button class="chip" data-issues="1" aria-pressed="false">needs attention</button>' +
     langs +
@@ -1170,6 +1264,13 @@ function renderFilters() {
     if (b.dataset.raw) {
       state.raw = b.getAttribute('aria-pressed') !== 'true';
       b.setAttribute('aria-pressed', String(state.raw));
+      render();
+      return;
+    }
+    if (b.dataset.group) {
+      state.group = b.dataset.group;
+      el.querySelectorAll('button[data-group]').forEach(other =>
+        other.setAttribute('aria-pressed', String(other === b)));
       render();
       return;
     }
@@ -1211,8 +1312,12 @@ function card(item) {
   const view = inLang(item);
   // Where it lives comes first — for a repo-scoped item that is the repo name,
   // for a global one the config directory, for a plugin's the plugin.
-  const tags = [`<span class="tag origin">${esc(item.origin)}</span>`,
-                `<span class="tag">${esc(item.layer)}</span>`];
+  const tags = [`<span class="tag origin">${esc(item.origin)}</span>`];
+  // In scope mode the section heading above already says the layer, so the chip
+  // would only repeat it on every row.
+  if (state.group !== 'scope') {
+    tags.push(`<span class="tag">${esc((LAYER_LABEL[item.layer] || item.layer).toLowerCase())}</span>`);
+  }
   if (item.conflicted) tags.push('<span class="tag warn">shadowed</span>');
   if (item.resolves === false) tags.push('<span class="tag warn">missing script</span>');
   if (item.enabled === false) tags.push('<span class="tag warn">disabled</span>');
@@ -1258,6 +1363,19 @@ function card(item) {
   </details>`;
 }
 
+// One kind's heading plus its cards. Shared by both grouping modes so a kind
+// section looks the same whether or not it sits under a scope.
+function byKind(items) {
+  let html = '';
+  for (const kind of KIND_ORDER) {
+    const group = items.filter(i => i.kind === kind);
+    if (!group.length) continue;
+    html += `<h2 class="kind">${esc(KIND_LABEL[kind] || kind)} (${group.length})</h2>`;
+    html += group.map(card).join('');
+  }
+  return html;
+}
+
 function render() {
   const shown = DATA.items.filter(matches);
   const list = document.getElementById('list');
@@ -1266,12 +1384,20 @@ function render() {
     list.innerHTML = '<div class="empty">Nothing matches.</div>';
     return;
   }
+  if (state.group !== 'scope') {
+    list.innerHTML = byKind(shown);
+    return;
+  }
   let html = '';
-  for (const kind of KIND_ORDER) {
-    const group = shown.filter(i => i.kind === kind);
+  for (const layer of LAYER_ORDER) {
+    const group = shown.filter(i => i.layer === layer);
     if (!group.length) continue;
-    html += `<h2 class="kind">${esc(KIND_LABEL[kind] || kind)} (${group.length})</h2>`;
-    html += group.map(card).join('');
+    const tokens = residentTokens(group);
+    html += `<h2 class="scope">${esc(LAYER_LABEL[layer] || layer)}` +
+      `<span class="where mono">${esc(scopeWhere(layer, group))}</span>` +
+      `<span class="tally">${group.length} item${group.length === 1 ? '' : 's'}` +
+      (tokens ? ` · ~${tokens.toLocaleString()}t always on` : '') + '</span></h2>';
+    html += byKind(group);
   }
   list.innerHTML = html;
 }
@@ -1297,12 +1423,18 @@ render();
 
 def render_html(graph: dict[str, Any]) -> str:
     heading = f"Claude Code atlas — {graph['projectName']}"
+    lead = (
+        "The user config and installed plugins, from"
+        if graph.get("scope") == "global"
+        else "Everything reachable from"
+    )
     # `<` cannot appear outside a JSON string, so escaping every one of them is
     # enough to keep an embedded `</script>` from ending the block early.
     data = json.dumps(graph, ensure_ascii=False).replace("<", "\\u003c")
     return (
         PAGE.replace("__TITLE__", html.escape(heading))
         .replace("__HEADING__", html.escape(heading))
+        .replace("__LEAD__", lead)
         .replace("__PROJECT__", html.escape(graph["project"]))
         .replace("__GENERATED__", html.escape(graph["generatedAt"]))
         .replace("__DATA__", data)
@@ -1314,15 +1446,81 @@ def render_html(graph: dict[str, Any]) -> str:
 # --------------------------------------------------------------------------
 
 
-def default_out(project: Path) -> Path:
+def viewer_name(label: str) -> str:
+    """The file name a viewer for `label` gets. One name per subject, so a
+    re-run of the same subject overwrites rather than accumulating."""
+    safe = re.sub(r"[^A-Za-z0-9._-]", "-", label) or "project"
+    return f"claude-atlas-{safe}.html"
+
+
+def default_out(label: str) -> Path:
     """Write outside the project by default.
 
     A viewer dropped into the repository is one `git add .` away from being
     committed, so the default lands in the temp directory and the path is
     printed. `--out` puts it wherever the user actually wants it.
     """
-    safe = re.sub(r"[^A-Za-z0-9._-]", "-", project.name) or "project"
-    return Path(tempfile.gettempdir()) / f"claude-atlas-{safe}.html"
+    return Path(tempfile.gettempdir()) / viewer_name(label)
+
+
+# What a viewer is called, and a string only a viewer contains. Both must match
+# before a file is deleted — a glob alone would be willing to remove someone
+# else's file that happened to be named the same way.
+VIEWER_GLOB = "claude-atlas-*.html"
+VIEWER_MARKER = "Claude Code atlas"
+
+
+def prune_old_viewers(spare: Iterable[Path]) -> list[Path]:
+    """Delete viewers left in the temp directory by earlier runs.
+
+    Re-running in the same project already overwrites: the name is derived from
+    the subject, not the timestamp. What accumulates is one multi-megabyte file
+    per project ever mapped, in a directory nobody opens. This sweeps those.
+
+    Deliberately narrow. Only the temp directory — an `--out` the user picked is
+    theirs to manage — only atlas's own file name, and only after reading the
+    file's own title back out of it.
+    """
+    kept = {path.resolve() for path in spare}
+    removed: list[Path] = []
+    for path in sorted(Path(tempfile.gettempdir()).glob(VIEWER_GLOB)):
+        if not path.is_file() or path.resolve() in kept:
+            continue
+        try:
+            with path.open("r", encoding="utf-8", errors="replace") as handle:
+                head = handle.read(2048)
+        except OSError:
+            continue
+        if VIEWER_MARKER not in head:
+            continue
+        try:
+            path.unlink()
+        except OSError:
+            continue
+        removed.append(path)
+    return removed
+
+
+def resolve_project(text: str, session: Path) -> Path:
+    """Turn a `view` argument into a directory.
+
+    A path is used as given. A bare name is looked for next to the session
+    project first — sibling checkouts are how repositories are usually laid out
+    — and then under the home directory, so `atlas view acme-platform` works
+    from inside another repo without typing the whole path.
+    """
+    candidate = Path(text).expanduser()
+    tried = [candidate]
+    if candidate.is_dir():
+        return candidate.resolve()
+    if not candidate.is_absolute() and os.sep not in text:
+        for base in (session.parent, Path.home()):
+            guess = base / text
+            tried.append(guess)
+            if guess.is_dir():
+                return guess.resolve()
+    where = "\n       ".join(collapse_home(p) for p in tried)
+    raise SystemExit(f"atlas: no directory found for {text!r}. Tried:\n       {where}")
 
 
 def guard_out(out: Path, roots: list[Path], project: Path) -> None:
@@ -1336,7 +1534,7 @@ def guard_out(out: Path, roots: list[Path], project: Path) -> None:
         raise SystemExit(
             f"atlas: refusing to write into a scanned directory ({collapse_home(root)}).\n"
             f"       Pick an --out outside it, or omit --out for "
-            f"{collapse_home(default_out(project))}."
+            f"{collapse_home(default_out(project.name))}."
         )
 
 
@@ -1359,10 +1557,22 @@ def print_report(graph: dict[str, Any], out: Path | None) -> None:
     kinds = ", ".join(
         f"{s['byKind'][k]} {KIND_PLURAL.get(k, k)}" for k in KIND_ORDER if s["byKind"].get(k)
     )
-    print(f"Project: {graph['project']}")
+    if graph.get("scope") == "global":
+        print(f"Global: {graph['project']} (no project layer)")
+    else:
+        print(f"Project: {graph['project']}")
     print(f"Resources: {s['total']} ({kinds})")
-    layers = ", ".join(f"{v} {k}" for k, v in sorted(graph["stats"]["byLayer"].items()))
-    print(f"By layer: {layers}")
+    # Per scope, with its own slice of the always-on bill — a single total says
+    # the cost is large, this says which directory to go open.
+    per_layer = s.get("residentTokensByLayer", {})
+    known = [layer for layer in LAYER_ORDER if s["byLayer"].get(layer)]
+    rest = sorted(layer for layer in s["byLayer"] if layer not in LAYER_ORDER)
+    scopes = " · ".join(
+        f"{LAYER_LABEL.get(layer, layer)} {s['byLayer'][layer]}"
+        + (f" (~{per_layer[layer]:,}t)" if per_layer.get(layer) else "")
+        for layer in known + rest
+    )
+    print(f"By scope: {scopes}")
     print(f"Always-on context: ~{s['residentTokens']:,} tokens ({s['residentChars']:,} chars, estimate)")
     if graph["conflicts"]:
         print(f"Name conflicts: {len(graph['conflicts'])}")
@@ -1395,11 +1605,27 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command")
 
     view = sub.add_parser("view", help="build the HTML viewer")
-    view.add_argument("--out", default=None, help="where to write the viewer")
+    view.add_argument(
+        "targets",
+        nargs="*",
+        metavar="PROJECT",
+        help="also map these projects; naming any of them additionally emits a "
+        "global-only map, so you get one file per subject to compare",
+    )
+    view.add_argument(
+        "--out",
+        default=None,
+        help="where to write the viewer — a file for one map, a directory for several",
+    )
     view.add_argument("--open", action="store_true", help="open it in a browser afterwards")
     view.add_argument("--no-bodies", action="store_true", help="omit file bodies (smaller file)")
     view.add_argument(
         "--max-body", type=int, default=20000, help="per-item body character cap (default: 20000)"
+    )
+    view.add_argument(
+        "--keep-old",
+        action="store_true",
+        help="keep viewers from earlier runs (default: delete atlas's own stale files in the temp dir)",
     )
 
     scan = sub.add_parser("scan", help="emit the graph as JSON")
@@ -1418,23 +1644,27 @@ def main(argv: list[str] | None = None) -> int:
         else user_root / "plugins"
     )
 
-    graph = build_graph(
-        project=project,
-        user_root=user_root,
-        plugins_root=plugins_root,
-        max_body=getattr(args, "max_body", 20000),
-        include_bodies=not getattr(args, "no_bodies", False),
-    )
+    def graph_for(subject: Path, include_project: bool = True) -> dict[str, Any]:
+        return build_graph(
+            project=subject,
+            user_root=user_root,
+            plugins_root=plugins_root,
+            max_body=getattr(args, "max_body", 20000),
+            include_bodies=not getattr(args, "no_bodies", False),
+            include_project=include_project,
+        )
 
-    scanned = [user_root, project / ".claude"] + [
-        expand_home(root["path"]) for root in graph["roots"] if root["layer"] == "plugin"
-    ]
+    def scanned_roots(graph: dict[str, Any], subject: Path) -> list[Path]:
+        return [user_root, subject / ".claude"] + [
+            expand_home(root["path"]) for root in graph["roots"] if root["layer"] == "plugin"
+        ]
 
     if command == "scan":
+        graph = graph_for(project)
         payload = json.dumps(graph, ensure_ascii=False, indent=2)
         if args.out:
             out = Path(args.out).expanduser()
-            guard_out(out, scanned, project)
+            guard_out(out, scanned_roots(graph, project), project)
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_text(payload + "\n", encoding="utf-8")
             print(f"atlas: wrote {out}")
@@ -1442,13 +1672,53 @@ def main(argv: list[str] | None = None) -> int:
             print(payload)
         return 0
 
-    out = Path(args.out).expanduser() if args.out else default_out(project)
-    guard_out(out, scanned, project)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(render_html(graph), encoding="utf-8")
-    print_report(graph, out)
+    # What to map. Always the session project. Naming another one turns this
+    # into a comparison, and a comparison needs the third term: the global layer
+    # on its own, which is the part both of them share.
+    targets = [resolve_project(text, project) for text in args.targets]
+    subjects: list[tuple[Path, bool]] = [(project, True)]
+    if targets:
+        subjects.append((project, False))  # the global layer on its own
+        seen = {project}
+        for target in targets:
+            if target in seen:
+                continue
+            seen.add(target)
+            subjects.append((target, True))
+
+    out_dir: Path | None = None
+    if len(subjects) > 1:
+        # Several files cannot share one --out, so it becomes the directory they
+        # go in. Each still gets the name its subject earns.
+        out_dir = Path(args.out).expanduser() if args.out else Path(tempfile.gettempdir())
+        if out_dir.exists() and not out_dir.is_dir():
+            raise SystemExit(
+                f"atlas: {out_dir} is a file, but {len(subjects)} maps are being written.\n"
+                f"       With more than one subject, --out is the directory to write them into."
+            )
+
+    written: list[Path] = []
+    for index, (subject, include_project) in enumerate(subjects):
+        graph = graph_for(subject, include_project)
+        if out_dir is not None:
+            out = out_dir / viewer_name(graph["projectName"])
+        else:
+            out = Path(args.out).expanduser() if args.out else default_out(graph["projectName"])
+        guard_out(out, scanned_roots(graph, subject), subject)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(render_html(graph), encoding="utf-8")
+        if index:
+            print()
+        print_report(graph, out)
+        written.append(out)
+
+    if not args.keep_old:
+        for stale in prune_old_viewers(written):
+            print(f"Removed stale viewer: {stale}")
+
     if args.open:
-        open_in_browser(out)
+        for path in written:
+            open_in_browser(path)
     return 0
 
 

@@ -1,20 +1,20 @@
 ---
 name: view
-description: Build a browsable HTML map of every Claude Code resource this project can reach — commands, agents, skills, hooks, MCP servers and memory files, from your user config, this repo, and every installed plugin, with the name conflicts and dead hooks marked. Use when asked "what commands do I have here", "show my setup", "what does this plugin actually add", "open my config in a browser", or after installing a plugin.
-argument-hint: "[--open] [--out FILE] [--no-bodies]"
+description: Build a browsable HTML map of every Claude Code resource this project can reach — commands, agents, skills, hooks, MCP servers and memory files, from your user config, this repo, and every installed plugin, with the name conflicts and dead hooks marked. Use when asked "what commands do I have here", "show my setup", "what does this plugin actually add", "open my config in a browser", "compare this repo's setup with another", or after installing a plugin.
+argument-hint: "[PROJECT…] [--open] [--out FILE] [--no-bodies]"
 allowed-tools: Bash, Read
 ---
 
 # atlas:view — what can this project actually reach?
 
-Scans the four layers a session resolves at once, then writes a single self-contained HTML file you open in a browser.
+Scans the four layers a session resolves at once, then writes a self-contained HTML file you open in a browser — one per subject mapped.
 
 1. the user config directory — `~/.claude`, or `$CLAUDE_CONFIG_DIR`
 2. this project — `.claude/`, `settings.local.json`, `CLAUDE.md`, `.mcp.json`
 3. every installed plugin — resolved through `~/.claude/plugins/installed_plugins.json`
 4. the hooks registered by any settings file in the first two
 
-This skill is **read-only** against everything it scans. The only file it writes is the viewer.
+This skill is **read-only** against everything it scans. The only files it touches are the viewers it produces — including clearing its own stale ones out of the temp directory.
 
 <br/>
 
@@ -28,14 +28,32 @@ That writes to the temp directory and opens a browser. Forward whatever the user
 
 | Flag | When |
 |---|---|
+| `PROJECT …` | they named another repo to compare against — see below |
 | `--out FILE` | the user wants the file somewhere specific, or wants to send it to someone |
 | `--no-bodies` | the config is large and they only want the index |
-| `--project DIR` | mapping a repo other than the working directory |
+| `--project DIR` | mapping a repo other than the working directory, *instead of* this one |
+| `--keep-old` | they said to leave earlier viewers alone |
 | `scan` instead of `view` | they want the graph as JSON to pipe somewhere |
 
 Omit `--open` when the user only asked for the numbers, or when a browser would not help — a remote shell, a container, CI.
 
 The script prints a summary to stdout as well as writing the file. **Do not re-type the viewer's contents into your reply**; the file is the deliverable.
+
+<br/>
+
+## Comparing against another project
+
+A positional argument means *also* map that project. Naming any adds a third map — the global layer with no project scanned — so three files come out of `atlas.py view acme-platform`: this project, global, and that one.
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/atlas.py" view <project> --open
+```
+
+Use it when the ask is comparative — "why is this repo heavier than that one", "what does that repo have that I don't". Reach for `--project DIR` instead when they want to map a *different* repo rather than compare with one.
+
+Report the three by what each answers, not as three separate runs: the global map is the shared baseline, and each project map is that baseline plus what the repo adds. The per-scope numbers on the `By scope:` line are what makes the comparison concrete — quote those rather than the totals.
+
+Old viewers in the temp directory are cleared on every run. Do not mention it unless the script printed a `Removed stale viewer:` line, and then only in passing.
 
 <br/>
 
@@ -51,13 +69,15 @@ Lead with the path to the file and the one-line count the script printed, then a
 
 **Always-on context.** The `name` and `description` of every command, agent and skill is resident in every session's system prompt, and every `CLAUDE.md` is resident in full — bodies load only on invocation. That total is what the session pays before the user types anything. Under ~5k tokens is unremarkable; past ~25k a meaningful slice of every session is spent before work starts. It is an estimate at 4 characters per token, so quote it as one.
 
+**Which scope the weight is in.** The `By scope:` line splits that total across Global, Project and Plugins. Say which one dominates — a bill carried into every repository is a different problem from one this repository added, and they are fixed in different directories. The total alone does not distinguish them.
+
 **What each installed plugin contributes.** After a `/plugin install`, this is usually the actual question: which commands, agents, skills and hooks did that plugin just add, and are they enabled here.
 
 <br/>
 
 ## Hard rules
 
-- Read-only against every scanned tree. The only write is the viewer.
+- Read-only against every scanned tree. The only writes are the viewers, and the only deletions are atlas's own earlier viewers in the temp directory.
 - Never edit, move, or delete a discovered item, and never offer to as part of this skill.
 - The script refuses an `--out` inside a scanned directory. If that refusal fires, pick a path outside it rather than working around it.
 - If the user wants the viewer kept in their repo, say that it names real paths from this machine and belongs in `.gitignore`.

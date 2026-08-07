@@ -944,6 +944,18 @@ jobs:
                   f"{graph['stats']['missingDescriptions']}"
               )
 
+          # The per-scope split is what makes the always-on figure actionable.
+          # If it stops summing to the whole, one scope is being charged to
+          # another and the page points at the wrong directory.
+          split = graph["stats"]["residentByLayer"]
+          if sum(split.values()) != graph["stats"]["residentChars"]:
+              failures.append(
+                  f"per-scope resident split {split} does not sum to "
+                  f"{graph['stats']['residentChars']}"
+              )
+          if set(split) - layers:
+              failures.append(f"resident charged to a layer with no items: {set(split) - layers}")
+
           for line in failures:
               print(f"FAIL: {line}")
           sys.exit(1 if failures else 0)
@@ -1253,6 +1265,99 @@ jobs:
             --user-root "$fixture/home/.claude" view --out "$fixture/outside.html"
           test -s "$fixture/outside.html"
           echo "PASS: refused inside the root, allowed outside it"
+
+      - name: atlas maps a named project beside this one and the global layer
+        # Two project maps each contain the whole global layer, so setting them
+        # side by side mostly shows what they have in common. The global-only
+        # map is the term you subtract — which only works if it genuinely skips
+        # the project layer rather than mapping an empty one.
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp -d)"
+          mkdir -p "$fixture/home/.claude/agents" \
+                   "$fixture/here/.claude/agents" \
+                   "$fixture/there/.claude/agents"
+          printf -- '---\nname: shared\ndescription: A user agent\n---\nbody\n' \
+            > "$fixture/home/.claude/agents/shared.md"
+          printf -- '---\nname: here-only\ndescription: Only in here\n---\nbody\n' \
+            > "$fixture/here/.claude/agents/here-only.md"
+          printf -- '---\nname: there-only\ndescription: Only in there\n---\nbody\n' \
+            > "$fixture/there/.claude/agents/there-only.md"
+
+          python3 plugins/atlas/scripts/atlas.py --project "$fixture/here" \
+            --user-root "$fixture/home/.claude" \
+            view "$fixture/there" --out "$fixture/maps"
+
+          count="$(find "$fixture/maps" -name '*.html' | wc -l | tr -d ' ')"
+          if [ "$count" != "3" ]; then
+            echo "FAIL: expected 3 maps, got $count"
+            ls -1 "$fixture/maps"
+            exit 1
+          fi
+          for name in here global there; do
+            test -s "$fixture/maps/claude-atlas-$name.html" \
+              || { echo "FAIL: no map named $name"; exit 1; }
+          done
+
+          global="$fixture/maps/claude-atlas-global.html"
+          grep -qF '"scope": "global"' "$global" \
+            || { echo "FAIL: the global map does not declare itself as one"; exit 1; }
+          if grep -qF 'here-only' "$global"; then
+            echo "FAIL: the global map scanned a project layer"
+            exit 1
+          fi
+          grep -qF 'shared' "$global" \
+            || { echo "FAIL: the global map dropped the user layer too"; exit 1; }
+
+          grep -qF 'here-only' "$fixture/maps/claude-atlas-here.html" \
+            || { echo "FAIL: the session project map is missing its own agent"; exit 1; }
+          grep -qF 'there-only' "$fixture/maps/claude-atlas-there.html" \
+            || { echo "FAIL: the named project map is missing its own agent"; exit 1; }
+          if grep -qF 'there-only' "$fixture/maps/claude-atlas-here.html"; then
+            echo "FAIL: one project's items leaked into another's map"
+            exit 1
+          fi
+          echo "PASS: three maps, and the global one really is global"
+
+      - name: atlas clears its own stale viewers and nothing else
+        # A viewer is named after its subject, so re-running in one project
+        # overwrites. What piled up was one multi-megabyte file per project ever
+        # mapped. Sweeping them is only safe if the sweep cannot reach a file
+        # atlas did not write — the name alone is not evidence enough.
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp -d)"
+          export TMPDIR="$fixture/tmp"
+          mkdir -p "$TMPDIR" "$fixture/home/.claude/agents" "$fixture/repo"
+          printf -- '---\nname: alpha\ndescription: an agent\n---\nbody\n' \
+            > "$fixture/home/.claude/agents/alpha.md"
+
+          printf '<!doctype html>\n<title>Claude Code atlas — gone</title>\n' \
+            > "$TMPDIR/claude-atlas-gone.html"
+          # Wears the name, carries no atlas title. Must survive.
+          printf '<!doctype html>\n<title>somebody else entirely</title>\n' \
+            > "$TMPDIR/claude-atlas-imposter.html"
+          printf 'not html at all\n' > "$TMPDIR/notes.txt"
+
+          python3 plugins/atlas/scripts/atlas.py --project "$fixture/repo" \
+            --user-root "$fixture/home/.claude" view
+
+          test ! -e "$TMPDIR/claude-atlas-gone.html" \
+            || { echo "FAIL: a viewer from an earlier run survived"; exit 1; }
+          test -e "$TMPDIR/claude-atlas-imposter.html" \
+            || { echo "FAIL: deleted a file that only shared the name"; exit 1; }
+          test -e "$TMPDIR/notes.txt" \
+            || { echo "FAIL: deleted an unrelated file"; exit 1; }
+          test -s "$TMPDIR/claude-atlas-repo.html" \
+            || { echo "FAIL: the viewer it just wrote is not there"; exit 1; }
+
+          printf '<!doctype html>\n<title>Claude Code atlas — kept</title>\n' \
+            > "$TMPDIR/claude-atlas-kept.html"
+          python3 plugins/atlas/scripts/atlas.py --project "$fixture/repo" \
+            --user-root "$fixture/home/.claude" view --keep-old
+          test -e "$TMPDIR/claude-atlas-kept.html" \
+            || { echo "FAIL: --keep-old deleted an earlier viewer anyway"; exit 1; }
+          echo "PASS: own stale viewers cleared, lookalikes and --keep-old respected"
 
   ci-result:
     name: CI Result
