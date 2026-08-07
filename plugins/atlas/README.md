@@ -41,9 +41,12 @@ The page groups every resource by **where it came from** — Global, Project, Pl
 - **Search** across name, description, path and body at once — and across every translation, so a Korean term finds an item whose source description is English.
 - **Group** by scope or by kind, one toggle. Scope answers *what does this repo add on top of my global config*; kind answers *what commands do I have here*.
 - **Filter** by kind (commands, agents, skills, hooks, MCP, memory, plugins) and by scope (Global, Project, Plugins).
+- **Sort** by name or by size. Sorting by size ranks each section by what its descriptions cost, which is the order to read in when you are looking for something to shorten.
 - **Needs attention** — one toggle that narrows to just the shadowed names, the dead hooks, and the items with no description.
 - **Language** — switch the whole page between the source and any translation mirror you keep. See below.
 - Every row leads with **where it lives** — the repo name for a repo-scoped item, the config directory for a global one, the plugin for a plugin's — then the always-on cost of its description. Grouped by kind it carries its scope as a chip too; grouped by scope the heading above already says it.
+
+Your filters are remembered per project. Regenerating the map is how you check whether a change landed, and having to re-set four chips every time made that loop tedious. The search box is deliberately not remembered — a query restored from yesterday looks like a viewer that has lost most of its contents.
 
 Light and dark both, following the browser.
 
@@ -58,6 +61,8 @@ Rendering means the page now interprets text it did not write, so the rule is ab
 A `description` is a single unbroken line on disk, and a mature one runs past two thousand characters. So the viewer also inserts a line break at each sentence end — the only reformatting it does to the text itself — and clamps the collapsed row to three lines. Open the row to read the whole thing.
 
 Each routable row also carries what its description costs: `1,329c · ~332t always on`. That is the number to look at when one row is visibly longer than its neighbours.
+
+A body is rendered the first time you open its row, not when the page loads. Rendering all of them up front cost about 17ms and 1.25MB of string on a 95-item config — repeated on every keystroke in the search box, for text sitting inside collapsed rows nobody was looking at. Search still spans every body, because that is matched against the data rather than the page.
 
 <br/>
 
@@ -119,6 +124,64 @@ The figure is also broken out per scope — in the summary cards, on every scope
 
 <br/>
 
+## What the bill is actually spent on
+
+The scope split says which directory to open. `budget` says which file.
+
+```bash
+atlas budget                    # grouped by scope, heaviest 15 items
+atlas budget --by kind          # or by origin
+atlas budget --over 400         # every item at or over ~400 tokens
+atlas budget --json             # for piping somewhere
+```
+
+```
+Always-on context: ~26,377 tokens (105,508 chars, estimate) across 85 items
+
+By kind
+  ~ 17,775t   67%    2 items  memory files
+  ~  6,503t   24%   48 items  agents
+  ~  1,234t    4%   27 items  commands
+  ~    834t    3%    8 items  skills
+
+Heaviest 4 items
+  ~ 11,491t  memory   CLAUDE.md                                  ~/.claude
+  ~  6,284t  memory   CLAUDE.md                                  acme-platform
+  ~    161t  agent    upgrade-sync-public-mirror                 ~/.claude
+  ~    152t  agent    tools-reviewer                             acme-platform
+```
+
+That output is the usual shape of the answer, and it is usually a surprise: the descriptions everyone tightens are the small half, and two `CLAUDE.md` files are two thirds of the bill.
+
+Characters are what the report adds up; tokens are a division and only ever an estimate. Flooring each item before summing gives a total that disagrees with flooring once at the end, so the invariant is kept on the exact quantity and the estimate is derived for display.
+
+<br/>
+
+## Comparing two moments
+
+Rewriting descriptions across a config is a campaign, and the question at the end is not only "is it smaller" but "did anything disappear that I did not mean to touch".
+
+```bash
+atlas scan --no-bodies --out before.json     # ... do the work ...
+atlas diff before.json
+```
+
+```
+Always-on context: 105,508 → 71,402 chars (-34,106, ~-8,526t)
+  Global     70,232 →   48,110  -22,122
+  Project    35,276 →   23,292  -11,984
+
+Removed: 1
+      -612c  agent    retired-reviewer                         ~/.claude
+
+Changed: 38
+    -1,204c  agent    upgrade-sync-public-mirror               ~/.claude
+```
+
+Items are matched on kind, scope, origin and addressable name — never on path, so moving a file into a subdirectory reads as the same item rather than one deletion and one addition. The per-item deltas and the total are checked against each other, so the report cannot tell two stories about one campaign.
+
+<br/>
+
 ## Comparing projects
 
 Name another project and `view` produces three files instead of one:
@@ -139,7 +202,7 @@ A bare name is looked for next to the session project first — sibling checkout
 
 ## Running the script directly
 
-The skill wraps one bundled script — python3, **stdlib only**, no install step.
+The skill wraps one bundled script — python3, **stdlib only**, no install step. Its viewer template lives beside it at `templates/page.html`; the two ship together, and the script says so plainly if the template is missing.
 
 ```bash
 python3 scripts/atlas.py view --open              # build and open in a browser
@@ -148,11 +211,17 @@ python3 scripts/atlas.py view --no-bodies         # index only, much smaller fil
 python3 scripts/atlas.py view ~/code/api          # three maps: here, global, and that repo
 python3 scripts/atlas.py --project ~/code/api view
 python3 scripts/atlas.py scan                     # the same graph, as JSON
+python3 scripts/atlas.py budget --by kind         # what the always-on context buys
+python3 scripts/atlas.py diff before.json         # what changed since that scan
 ```
 
 | Flag | Default | Meaning |
 |---|---|---|
 | `PROJECT …` | — | `view` only — extra projects to map; naming any of them also emits a global-only map |
+| `--by AXIS` | `scope` | `budget` only — group by `scope`, `kind` or `origin` |
+| `--over N` | off | `budget` only — list every item at or over N tokens instead of the top ones |
+| `--top N` | 15 | `budget` and `diff` — how many entries to list |
+| `--json` | off | `budget` and `diff` — emit the report as JSON |
 | `--project DIR` | cwd | the repo to map |
 | `--user-root DIR` | `$CLAUDE_CONFIG_DIR` or `~/.claude` | the user config directory |
 | `--plugins-root DIR` | `<user root>/plugins` | where the plugin registry lives |
@@ -163,6 +232,8 @@ python3 scripts/atlas.py scan                     # the same graph, as JSON
 | `--keep-old` | off | keep viewers from earlier runs instead of clearing atlas's own stale files out of the temp directory |
 
 The split is deliberate: the script scans and renders, the skill interprets. Reading a hundred-odd files is not model work — it is slow, expensive and non-deterministic. Saying what the result means is.
+
+Every check CI runs is also a file you can run: `bash tests/run.sh` from the repo root, or `bash plugins/atlas/tests/run.sh` for this plugin alone. The workflow calls those same scripts rather than carrying the bodies inline, so "will CI pass?" is answerable before pushing.
 
 <br/>
 

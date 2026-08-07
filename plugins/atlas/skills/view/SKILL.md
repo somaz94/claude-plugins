@@ -34,6 +34,8 @@ That writes to the temp directory and opens a browser. Forward whatever the user
 | `--project DIR` | mapping a repo other than the working directory, *instead of* this one |
 | `--keep-old` | they said to leave earlier viewers alone |
 | `scan` instead of `view` | they want the graph as JSON to pipe somewhere |
+| `budget` instead of `view` | the question is about cost, not about what exists — see below |
+| `diff` instead of `view` | they want what changed since a scan they saved |
 
 Omit `--open` when the user only asked for the numbers, or when a browser would not help — a remote shell, a container, CI.
 
@@ -54,6 +56,23 @@ Use it when the ask is comparative — "why is this repo heavier than that one",
 Report the three by what each answers, not as three separate runs: the global map is the shared baseline, and each project map is that baseline plus what the repo adds. The per-scope numbers on the `By scope:` line are what makes the comparison concrete — quote those rather than the totals.
 
 Old viewers in the temp directory are cleared on every run. Do not mention it unless the script printed a `Removed stale viewer:` line, and then only in passing.
+
+<br/>
+
+## When the question is about cost
+
+"Why is my context so full", "what should I trim", "did that shrink anything" are not map questions, and a browser is the wrong answer to them. Two subcommands answer them directly, on stdout, with no file written:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/atlas.py" budget --by kind
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/atlas.py" diff <saved-scan.json>
+```
+
+`budget` ranks what the always-on context is spent on — grouped by `scope`, `kind` or `origin`, with the heaviest items listed. Use `--over N` when they want everything past a threshold rather than a top N.
+
+Report the shape of it, not the whole table. The usual finding is that `CLAUDE.md` files dominate and the descriptions everyone tightens are the smaller half; say which bucket dominates and name the two or three items worth opening. Do not recommend deleting anything — a heavy item may be earning its cost.
+
+`diff` needs a baseline the user already has. If they want to measure a rewrite that has not happened yet, tell them to save one first (`scan --no-bodies --out before.json`) rather than inventing a comparison.
 
 <br/>
 

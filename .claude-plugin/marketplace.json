@@ -29,8 +29,8 @@
     {
       "name": "atlas",
       "source": "./plugins/atlas",
-      "version": "0.4.0",
-      "description": "A browsable HTML map of every Claude Code resource a project can reach — commands, agents, skills, hooks, MCP servers and memory across your user config, this repo, and every installed plugin.",
+      "version": "0.5.0",
+      "description": "A browsable HTML map of every Claude Code resource a project can reach — commands, agents, skills, hooks, MCP servers and memory across your user config, this repo, and every installed plugin, plus a ranked report of what it all costs in always-on context.",
       "category": "productivity",
       "license": "MIT",
       "homepage": "https://github.com/somaz94/claude-plugins/tree/main/plugins/atlas",

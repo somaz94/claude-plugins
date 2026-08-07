@@ -41,9 +41,12 @@ Removed stale viewer: /tmp/claude-atlas-old-project.html
 - **검색** — 이름, 설명, 경로, 본문에 더해 모든 번역본까지 한 번에 훑습니다. 원문이 영어인 항목을 한국어 단어로 찾을 수 있습니다.
 - **묶기** — 스코프 기준과 종류 기준을 토글 하나로 오갑니다. 스코프는 *이 레포가 내 전역 설정 위에 무엇을 얹는가*에 답하고, 종류는 *여기서 쓸 수 있는 커맨드가 무엇인가*에 답합니다.
 - **필터** — 종류별(커맨드·에이전트·스킬·훅·MCP·메모리·플러그인), 스코프별(Global·Project·Plugins).
+- **정렬** — 이름순과 크기순. 크기순은 각 섹션을 설명 비용 순으로 세우는데, 줄일 것을 찾을 때 읽어야 하는 순서가 그것입니다.
 - **needs attention** — 토글 하나로 가려진 이름, 죽은 훅, 설명 없는 항목만 남깁니다.
 - **언어** — 원문과 번역 미러 사이를 페이지 전체 단위로 전환합니다. 아래 참고.
 - 모든 행이 **어디에 있는지**를 맨 앞에 답니다 — 레포 스코프 항목은 레포 이름, 전역 항목은 설정 디렉터리, 플러그인 항목은 플러그인 이름. 그다음이 그 설명의 상주 비용입니다. 종류 기준으로 묶었을 때는 스코프도 칩으로 함께 달리고, 스코프 기준일 때는 바로 위 제목이 이미 말해 주므로 생략합니다.
+
+필터는 프로젝트별로 기억합니다. 변경이 반영됐는지 확인하는 방법이 지도를 다시 만드는 것인데, 그때마다 칩 네 개를 다시 누르게 되니 그 반복이 성가셨습니다. 검색어는 일부러 기억하지 않습니다 — 어제 치던 질의가 복원되면 뷰어가 내용을 대부분 잃어버린 것처럼 보입니다.
 
 라이트/다크 모두 지원하며 브라우저 설정을 따릅니다.
 
@@ -58,6 +61,8 @@ Removed stale viewer: /tmp/claude-atlas-old-project.html
 `description`은 디스크에 줄바꿈 없는 한 줄로 저장되고, 오래 자란 것은 2,000자를 넘깁니다. 그래서 뷰어는 문장이 끝나는 지점마다 줄바꿈도 넣습니다 — 텍스트 자체에 가하는 유일한 재구성입니다 — 그리고 접힌 행은 세 줄로 자릅니다. 펼치면 전문이 보입니다.
 
 각 호출 가능 행에는 그 설명의 비용도 함께 붙습니다: `1,329c · ~332t always on`. 어떤 행이 유독 길어 보일 때 봐야 할 숫자입니다.
+
+본문은 페이지를 열 때가 아니라 그 행을 처음 펼칠 때 렌더합니다. 미리 전부 렌더하면 항목 95개 기준 약 17ms, 문자열 1.25MB가 들었고, 그것도 접혀 있어 아무도 보지 않는 텍스트를 위해 검색창 키 입력마다 반복됐습니다. 검색은 여전히 모든 본문을 훑습니다 — 화면이 아니라 데이터를 대상으로 맞추기 때문입니다.
 
 <br/>
 
@@ -119,6 +124,64 @@ Claude Code가 실제로 설정을 로드하는 방식에서 두 가지가 따�
 
 <br/>
 
+## 그 비용이 정확히 어디에 쓰이나
+
+스코프별 분해는 어느 디렉터리를 열지 알려줍니다. `budget`은 어느 파일인지 알려줍니다.
+
+```bash
+atlas budget                    # 스코프별 묶음, 무거운 15개
+atlas budget --by kind          # kind 또는 origin 기준
+atlas budget --over 400         # ~400토큰 이상인 항목 전부
+atlas budget --json             # 파이프로 넘길 때
+```
+
+```
+Always-on context: ~26,377 tokens (105,508 chars, estimate) across 85 items
+
+By kind
+  ~ 17,775t   67%    2 items  memory files
+  ~  6,503t   24%   48 items  agents
+  ~  1,234t    4%   27 items  commands
+  ~    834t    3%    8 items  skills
+
+Heaviest 4 items
+  ~ 11,491t  memory   CLAUDE.md                                  ~/.claude
+  ~  6,284t  memory   CLAUDE.md                                  acme-platform
+  ~    161t  agent    upgrade-sync-public-mirror                 ~/.claude
+  ~    152t  agent    tools-reviewer                             acme-platform
+```
+
+이런 모양이 대개의 답이고, 대개 뜻밖입니다. 다들 붙잡고 줄이는 description 쪽이 작은 절반이고, `CLAUDE.md` 두 개가 전체의 3분의 2입니다.
+
+이 리포트가 더하는 단위는 글자 수이고, 토큰은 나눗셈의 결과이자 어디까지나 추정치입니다. 항목마다 내림한 뒤 더하면 마지막에 한 번 내림한 값과 어긋나므로, 불변식은 정확한 쪽에 걸어 두고 추정치는 표시할 때만 뽑아 씁니다.
+
+<br/>
+
+## 두 시점 비교하기
+
+설정 전체의 description을 다시 쓰는 일은 하나의 캠페인이고, 끝난 뒤의 질문은 "줄었나"만이 아니라 "건드릴 생각이 없던 게 사라지진 않았나"입니다.
+
+```bash
+atlas scan --no-bodies --out before.json     # ... 작업 ...
+atlas diff before.json
+```
+
+```
+Always-on context: 105,508 → 71,402 chars (-34,106, ~-8,526t)
+  Global     70,232 →   48,110  -22,122
+  Project    35,276 →   23,292  -11,984
+
+Removed: 1
+      -612c  agent    retired-reviewer                         ~/.claude
+
+Changed: 38
+    -1,204c  agent    upgrade-sync-public-mirror               ~/.claude
+```
+
+항목을 맞추는 기준은 종류·스코프·출처·호출 이름이고, **경로는 쓰지 않습니다.** 파일을 하위 디렉터리로 옮긴 것이 삭제 하나와 추가 하나로 읽히면 안 되기 때문입니다. 항목별 증감의 합과 총합을 서로 대조하므로, 한 캠페인을 두 가지로 이야기하는 리포트는 나올 수 없습니다.
+
+<br/>
+
 ## 프로젝트 비교하기
 
 다른 프로젝트 이름을 붙이면 `view`가 파일 하나가 아니라 셋을 만듭니다.
@@ -139,7 +202,7 @@ Claude Code가 실제로 설정을 로드하는 방식에서 두 가지가 따�
 
 ## 스크립트 직접 실행하기
 
-스킬은 번들 스크립트 하나를 감쌉니다. python3 **표준 라이브러리만** 쓰며 설치 단계가 없습니다.
+스킬은 번들 스크립트 하나를 감쌉니다. python3 **표준 라이브러리만** 쓰며 설치 단계가 없습니다. 뷰어 템플릿은 그 옆 `templates/page.html`에 있습니다. 둘은 함께 배포되고, 템플릿이 없으면 스크립트가 그 사실을 그대로 말해 줍니다.
 
 ```bash
 python3 scripts/atlas.py view --open              # 만들고 브라우저로 열기
@@ -148,11 +211,17 @@ python3 scripts/atlas.py view --no-bodies         # 목록만, 파일 크기가 
 python3 scripts/atlas.py view ~/code/api          # 지도 셋: 여기, 전역, 그리고 그 레포
 python3 scripts/atlas.py --project ~/code/api view
 python3 scripts/atlas.py scan                     # 같은 그래프를 JSON으로
+python3 scripts/atlas.py budget --by kind         # 상주 컨텍스트가 무엇을 사는지
+python3 scripts/atlas.py diff before.json         # 그 scan 이후 무엇이 바뀌었는지
 ```
 
 | 플래그 | 기본값 | 의미 |
 |---|---|---|
 | `PROJECT …` | — | `view` 전용 — 함께 지도로 만들 프로젝트. 하나라도 붙이면 전역 전용 지도도 같이 나옵니다 |
+| `--by AXIS` | `scope` | `budget` 전용 — `scope` / `kind` / `origin` 중 하나로 묶기 |
+| `--over N` | 꺼짐 | `budget` 전용 — 상위 N개 대신 N토큰 이상인 항목을 전부 나열 |
+| `--top N` | 15 | `budget`과 `diff` — 나열할 항목 수 |
+| `--json` | 꺼짐 | `budget`과 `diff` — 리포트를 JSON으로 출력 |
 | `--project DIR` | 현재 디렉터리 | 지도로 만들 저장소 |
 | `--user-root DIR` | `$CLAUDE_CONFIG_DIR` 또는 `~/.claude` | 사용자 설정 디렉터리 |
 | `--plugins-root DIR` | `<user root>/plugins` | 플러그인 레지스트리 위치 |
@@ -163,6 +232,8 @@ python3 scripts/atlas.py scan                     # 같은 그래프를 JSON으�
 | `--keep-old` | 꺼짐 | 임시 디렉터리에 남은 atlas 자신의 오래된 뷰어를 지우지 않고 그대로 둡니다 |
 
 역할을 나눈 건 의도적입니다. 스크립트는 훑고 그리며, 스킬은 해석합니다. 백 개 남짓한 파일을 읽는 일은 모델이 할 일이 아닙니다 — 느리고 비싸고 매번 결과가 달라집니다. 그 결과가 무엇을 뜻하는지 말하는 쪽이 모델의 일입니다.
+
+CI가 돌리는 검사는 전부 직접 실행할 수 있는 파일이기도 합니다. 레포 루트에서 `bash tests/run.sh`, 이 플러그인만 보려면 `bash plugins/atlas/tests/run.sh`. 워크플로가 본문을 품는 대신 같은 스크립트를 호출하므로 "CI가 통과할까?"에 푸시 전에 답할 수 있습니다.
 
 <br/>
 

@@ -17,15 +17,18 @@ Design contract:
     stale ones out of the temp directory, since nothing else ever would.
   - stdlib only. A tool you reach for to understand your setup must not need a
     setup of its own.
-  - The viewer is one self-contained file. No server, no CDN, no build step:
-    every byte of CSS and JS is inline, so it opens offline and can be handed
-    to someone else as a single attachment.
+  - The viewer it PRODUCES is one self-contained file. No server, no CDN, no
+    build step: every byte of CSS and JS ends up inline, so it opens offline and
+    can be handed to someone else as a single attachment. The source of that
+    page is templates/page.html next to this script, not a literal in it.
 
 Subcommands:
-  view   build the HTML viewer and optionally open it in a browser. Name other
-         projects to get one file each, plus a global-only map to compare them
-         against.
-  scan   emit the same graph as JSON, for piping somewhere else
+  view    build the HTML viewer and optionally open it in a browser. Name other
+          projects to get one file each, plus a global-only map to compare them
+          against.
+  scan    emit the same graph as JSON, for piping somewhere else
+  budget  rank what the always-on context is actually spent on
+  diff    compare the current state against a scan saved earlier
 """
 
 from __future__ import annotations
@@ -41,7 +44,7 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, NamedTuple
 
 # Same ratio the rest of this marketplace uses when it estimates resident cost.
 # It is an estimate and is always labelled as one.
@@ -200,6 +203,26 @@ def read_text(path: Path) -> str:
 # --------------------------------------------------------------------------
 
 
+class _Origin(NamedTuple):
+    """Where a directory's items come from, carried as one value.
+
+    The three travel together through every collector and are written onto every
+    item unchanged; passing them separately meant repeating `namespace or ""` at
+    each call site, which is exactly the kind of thing that drifts.
+    """
+
+    layer: str
+    origin: str
+    namespace: str
+
+    def fields(self) -> dict[str, str]:
+        return {"layer": self.layer, "origin": self.origin, "namespace": self.namespace}
+
+
+# Translation mirrors, keyed by the (kind, key) of the item they translate.
+Mirrors = dict[tuple[str, str], dict[str, Any]]
+
+
 class Collector:
     """Builds the flat item list. One instance per run."""
 
@@ -229,7 +252,7 @@ class Collector:
 
     # -- markdown-defined resources --------------------------------------
 
-    def collect_translations(self, config_dir: Path) -> dict[tuple[str, str], dict[str, Any]]:
+    def collect_translations(self, config_dir: Path) -> Mirrors:
         """Collect `<kind>-<lang>` mirror directories, keyed by (kind, key).
 
         A translation mirror is not a second resource — Claude Code loads only
@@ -241,7 +264,7 @@ class Collector:
         frontmatter name was translated too would otherwise fail to pair with
         the file it is plainly a translation of.
         """
-        found: dict[tuple[str, str], dict[str, Any]] = {}
+        found: Mirrors = {}
         if not config_dir.is_dir():
             return found
 
@@ -281,75 +304,91 @@ class Collector:
         its commands and skills are addressed as /<plugin>:<name>, which is what
         makes them unable to collide with a user's own.
         """
-        counts = {"agent": 0, "command": 0, "skill": 0}
         if not config_dir.is_dir():
-            return counts
+            return {"agent": 0, "command": 0, "skill": 0}
 
         mirrors = self.collect_translations(config_dir)
         # Which languages this directory keeps mirrors in at all. An item here
         # with no mirror is a gap only against this list.
         here = sorted({lang for entry in mirrors.values() for lang in entry})
+        where = _Origin(layer=layer, origin=origin, namespace=namespace or "")
 
-        for path in sorted((config_dir / "agents").rglob("*.md")):
+        return {
+            "agent": self._collect_agents(config_dir, where, mirrors, here),
+            "command": self._collect_commands(config_dir, where, mirrors, here),
+            "skill": self._collect_skills(config_dir, where, mirrors, here),
+        }
+
+    def _collect_agents(
+        self, config_dir: Path, where: _Origin, mirrors: Mirrors, langs: list[str]
+    ) -> int:
+        directory = config_dir / "agents"
+        count = 0
+        for path in sorted(directory.rglob("*.md")):
             meta, body = parse_frontmatter(read_text(path))
-            name = meta.get("name") or path.stem
-            key = path.relative_to(config_dir / "agents").with_suffix("").as_posix()
+            key = path.relative_to(directory).with_suffix("").as_posix()
             text, truncated = self._body(body)
             self.add(
                 kind="agent",
-                name=name,
+                name=meta.get("name") or path.stem,
                 key=key,
                 translations=mirrors.get(("agent", key), {}),
-                mirrorLangs=here,
+                mirrorLangs=langs,
                 # An agent is not typed as a slash command; it is selected by
                 # its description. Showing a fake invocation would teach the
                 # wrong thing, so the field stays empty and the viewer says so.
                 invocation="",
                 description=meta.get("description", ""),
-                layer=layer,
-                origin=origin,
-                namespace=namespace or "",
+                **where.fields(),
                 path=collapse_home(path),
                 body=text,
                 truncated=truncated,
                 extra=self._extra(meta),
             )
-            counts["agent"] += 1
+            count += 1
+        return count
 
-        commands_dir = config_dir / "commands"
-        for path in sorted(commands_dir.rglob("*.md")):
+    def _collect_commands(
+        self, config_dir: Path, where: _Origin, mirrors: Mirrors, langs: list[str]
+    ) -> int:
+        directory = config_dir / "commands"
+        count = 0
+        for path in sorted(directory.rglob("*.md")):
             meta, body = parse_frontmatter(read_text(path))
             # A subdirectory namespaces the command; the file name is the last
             # segment. A command has no `name:` field — the path IS the name.
-            parts = list(path.relative_to(commands_dir).with_suffix("").parts)
-            local = ":".join(parts)
-            invocation = f"/{namespace}:{local}" if namespace else f"/{local}"
+            local = ":".join(path.relative_to(directory).with_suffix("").parts)
             text, truncated = self._body(body)
             self.add(
                 kind="command",
                 name=local,
                 key=local,
                 translations=mirrors.get(("command", local), {}),
-                mirrorLangs=here,
-                invocation=invocation,
+                mirrorLangs=langs,
+                invocation=f"/{where.namespace}:{local}" if where.namespace else f"/{local}",
                 description=meta.get("description", ""),
-                layer=layer,
-                origin=origin,
-                namespace=namespace or "",
+                **where.fields(),
                 path=collapse_home(path),
                 body=text,
                 truncated=truncated,
                 extra=self._extra(meta),
             )
-            counts["command"] += 1
+            count += 1
+        return count
 
-        skills_dir = config_dir / "skills"
-        for path in sorted(skills_dir.rglob("SKILL.md")):
+    def _collect_skills(
+        self, config_dir: Path, where: _Origin, mirrors: Mirrors, langs: list[str]
+    ) -> int:
+        directory = config_dir / "skills"
+        count = 0
+        for path in sorted(directory.rglob("SKILL.md")):
             meta, body = parse_frontmatter(read_text(path))
             name = meta.get("name") or path.parent.name
-            key = path.parent.relative_to(skills_dir).as_posix() if skills_dir.is_dir() else name
-            invocation = f"/{namespace}:{name}" if namespace else f"/{name}"
+            key = path.parent.relative_to(directory).as_posix() if directory.is_dir() else name
             text, truncated = self._body(body)
+            # A skill can ship references, scripts and templates beside its
+            # SKILL.md. They are not separate resources, but their number says
+            # whether this is a prompt or a small program.
             bundled = sorted(
                 collapse_home(p)
                 for p in path.parent.rglob("*")
@@ -363,21 +402,18 @@ class Collector:
                 name=name,
                 key=key,
                 translations=mirrors.get(("skill", key), {}),
-                mirrorLangs=here,
-                invocation=invocation,
+                mirrorLangs=langs,
+                invocation=f"/{where.namespace}:{name}" if where.namespace else f"/{name}",
                 description=meta.get("description", ""),
-                layer=layer,
-                origin=origin,
-                namespace=namespace or "",
+                **where.fields(),
                 path=collapse_home(path),
                 body=text,
                 truncated=truncated,
                 extra=extra,
                 bundled=bundled,
             )
-            counts["skill"] += 1
-
-        return counts
+            count += 1
+        return count
 
     @staticmethod
     def _extra(meta: dict[str, str]) -> dict[str, str]:
@@ -869,556 +905,28 @@ def summarize(items: list[dict[str, Any]]) -> dict[str, Any]:
 # rendering
 # --------------------------------------------------------------------------
 
-PAGE = """<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>__TITLE__</title>
-<style>
-:root {
-  color-scheme: light dark;
-  --bg: #fbfbfa; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66;
-  --line: #e3e3df; --accent: #b4551d; --warn: #a8341f; --ok: #2f6b45;
-  --chip: #f0f0ec; --code: #f5f5f2;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #161614; --panel: #1e1e1b; --ink: #eceae5; --muted: #9c9a93;
-    --line: #33322e; --accent: #e08b4f; --warn: #e07a63; --ok: #7ec295;
-    --chip: #2a2a26; --code: #232320;
-  }
-}
-* { box-sizing: border-box; }
-body {
-  margin: 0; background: var(--bg); color: var(--ink);
-  font: 15px/1.55 ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-}
-code, pre, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-.wrap { max-width: 1100px; margin: 0 auto; padding: 28px 20px 80px; }
-header h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
-header .sub { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
-header .sub code { background: var(--code); padding: 1px 5px; border-radius: 4px; }
-.stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
-.stat {
-  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
-  padding: 8px 12px; min-width: 96px;
-}
-.stat b { display: block; font-size: 19px; font-weight: 600; }
-.stat span { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
-.toolbar { position: sticky; top: 0; background: var(--bg); padding: 10px 0 12px; z-index: 5; }
-#q {
-  width: 100%; padding: 10px 12px; font-size: 15px; color: var(--ink);
-  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
-}
-#q:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-.filters { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; align-items: center; }
-.filters .sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
-button.chip {
-  font: inherit; font-size: 12.5px; cursor: pointer; padding: 4px 10px;
-  border-radius: 999px; border: 1px solid var(--line);
-  background: var(--chip); color: var(--muted);
-}
-button.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
-.count { color: var(--muted); font-size: 12.5px; margin-left: auto; }
-h2.kind {
-  font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted);
-  margin: 26px 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line);
-}
-/* A scope heading outranks a kind heading on purpose: when you group by scope,
-   "where does this come from" is the question being asked, and the kind is the
-   subdivision inside the answer. */
-h2.scope {
-  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
-  font-size: 16px; letter-spacing: -0.01em; color: var(--ink);
-  margin: 36px 0 2px; padding-bottom: 8px; border-bottom: 2px solid var(--accent);
-}
-h2.scope:first-child { margin-top: 8px; }
-h2.scope .where { font: inherit; font-size: 12.5px; font-weight: 400; color: var(--muted); }
-h2.scope .tally { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--muted); }
-h2.scope + h2.kind { margin-top: 14px; }
-details.card {
-  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
-  margin-bottom: 7px; overflow: hidden;
-}
-details.card[open] { border-color: var(--accent); }
-summary { cursor: pointer; padding: 11px 14px; list-style: none; }
-summary::-webkit-details-marker { display: none; }
-.row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.name { font-weight: 600; font-size: 14.5px; }
-.inv { font-size: 12.5px; color: var(--accent); }
-.tag {
-  font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
-  padding: 2px 7px; border-radius: 999px; background: var(--chip); color: var(--muted);
-}
-.tag.warn { color: var(--warn); border: 1px solid var(--warn); background: none; }
-.tag.origin { text-transform: none; letter-spacing: 0; color: var(--ink); }
-/* A description is one long line on disk. Sentence breaks are inserted at
-   render time and shown with pre-wrap; the clamp keeps a 2,000-character one
-   from burying the next row until you open it. */
-.desc {
-  color: var(--muted); font-size: 13.5px; margin-top: 5px; line-height: 1.6;
-  white-space: pre-wrap; max-width: 78ch;
-  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
-}
-details[open] .desc { display: block; overflow: visible; }
-.desc.none { font-style: italic; color: var(--warn); }
-.size { font-size: 11px; color: var(--muted); }
-.meta { padding: 0 14px 12px; border-top: 1px solid var(--line); }
-.kv { display: flex; flex-wrap: wrap; gap: 5px; margin: 10px 0; }
-.kv span { font-size: 11.5px; background: var(--chip); border-radius: 4px; padding: 2px 7px; }
-.kv span b { font-weight: 600; }
-.path { font-size: 12px; color: var(--muted); margin-top: 8px; word-break: break-all; }
-pre.body {
-  background: var(--code); border: 1px solid var(--line); border-radius: 6px;
-  padding: 12px; overflow-x: auto; font-size: 12.5px; line-height: 1.5;
-  max-height: 460px; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word;
-}
-/* Rendered Markdown. Deliberately smaller than page type — this is a document
-   inside a card, not the page itself, so its h1 must not outrank the row name. */
-.md {
-  background: var(--code); border: 1px solid var(--line); border-radius: 6px;
-  padding: 14px 16px; font-size: 13.5px; line-height: 1.65;
-  max-height: 460px; overflow-y: auto; overflow-x: auto;
-}
-.md > :first-child { margin-top: 0; }
-.md > :last-child { margin-bottom: 0; }
-.md h1, .md h2, .md h3, .md h4 {
-  font-size: 13px; text-transform: uppercase; letter-spacing: .06em;
-  color: var(--accent); margin: 18px 0 6px;
-}
-.md h3, .md h4 { text-transform: none; letter-spacing: 0; font-size: 13.5px; color: var(--ink); }
-.md p { margin: 8px 0; }
-.md ul, .md ol { margin: 8px 0; padding-left: 20px; }
-.md li { margin: 3px 0; }
-.md blockquote {
-  margin: 10px 0; padding: 6px 0 6px 12px;
-  border-left: 3px solid var(--accent); color: var(--muted);
-}
-.md code { background: var(--chip); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
-.md pre { background: var(--chip); padding: 10px 12px; border-radius: 6px; overflow-x: auto; margin: 10px 0; }
-.md pre code { background: none; padding: 0; font-size: 12px; line-height: 1.5; }
-.md table { border-collapse: collapse; margin: 10px 0; font-size: 12.5px; display: block; overflow-x: auto; }
-.md th, .md td { border: 1px solid var(--line); padding: 5px 9px; text-align: left; vertical-align: top; }
-.md th { background: var(--chip); font-weight: 600; }
-.md hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
-/* A link is rendered as its text plus a muted target. Never an anchor: this
-   page promises no external reference, and a live href is one. */
-.md .url { color: var(--muted); font-size: 11.5px; }
-.empty { color: var(--muted); padding: 40px 0; text-align: center; }
-.callout {
-  border: 1px solid var(--warn); border-radius: 8px; padding: 12px 14px;
-  margin-bottom: 14px; font-size: 13.5px;
-}
-.callout h3 { margin: 0 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--warn); }
-.callout ul { margin: 6px 0 0; padding-left: 18px; }
-.callout li { margin-bottom: 4px; }
-footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12.5px; }
-footer code { background: var(--code); padding: 1px 5px; border-radius: 4px; }
-</style>
-</head>
-<body>
-<div class="wrap">
-<header>
-  <h1>__HEADING__</h1>
-  <div class="sub">__LEAD__ <code>__PROJECT__</code> · generated __GENERATED__</div>
-</header>
-<div id="summary"></div>
-<div class="toolbar">
-  <input id="q" type="search" placeholder="Search name, description, path, or body…" autocomplete="off">
-  <div class="filters" id="filters"></div>
-</div>
-<main id="list"></main>
-<footer>
-  Regenerate with <code>/atlas:view</code>. This file is self-contained — no network requests, no server.
-  Bodies render as Markdown; the raw source toggle shows the file byte for byte.
-</footer>
-</div>
-<script id="atlas-data" type="application/json">__DATA__</script>
-<script>
-const DATA = JSON.parse(document.getElementById('atlas-data').textContent);
-const KIND_LABEL = {
-  command: 'Commands', agent: 'Agents', skill: 'Skills',
-  hook: 'Hooks', mcp: 'MCP servers', memory: 'Memory', plugin: 'Plugins'
-};
-const KIND_ORDER = ['command', 'agent', 'skill', 'hook', 'mcp', 'memory', 'plugin'];
-// `user` is the key on disk; "Global" is what it is next to a repo's own
-// .claude/, and what people call it. The data keeps the key, the page shows the
-// word — so a scan piped somewhere else still matches the documented shape.
-const LAYER_ORDER = ['user', 'project', 'plugin'];
-const LAYER_LABEL = { user: 'Global', project: 'Project', plugin: 'Plugins' };
-const CHARS_PER_TOKEN = 4;
-const state = {
-  q: '', kinds: new Set(), layers: new Set(),
-  issuesOnly: false, lang: 'source', raw: false, group: 'scope'
-};
+# The viewer's markup lives in templates/page.html rather than in a literal
+# here. Not only for its length: inside a Python string every backslash in the
+# page's JavaScript had to be written twice — 54 of them across 23 lines — and a
+# single missed pair fails silently at runtime rather than at parse time. As its
+# own file it is ordinary HTML that an editor highlights and a test can load
+# directly, without first building a page to extract it back out of.
+TEMPLATE = Path(__file__).resolve().parent.parent / "templates" / "page.html"
 
-// Resident cost of an arbitrary subset, recomputed rather than read off DATA so
-// the per-scope tally tracks whatever is currently filtered in.
-function residentTokens(items) {
-  let chars = 0;
-  for (const item of items) {
-    if (['agent', 'command', 'skill'].includes(item.kind)) chars += item.descriptionChars || 0;
-    else if (item.kind === 'memory') chars += item.residentChars || 0;
-  }
-  return Math.floor(chars / CHARS_PER_TOKEN);
-}
 
-// Where a scope physically is. For plugins that is not one path, so it says how
-// many contributed instead.
-function scopeWhere(layer, items) {
-  if (layer === 'user') return DATA.userRoot;
-  if (layer === 'project') return DATA.project;
-  const origins = new Set(items.map(i => i.origin));
-  return origins.size + (origins.size === 1 ? ' plugin' : ' plugins');
-}
+def load_template() -> str:
+    """Read the viewer template, or say plainly what is missing.
 
-// A description is stored as one unbroken line. Breaking at sentence ends is
-// the only reformatting done to it — the text itself is never altered.
-function readable(text) {
-  return String(text || '').replace(/([.!?。])\\s+(?=[A-Z0-9`~/*\\[(가-힣ぁ-んァ-ヶ一-龯])/g, '$1\\n');
-}
-
-// The text to show for an item in the selected language, and whether that
-// language actually had a mirror for it.
-function inLang(item) {
-  const tr = state.lang !== 'source' && item.translations && item.translations[state.lang];
-  if (tr) return { description: tr.description, body: tr.body, path: tr.path, missing: false };
-  // "Missing" only where a mirror was expected — a plugin that keeps no
-  // translations at all is not incomplete, it just does not do that.
-  const expected = (item.mirrorLangs || []).includes(state.lang);
-  return { description: item.description, body: item.body, path: item.path, missing: expected };
-}
-
-function esc(s) {
-  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
-// Inline Markdown, applied to already-escaped text so nothing in a scanned file
-// can inject markup. A link becomes its text plus a muted target rather than an
-// anchor — this page promises no external reference, and a live href is one.
-function inline(s) {
-  return esc(s)
-    .replace(/&lt;br\\s*\\/?&gt;/gi, '<br>')
-    .replace(/`([^`\\n]+)`/g, '<code>$1</code>')
-    .replace(/\\*\\*([^*\\n]+)\\*\\*/g, '<strong>$1</strong>')
-    .replace(/(^|[^*\\w])\\*([^*\\n]+)\\*/g, '$1<em>$2</em>')
-    .replace(/\\[([^\\]\\n]+)\\]\\(([^)\\n]+)\\)/g, '$1 <span class="url">$2</span>');
-}
-
-// A deliberately small block-level Markdown renderer: headings, fences, quotes,
-// lists, tables, rules. Anything it does not know stays a paragraph, which is
-// why an unsupported construct degrades to readable text instead of vanishing.
-function mdToHtml(src) {
-  const lines = String(src || '').split('\\n');
-  const out = [];
-  let list = null, fence = null, table = null, para = [];
-
-  const closeList = () => { if (list) { out.push('</' + list + '>'); list = null; } };
-  const closeTable = () => { if (table) { out.push('</tbody></table>'); table = null; } };
-  const closePara = () => {
-    if (para.length) { out.push('<p>' + inline(para.join('\\n')).replace(/\\n/g, '<br>') + '</p>'); para = []; }
-  };
-  const closeAll = () => { closePara(); closeList(); closeTable(); };
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    const fenceMark = line.match(/^\\s*(`{3,}|~{3,})(.*)$/);
-    if (fenceMark) {
-      if (fence) { out.push('</code></pre>'); fence = null; }
-      else { closeAll(); fence = fenceMark[1]; out.push('<pre><code>'); }
-      continue;
-    }
-    if (fence) { out.push(esc(line) + '\\n'); continue; }
-
-    if (!line.trim()) { closeAll(); continue; }
-
-    const heading = line.match(/^(#{1,6})\\s+(.*)$/);
-    if (heading) {
-      closeAll();
-      const level = Math.min(heading[1].length + 2, 6);
-      out.push('<h' + level + '>' + inline(heading[2]) + '</h' + level + '>');
-      continue;
-    }
-
-    if (/^\\s*(---+|\\*\\*\\*+|___+)\\s*$/.test(line)) { closeAll(); out.push('<hr>'); continue; }
-
-    // A table needs its separator row to be a table at all; without it these
-    // are just lines that happen to contain pipes.
-    if (/^\\s*\\|/.test(line)) {
-      const cells = line.trim().replace(/^\\||\\|$/g, '').split('|').map(c => c.trim());
-      if (/^[\\s|:-]+$/.test(line) && table === 'head') { out.push('<tbody>'); table = 'body'; continue; }
-      if (!table) {
-        closePara(); closeList();
-        out.push('<table><thead><tr>' + cells.map(c => '<th>' + inline(c) + '</th>').join('') + '</tr></thead>');
-        table = 'head';
-        continue;
-      }
-      out.push('<tr>' + cells.map(c => '<td>' + inline(c) + '</td>').join('') + '</tr>');
-      continue;
-    }
-    closeTable();
-
-    const quote = line.match(/^\\s*&gt;\\s?(.*)$/) || line.match(/^\\s*>\\s?(.*)$/);
-    if (quote) {
-      closePara(); closeList();
-      out.push('<blockquote>' + inline(quote[1]) + '</blockquote>');
-      continue;
-    }
-
-    const bullet = line.match(/^\\s*[-*+]\\s+(.*)$/);
-    const numbered = line.match(/^\\s*\\d+[.)]\\s+(.*)$/);
-    if (bullet || numbered) {
-      const want = bullet ? 'ul' : 'ol';
-      closePara();
-      if (list !== want) { closeList(); out.push('<' + want + '>'); list = want; }
-      out.push('<li>' + inline((bullet || numbered)[1]) + '</li>');
-      continue;
-    }
-    closeList();
-
-    para.push(line);
-  }
-  if (fence) out.push('</code></pre>');
-  closeAll();
-  // Consecutive blockquote lines render as separate elements; merging them here
-  // is cheaper and safer than tracking quote state through the loop.
-  return out.join('').replace(/<\\/blockquote><blockquote>/g, '<br>');
-}
-
-function renderSummary() {
-  const s = DATA.stats;
-  const cards = [
-    ['Resources', s.total],
-    ['Commands', s.byKind.command || 0],
-    ['Agents', s.byKind.agent || 0],
-    ['Skills', s.byKind.skill || 0],
-    ['Hooks', s.byKind.hook || 0],
-    ['~Tokens always on', s.residentTokens.toLocaleString()],
-  ];
-  // The same bill, split by scope. A total tells you it is large; this tells
-  // you which directory to go open.
-  const perLayer = s.residentTokensByLayer || {};
-  for (const layer of LAYER_ORDER) {
-    if (!perLayer[layer]) continue;
-    cards.push(['↳ ' + LAYER_LABEL[layer], perLayer[layer].toLocaleString()]);
-  }
-  let html = '<div class="stats">' + cards.map(([k, v]) =>
-    `<div class="stat"><b>${esc(v)}</b><span>${esc(k)}</span></div>`).join('') + '</div>';
-
-  const alerts = [];
-  if (DATA.conflicts.length) {
-    alerts.push('<h3>' + DATA.conflicts.length + ' name' + (DATA.conflicts.length > 1 ? 's resolve' : ' resolves') +
-      ' to more than one definition</h3><ul>' + DATA.conflicts.map(c =>
-      `<li><code>${esc(c.name)}</code> (${esc(c.kind)}) — defined in ` +
-      c.where.map(w => esc(w.origin)).join(', ') + '. ' + esc(c.verdict) + '</li>').join('') + '</ul>');
-  }
-  if (s.unresolvedHooks) {
-    alerts.push('<h3>' + s.unresolvedHooks + ' hook' + (s.unresolvedHooks > 1 ? 's point' : ' points') +
-      ' at a script that is not there</h3><p>The registration ships, the hook never fires, and nothing says so.</p>');
-  }
-  if (s.missingDescriptions) {
-    alerts.push('<h3>' + s.missingDescriptions + ' item' + (s.missingDescriptions > 1 ? 's declare' : ' declares') +
-      ' no description</h3><p>The description is the only signal for when to reach for an item. Without one it is unreachable unless named outright.</p>');
-  }
-  if (DATA.notes.length) {
-    alerts.push('<h3>Notes</h3><ul>' + DATA.notes.map(n => `<li>${esc(n)}</li>`).join('') + '</ul>');
-  }
-  if (alerts.length) html += alerts.map(a => `<div class="callout">${a}</div>`).join('');
-  document.getElementById('summary').innerHTML = html;
-}
-
-function renderFilters() {
-  const kinds = KIND_ORDER.filter(k => DATA.items.some(i => i.kind === k));
-  const layers = LAYER_ORDER.filter(l => DATA.items.some(i => i.layer === l));
-  const el = document.getElementById('filters');
-  // Language is a radio, not a toggle — you read in one language at a time.
-  const langs = DATA.languages.length
-    ? '<span class="sep"></span>' +
-      ['source'].concat(DATA.languages).map(l =>
-        `<button class="chip" data-lang="${esc(l)}" aria-pressed="${l === 'source'}">${esc(l)}</button>`).join('')
-    : '';
-  // Grouping is a radio too: one axis at a time, scope or kind. The layer chips
-  // beside it stay additive — they narrow what is listed, this decides how the
-  // survivors are sectioned.
-  const groups = ['scope', 'kind'].map(g =>
-    `<button class="chip" data-group="${g}" aria-pressed="${g === state.group}">group: ${g}</button>`).join('');
-  el.innerHTML =
-    kinds.map(k => `<button class="chip" data-kind="${k}" aria-pressed="false">${esc(KIND_LABEL[k] || k)}</button>`).join('') +
-    '<span class="sep"></span>' +
-    layers.map(l => `<button class="chip" data-layer="${l}" aria-pressed="false">${esc(LAYER_LABEL[l] || l)}</button>`).join('') +
-    '<span class="sep"></span>' +
-    groups +
-    '<span class="sep"></span>' +
-    '<button class="chip" data-issues="1" aria-pressed="false">needs attention</button>' +
-    langs +
-    '<span class="sep"></span>' +
-    '<button class="chip" data-raw="1" aria-pressed="false">raw source</button>' +
-    '<span class="count" id="count"></span>';
-
-  el.addEventListener('click', e => {
-    const b = e.target.closest('button.chip');
-    if (!b) return;
-    if (b.dataset.raw) {
-      state.raw = b.getAttribute('aria-pressed') !== 'true';
-      b.setAttribute('aria-pressed', String(state.raw));
-      render();
-      return;
-    }
-    if (b.dataset.group) {
-      state.group = b.dataset.group;
-      el.querySelectorAll('button[data-group]').forEach(other =>
-        other.setAttribute('aria-pressed', String(other === b)));
-      render();
-      return;
-    }
-    if (b.dataset.lang) {
-      state.lang = b.dataset.lang;
-      el.querySelectorAll('button[data-lang]').forEach(other =>
-        other.setAttribute('aria-pressed', String(other === b)));
-      render();
-      return;
-    }
-    const on = b.getAttribute('aria-pressed') === 'true';
-    b.setAttribute('aria-pressed', String(!on));
-    if (b.dataset.kind) on ? state.kinds.delete(b.dataset.kind) : state.kinds.add(b.dataset.kind);
-    else if (b.dataset.layer) on ? state.layers.delete(b.dataset.layer) : state.layers.add(b.dataset.layer);
-    else state.issuesOnly = !on;
-    render();
-  });
-}
-
-function matches(item) {
-  if (state.kinds.size && !state.kinds.has(item.kind)) return false;
-  if (state.layers.size && !state.layers.has(item.layer)) return false;
-  if (state.issuesOnly) {
-    const bad = item.conflicted || item.resolves === false ||
-      (!item.description && ['agent', 'command', 'skill'].includes(item.kind));
-    if (!bad) return false;
-  }
-  if (!state.q) return true;
-  // Search spans every language, so a Korean term finds an item whose source
-  // description is English and vice versa.
-  const translated = Object.values(item.translations || {})
-    .map(t => t.description + '\\n' + (t.body || '')).join('\\n');
-  const hay = [item.name, item.invocation, item.description, item.path, item.origin, item.body, translated]
-    .join('\\n').toLowerCase();
-  return state.q.split(/\\s+/).every(t => hay.includes(t));
-}
-
-function card(item) {
-  const view = inLang(item);
-  // Where it lives comes first — for a repo-scoped item that is the repo name,
-  // for a global one the config directory, for a plugin's the plugin.
-  const tags = [`<span class="tag origin">${esc(item.origin)}</span>`];
-  // In scope mode the section heading above already says the layer, so the chip
-  // would only repeat it on every row.
-  if (state.group !== 'scope') {
-    tags.push(`<span class="tag">${esc((LAYER_LABEL[item.layer] || item.layer).toLowerCase())}</span>`);
-  }
-  if (item.conflicted) tags.push('<span class="tag warn">shadowed</span>');
-  if (item.resolves === false) tags.push('<span class="tag warn">missing script</span>');
-  if (item.enabled === false) tags.push('<span class="tag warn">disabled</span>');
-  if (view.missing) tags.push(`<span class="tag warn">no ${esc(state.lang)} mirror</span>`);
-
-  const kv = Object.entries(item.extra || {})
-    .map(([k, v]) => `<span><b>${esc(k)}</b> ${esc(v)}</span>`).join('');
-  const routable = ['agent', 'command', 'skill'].includes(item.kind);
-  const desc = view.description
-    ? `<div class="desc">${inline(readable(view.description))}</div>`
-    : (routable ? '<div class="desc none">no description — this item cannot be routed to</div>' : '');
-  // Only the source description is resident in every session; a mirror is read
-  // by people, not by Claude Code, so it is never charged for.
-  const size = routable && item.description
-    ? `<span class="size">${item.descriptionChars.toLocaleString()}c · ~${item.descriptionTokens}t always on</span>`
-    : '';
-
-  let body = '';
-  if (view.body) {
-    const text = view.body + (item.truncated ? '\\n\\n… truncated' : '');
-    body = state.raw
-      ? `<pre class="body">${esc(text)}</pre>`
-      : `<div class="md">${mdToHtml(text)}</div>`;
-  } else if (routable) {
-    body = '<div class="path">Body not included in this build.</div>';
-  }
-
-  return `<details class="card">
-    <summary>
-      <div class="row">
-        <span class="name">${esc(item.name)}</span>
-        ${item.invocation ? `<span class="inv mono">${esc(item.invocation)}</span>` : ''}
-        ${tags.join('')}
-        ${size}
-      </div>
-      ${desc}
-    </summary>
-    <div class="meta">
-      ${kv ? `<div class="kv">${kv}</div>` : ''}
-      ${body}
-      <div class="path mono">${esc(view.path)}</div>
-    </div>
-  </details>`;
-}
-
-// One kind's heading plus its cards. Shared by both grouping modes so a kind
-// section looks the same whether or not it sits under a scope.
-function byKind(items) {
-  let html = '';
-  for (const kind of KIND_ORDER) {
-    const group = items.filter(i => i.kind === kind);
-    if (!group.length) continue;
-    html += `<h2 class="kind">${esc(KIND_LABEL[kind] || kind)} (${group.length})</h2>`;
-    html += group.map(card).join('');
-  }
-  return html;
-}
-
-function render() {
-  const shown = DATA.items.filter(matches);
-  const list = document.getElementById('list');
-  document.getElementById('count').textContent = shown.length + ' of ' + DATA.items.length;
-  if (!shown.length) {
-    list.innerHTML = '<div class="empty">Nothing matches.</div>';
-    return;
-  }
-  if (state.group !== 'scope') {
-    list.innerHTML = byKind(shown);
-    return;
-  }
-  let html = '';
-  for (const layer of LAYER_ORDER) {
-    const group = shown.filter(i => i.layer === layer);
-    if (!group.length) continue;
-    const tokens = residentTokens(group);
-    html += `<h2 class="scope">${esc(LAYER_LABEL[layer] || layer)}` +
-      `<span class="where mono">${esc(scopeWhere(layer, group))}</span>` +
-      `<span class="tally">${group.length} item${group.length === 1 ? '' : 's'}` +
-      (tokens ? ` · ~${tokens.toLocaleString()}t always on` : '') + '</span></h2>';
-    html += byKind(group);
-  }
-  list.innerHTML = html;
-}
-
-document.getElementById('q').addEventListener('input', e => {
-  state.q = e.target.value.trim().toLowerCase();
-  render();
-});
-document.addEventListener('keydown', e => {
-  if (e.key === '/' && document.activeElement.id !== 'q') {
-    e.preventDefault();
-    document.getElementById('q').focus();
-  }
-});
-renderSummary();
-renderFilters();
-render();
-</script>
-</body>
-</html>
-"""
+    The template ships alongside this script. A bare traceback here would name
+    a path without explaining that the install itself is incomplete.
+    """
+    try:
+        return TEMPLATE.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise SystemExit(
+            f"atlas: cannot read the viewer template at {collapse_home(TEMPLATE)} ({exc}).\n"
+            f"       It ships next to scripts/atlas.py — reinstall the plugin if it is gone."
+        ) from exc
 
 
 def render_html(graph: dict[str, Any]) -> str:
@@ -1432,7 +940,8 @@ def render_html(graph: dict[str, Any]) -> str:
     # enough to keep an embedded `</script>` from ending the block early.
     data = json.dumps(graph, ensure_ascii=False).replace("<", "\\u003c")
     return (
-        PAGE.replace("__TITLE__", html.escape(heading))
+        load_template()
+        .replace("__TITLE__", html.escape(heading))
         .replace("__HEADING__", html.escape(heading))
         .replace("__LEAD__", lead)
         .replace("__PROJECT__", html.escape(graph["project"]))
@@ -1590,6 +1099,230 @@ def print_report(graph: dict[str, Any], out: Path | None) -> None:
 
 
 # --------------------------------------------------------------------------
+# budget
+# --------------------------------------------------------------------------
+
+# What a session pays for before you type: the name and description of every
+# routable item, and every CLAUDE.md in full.
+RESIDENT_KINDS = ("agent", "command", "skill")
+
+BUDGET_AXES = {
+    "kind": lambda i: KIND_PLURAL.get(i["kind"], i["kind"]),
+    "scope": lambda i: LAYER_LABEL.get(i["layer"], i["layer"]),
+    "origin": lambda i: i["origin"],
+}
+
+
+def item_chars(item: dict[str, Any]) -> int:
+    """This item's share of the always-on bill, in characters.
+
+    Characters rather than tokens because characters are the quantity that adds
+    up exactly. Tokens are an estimate produced by a division, and flooring each
+    item before summing gives a total that disagrees with flooring once at the
+    end — a one-token discrepancy that reads as a bug in the arithmetic.
+    """
+    if item["kind"] in RESIDENT_KINDS:
+        return int(item.get("descriptionChars", 0))
+    if item["kind"] == "memory":
+        return int(item.get("residentChars", 0))
+    return 0
+
+
+def item_tokens(item: dict[str, Any]) -> int:
+    """The same share, estimated in tokens. For display and ranking only."""
+    return item_chars(item) // CHARS_PER_TOKEN
+
+
+def budget_report(graph: dict[str, Any], axis: str, top: int, over: int) -> dict[str, Any]:
+    """Rank what the session is paying for, grouped and per item.
+
+    The scope line a `view` prints answers "how much, and from where". This
+    answers the question that follows it: which specific items, so there is
+    something to go and shorten.
+    """
+    resident = [i for i in graph["items"] if item_chars(i)]
+    key = BUDGET_AXES[axis]
+
+    groups: dict[str, dict[str, int]] = {}
+    for item in resident:
+        bucket = groups.setdefault(key(item), {"chars": 0, "count": 0})
+        bucket["chars"] += item_chars(item)
+        bucket["count"] += 1
+
+    ranked = sorted(resident, key=lambda i: (-item_chars(i), i["name"]))
+    if over:
+        ranked = [i for i in ranked if item_tokens(i) >= over]
+    shown = ranked if over else ranked[:top]
+
+    return {
+        "axis": axis,
+        "totalTokens": graph["stats"]["residentTokens"],
+        "totalChars": graph["stats"]["residentChars"],
+        "groups": [
+            {"name": name, "tokens": bucket["chars"] // CHARS_PER_TOKEN, **bucket}
+            for name, bucket in sorted(groups.items(), key=lambda kv: -kv[1]["chars"])
+        ],
+        "items": [
+            {
+                "name": i["name"],
+                "kind": i["kind"],
+                "origin": i["origin"],
+                "layer": i["layer"],
+                "tokens": item_tokens(i),
+                "chars": item_chars(i),
+                "path": i["path"],
+            }
+            for i in shown
+        ],
+        "itemsOverThreshold": len(ranked) if over else None,
+        "residentItems": len(resident),
+    }
+
+
+def print_budget(report: dict[str, Any], graph: dict[str, Any], over: int) -> None:
+    print(f"Project: {graph['project']}")
+    print(
+        f"Always-on context: ~{report['totalTokens']:,} tokens "
+        f"({report['totalChars']:,} chars, estimate) across {report['residentItems']} items"
+    )
+    print()
+    print(f"By {report['axis']}")
+    for group in report["groups"]:
+        share = group["chars"] * 100 // max(report["totalChars"], 1)
+        print(
+            f"  ~{group['tokens']:>7,}t  {share:>3}%  "
+            f"{group['count']:>3} items  {group['name']}"
+        )
+    print()
+    if over:
+        print(f"Items at or over ~{over:,} tokens: {report['itemsOverThreshold']}")
+    else:
+        print(f"Heaviest {len(report['items'])} items")
+    for item in report["items"]:
+        print(
+            f"  ~{item['tokens']:>7,}t  {item['kind']:<8} "
+            f"{item['name']:<42.42} {item['origin']}"
+        )
+    if not report["items"]:
+        print("  (none)")
+
+
+# --------------------------------------------------------------------------
+# diff
+# --------------------------------------------------------------------------
+
+
+def item_identity(item: dict[str, Any]) -> tuple[str, str, str, str]:
+    """What makes an item the same item across two scans.
+
+    The path is deliberately not part of it: moving `~/.claude/agents/x.md` into
+    a subdirectory should read as the same agent, not as one deleted and one
+    added. `key` is the addressable name where there is one and falls back to
+    `name` for the kinds that have no key at all.
+    """
+    return (item["kind"], item["layer"], item["origin"], item.get("key") or item["name"])
+
+
+def diff_report(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
+    """What changed between a saved scan and the current one.
+
+    Written for the shape of work that motivates it: a campaign that rewrites
+    many descriptions at once, where the question afterwards is not "is it
+    smaller" but "which items moved, and did anything disappear by accident".
+    """
+    old = {item_identity(i): i for i in before.get("items", [])}
+    new = {item_identity(i): i for i in after.get("items", [])}
+
+    def entry(identity: tuple[str, str, str, str], item: dict[str, Any], delta: int) -> dict:
+        return {
+            "kind": identity[0],
+            "name": item["name"],
+            "origin": item["origin"],
+            "layer": item["layer"],
+            "chars": item_chars(item),
+            "delta": delta,
+        }
+
+    added = [entry(k, new[k], item_chars(new[k])) for k in new.keys() - old.keys()]
+    removed = [entry(k, old[k], -item_chars(old[k])) for k in old.keys() - new.keys()]
+    changed = []
+    for identity in old.keys() & new.keys():
+        delta = item_chars(new[identity]) - item_chars(old[identity])
+        if delta:
+            changed.append(entry(identity, new[identity], delta))
+
+    for group in (added, removed, changed):
+        group.sort(key=lambda e: (-abs(e["delta"]), e["name"]))
+
+    before_stats = before.get("stats", {})
+    after_stats = after.get("stats", {})
+    scopes = {}
+    for layer in set(before_stats.get("residentByLayer", {})) | set(
+        after_stats.get("residentByLayer", {})
+    ):
+        was = before_stats.get("residentByLayer", {}).get(layer, 0)
+        now = after_stats.get("residentByLayer", {}).get(layer, 0)
+        scopes[layer] = {"before": was, "after": now, "delta": now - was}
+
+    return {
+        "baselineGeneratedAt": before.get("generatedAt", "unknown"),
+        "generatedAt": after["generatedAt"],
+        "residentChars": {
+            "before": before_stats.get("residentChars", 0),
+            "after": after_stats.get("residentChars", 0),
+            "delta": after_stats.get("residentChars", 0) - before_stats.get("residentChars", 0),
+        },
+        "byScope": scopes,
+        "added": added,
+        "removed": removed,
+        "changed": changed,
+    }
+
+
+def print_diff(report: dict[str, Any], top: int) -> None:
+    chars = report["residentChars"]
+    print(f"Baseline: {report['baselineGeneratedAt']}")
+    print(f"Now:      {report['generatedAt']}")
+    print()
+    print(
+        f"Always-on context: {chars['before']:,} → {chars['after']:,} chars "
+        f"({signed(chars['delta'])}, ~{signed(chars['delta'] // CHARS_PER_TOKEN)}t)"
+    )
+    for layer in LAYER_ORDER:
+        scope = report["byScope"].get(layer)
+        if not scope or not (scope["before"] or scope["after"]):
+            continue
+        print(
+            f"  {LAYER_LABEL.get(layer, layer):<8} {scope['before']:>8,} → {scope['after']:>8,}"
+            f"  {signed(scope['delta'])}"
+        )
+
+    for title, entries in (
+        ("Removed", report["removed"]),
+        ("Added", report["added"]),
+        ("Changed", report["changed"]),
+    ):
+        if not entries:
+            continue
+        print()
+        shown = entries[:top]
+        more = len(entries) - len(shown)
+        print(f"{title}: {len(entries)}")
+        for e in shown:
+            print(f"  {signed(e['delta']):>8}c  {e['kind']:<8} {e['name']:<40.40} {e['origin']}")
+        if more:
+            print(f"  … and {more} more")
+
+    if not (report["added"] or report["removed"] or report["changed"]):
+        print()
+        print("Nothing changed.")
+
+
+def signed(value: int) -> str:
+    return f"{value:+,}"
+
+
+# --------------------------------------------------------------------------
 # cli
 # --------------------------------------------------------------------------
 
@@ -1633,6 +1366,30 @@ def main(argv: list[str] | None = None) -> int:
     scan.add_argument("--no-bodies", action="store_true", help="omit file bodies")
     scan.add_argument("--max-body", type=int, default=20000, help="per-item body character cap")
 
+    budget = sub.add_parser("budget", help="rank what the always-on context is spent on")
+    budget.add_argument(
+        "--by",
+        choices=sorted(BUDGET_AXES),
+        default="scope",
+        help="group the totals by this axis (default: scope)",
+    )
+    budget.add_argument("--top", type=int, default=15, help="how many items to list (default: 15)")
+    budget.add_argument(
+        "--over",
+        type=int,
+        default=0,
+        help="list every item at or over this many tokens instead of the top N",
+    )
+    budget.add_argument("--json", action="store_true", help="emit the report as JSON")
+
+    # Deliberately its own subcommand rather than `scan --diff`: `scan` promises
+    # to print the graph as JSON, and a second thing printed from the same place
+    # would break whatever is reading it.
+    diff = sub.add_parser("diff", help="compare the current state against a saved scan")
+    diff.add_argument("baseline", metavar="SCAN.json", help="a file written by an earlier `scan`")
+    diff.add_argument("--top", type=int, default=15, help="entries to list per section")
+    diff.add_argument("--json", action="store_true", help="emit the comparison as JSON")
+
     args = parser.parse_args(argv)
     command = args.command or "view"
 
@@ -1650,7 +1407,11 @@ def main(argv: list[str] | None = None) -> int:
             user_root=user_root,
             plugins_root=plugins_root,
             max_body=getattr(args, "max_body", 20000),
-            include_bodies=not getattr(args, "no_bodies", False),
+            # Neither a budget nor a diff ever shows a body, and reading a
+            # megabyte of Markdown to count description characters is waste.
+            include_bodies=(
+                command not in ("budget", "diff") and not getattr(args, "no_bodies", False)
+            ),
             include_project=include_project,
         )
 
@@ -1658,6 +1419,29 @@ def main(argv: list[str] | None = None) -> int:
         return [user_root, subject / ".claude"] + [
             expand_home(root["path"]) for root in graph["roots"] if root["layer"] == "plugin"
         ]
+
+    if command == "diff":
+        baseline = read_json(Path(args.baseline).expanduser())
+        if not isinstance(baseline, dict) or "items" not in baseline:
+            raise SystemExit(
+                f"atlas: {args.baseline} is not a scan written by atlas.\n"
+                f"       Produce one with: atlas scan --no-bodies --out {args.baseline}"
+            )
+        report = diff_report(baseline, graph_for(project))
+        if args.json:
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+        else:
+            print_diff(report, args.top)
+        return 0
+
+    if command == "budget":
+        graph = graph_for(project)
+        report = budget_report(graph, args.by, args.top, args.over)
+        if args.json:
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+        else:
+            print_budget(report, graph, args.over)
+        return 0
 
     if command == "scan":
         graph = graph_for(project)
