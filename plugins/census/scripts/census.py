@@ -470,6 +470,20 @@ def _hook_script(command: str, base: Path) -> Path | None:
     return None
 
 
+def _hook_name(script: Path | None, tokens: list[str], event: str) -> str:
+    """What to call a hook.
+
+    The script it runs, falling back to the command itself and then to the
+    event — a registered command may be nothing but whitespace, and there is
+    still a registration to report.
+    """
+    if script is not None:
+        return script.name
+    if tokens:
+        return Path(tokens[0]).name
+    return event
+
+
 def _read_hooks(settings: Path, root: dict[str, Any], origin: str) -> list[dict[str, Any]]:
     """Extract hook registrations from a settings.json.
 
@@ -492,20 +506,10 @@ def _read_hooks(settings: Path, root: dict[str, Any], origin: str) -> list[dict[
             for raw_hook in _as_list(entry.get("hooks")):
                 command = _as_str(_as_dict(raw_hook).get("command"))
                 script = _hook_script(command, root["path"])
-                tokens = _hook_tokens(command)
-                # Named after the script it runs, falling back to the command
-                # itself and then to the event — a command may be nothing but
-                # whitespace, and there is still a registration to report.
-                if script is not None:
-                    name = script.name
-                elif tokens:
-                    name = Path(tokens[0]).name
-                else:
-                    name = event
                 found.append(
                     {
                         "kind": "hook",
-                        "name": name,
+                        "name": _hook_name(script, _hook_tokens(command), event),
                         "declaredName": None,
                         "file": str(settings),
                         "script": str(script) if script else None,
@@ -896,6 +900,20 @@ def _external_scripts(
     return [{"name": n, "file": found[n]} for n in sorted(found)]
 
 
+def _item_scripts(item: dict[str, Any], index: dict[str, str]) -> list[dict[str, str]]:
+    """Scripts this item shells out to, read from wherever its calls actually are.
+
+    A hook IS a script, so what it runs is read as code. Everything else is
+    Markdown, where only a backticked reference counts — see `_external_scripts`
+    for why that distinction has to be made at all.
+    """
+    if item["kind"] != "hook":
+        return _external_scripts(Path(item["file"]), index, item["name"])
+    if not item.get("scriptExists"):
+        return []
+    return _external_scripts(Path(item["script"]), index, item["name"], markdown=False)
+
+
 def build_portability(graph: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     roots = [
         {"path": Path(r["path"]), "scope": r["scope"], "repo": r["repo"]}
@@ -959,15 +977,7 @@ def build_portability(graph: dict[str, Any], config: dict[str, Any]) -> dict[str
                     [] if item["kind"] == "hook"
                     else _referenced_items(Path(item["file"]), catalogued, item["name"])
                 ),
-                # A hook IS a script, so read the script it runs; everything
-                # else is Markdown and only backticked references count.
-                "externalScripts": (
-                    _external_scripts(Path(item["script"]), scripts, item["name"], markdown=False)
-                    if item["kind"] == "hook" and item.get("scriptExists")
-                    else _external_scripts(Path(item["file"]), scripts, item["name"])
-                    if item["kind"] != "hook"
-                    else []
-                ),
+                "externalScripts": _item_scripts(item, scripts),
             }
         )
 
@@ -1004,6 +1014,32 @@ def build_portability(graph: dict[str, Any], config: dict[str, Any]) -> dict[str
     }
 
 
+def _table(headers: Iterable[str], rows: Iterable[Iterable[str]]) -> list[str]:
+    """A Markdown table as report lines.
+
+    The alignment row is the part every table here was spelling out by hand, and
+    the one thing that silently breaks a table when its column count changes.
+    """
+    columns = list(headers)
+    return [
+        "| " + " | ".join(columns) + " |",
+        "|" + "---|" * len(columns),
+        *("| " + " | ".join(row) + " |" for row in rows),
+    ]
+
+
+def _section(
+    heading: str, note: str, headers: Iterable[str], rows: Iterable[Iterable[str]]
+) -> list[str]:
+    """A report section: a spacer, a heading, an italic note, then a table.
+
+    Every section of both reports has this shape. Stating it once is also what
+    keeps the `<br/>` between heading sections — the house style this repo's own
+    doc checker enforces — from being forgotten in one section out of five.
+    """
+    return ["<br/>", "", f"## {heading}", "", f"_{note}_", "", *_table(headers, rows), ""]
+
+
 def render_portability(report: dict[str, Any], evidence: int) -> str:
     tiers = report["tiers"]
     total = sum(tiers.values())
@@ -1030,12 +1066,15 @@ def render_portability(report: dict[str, Any], evidence: int) -> str:
         "",
         "Derived markers — strings that identify this machine or owner:",
         "",
-        "| Marker | Category | Derived from |",
-        "|---|---|---|",
+        *_table(
+            ("Marker", "Category", "Derived from"),
+            (
+                (f"`{m['value']}`", m["category"], m["source"])
+                for m in report["markers"]
+            ),
+        ),
+        "",
     ]
-    for marker in report["markers"]:
-        out.append(f"| `{marker['value']}` | {marker['category']} | {marker['source']} |")
-    out.append("")
 
     scoped = report.get("scopedMarkers") or []
     if scoped:
@@ -1063,44 +1102,41 @@ def render_portability(report: dict[str, Any], evidence: int) -> str:
 
     blocked = [i for i in report["items"] if i["tier"] == TIER_PORTABLE and i["blockedBy"]]
     if blocked:
-        out += [
-            "<br/>",
-            "",
-            f"## ⛔ Blocked by a dependency ({len(blocked)})",
-            "",
-            "_Graded 🟢 on their own contents, but they hand work to an item that is not "
+        out += _section(
+            f"⛔ Blocked by a dependency ({len(blocked)})",
+            "Graded 🟢 on their own contents, but they hand work to an item that is not "
             "portable. Publishing one without its dependency ships a name that resolves to "
-            "nothing._",
-            "",
-            "| Item | Kind | Origin | Blocked by |",
-            "|---|---|---|---|",
-        ]
-        for item in sorted(blocked, key=lambda i: (-len(i["blockedBy"]), i["name"])):
-            deps = ", ".join(f"`{d}`" for d in item["blockedBy"])
-            out.append(
-                f"| `{item['name']}` | {item['kind']} | {', '.join(item['origins'])} | {deps} |"
-            )
-        out.append("")
+            "nothing.",
+            ("Item", "Kind", "Origin", "Blocked by"),
+            (
+                (
+                    f"`{item['name']}`",
+                    item["kind"],
+                    ", ".join(item["origins"]),
+                    ", ".join(f"`{d}`" for d in item["blockedBy"]),
+                )
+                for item in sorted(blocked, key=lambda i: (-len(i["blockedBy"]), i["name"]))
+            ),
+        )
 
     calls = [i for i in report["items"] if i["externalScripts"]]
     if calls:
-        out += [
-            "<br/>",
-            "",
-            f"## 🧩 Calls a script it does not contain ({len(calls)})",
-            "",
-            "_Each of these shells out to a script that is not part of the item and is not "
+        out += _section(
+            f"🧩 Calls a script it does not contain ({len(calls)})",
+            "Each of these shells out to a script that is not part of the item and is not "
             "catalogued as one. Publish the item alone and the call resolves to nothing — the "
             "same failure as a missing dependency, one layer down. Only scripts that actually "
-            "exist in a config root are counted, so an example filename never appears here._",
-            "",
-            "| Item | Kind | Calls |",
-            "|---|---|---|",
-        ]
-        for item in sorted(calls, key=lambda i: (-len(i["externalScripts"]), i["name"])):
-            names = ", ".join(f"`{s['name']}`" for s in item["externalScripts"])
-            out.append(f"| `{item['name']}` | {item['kind']} | {names} |")
-        out.append("")
+            "exist in a config root are counted, so an example filename never appears here.",
+            ("Item", "Kind", "Calls"),
+            (
+                (
+                    f"`{item['name']}`",
+                    item["kind"],
+                    ", ".join(f"`{s['name']}`" for s in item["externalScripts"]),
+                )
+                for item in sorted(calls, key=lambda i: (-len(i["externalScripts"]), i["name"]))
+            ),
+        )
 
     for tier, emoji, note in (
         (TIER_PORTABLE, "🟢", "no machine-specific reference; promote as-is"),
@@ -1113,15 +1149,21 @@ def render_portability(report: dict[str, Any], evidence: int) -> str:
         # Worst-coupled first, and the same order for the evidence below.
         group.sort(key=lambda i: (-len(i["hits"]), i["name"]))
 
-        out += ["<br/>", "", f"## {emoji} {tier} ({len(group)})", "", f"_{note}_", ""]
-        out += ["| Item | Kind | Origin | Hits | Markers |", "|---|---|---|---|---|"]
-        for item in group:
-            markers = ", ".join(f"`{m}`" for m in item["markers"]) or "—"
-            out.append(
-                f"| `{item['name']}` | {item['kind']} | {', '.join(item['origins'])} "
-                f"| {len(item['hits'])} | {markers} |"
-            )
-        out.append("")
+        out += _section(
+            f"{emoji} {tier} ({len(group)})",
+            note,
+            ("Item", "Kind", "Origin", "Hits", "Markers"),
+            (
+                (
+                    f"`{item['name']}`",
+                    item["kind"],
+                    ", ".join(item["origins"]),
+                    str(len(item["hits"])),
+                    ", ".join(f"`{m}`" for m in item["markers"]) or "—",
+                )
+                for item in group
+            ),
+        )
 
         if tier != TIER_PORTABLE and evidence:
             out += [f"### Evidence (first {evidence} hits per item)", ""]
@@ -1781,15 +1823,22 @@ def render_catalog(graph: dict[str, Any], top: int) -> str:
             group = _collapse_copies(i for i in scoped if i["kind"] == kind)
             if not group:
                 continue
-            out += [f"### {kind.capitalize()}s ({len(group)})", ""]
-            out.append("| Name | Origin | Description |")
-            out.append("|---|---|---|")
-            for item in sorted(group, key=lambda i: (i["origins"][0], i["name"])):
-                out.append(
-                    f"| `{item['name']}` | {', '.join(item['origins'])} "
-                    f"| {_truncate(_describe(item), 110)} |"
-                )
-            out.append("")
+            out += [
+                f"### {kind.capitalize()}s ({len(group)})",
+                "",
+                *_table(
+                    ("Name", "Origin", "Description"),
+                    (
+                        (
+                            f"`{item['name']}`",
+                            ", ".join(item["origins"]),
+                            _truncate(_describe(item), 110),
+                        )
+                        for item in sorted(group, key=lambda i: (i["origins"][0], i["name"]))
+                    ),
+                ),
+                "",
+            ]
 
     ranked = sorted(
         _collapse_copies(i for i in graph["items"] if i["kind"] != "hook"),
@@ -1797,15 +1846,25 @@ def render_catalog(graph: dict[str, Any], top: int) -> str:
         reverse=True,
     )[:top]
     if ranked:
-        out += ["<br/>", "", f"## Context budget — top {len(ranked)} by description size", ""]
-        out.append("| Item | Kind | Chars | ~Tokens |")
-        out.append("|---|---|---|---|")
-        for item in ranked:
-            out.append(
-                f"| `{item['name']}` | {item['kind']} | {item['descriptionChars']:,} "
-                f"| {item['descriptionChars'] // CHARS_PER_TOKEN:,} |"
-            )
-        out.append("")
+        out += [
+            "<br/>",
+            "",
+            f"## Context budget — top {len(ranked)} by description size",
+            "",
+            *_table(
+                ("Item", "Kind", "Chars", "~Tokens"),
+                (
+                    (
+                        f"`{item['name']}`",
+                        item["kind"],
+                        f"{item['descriptionChars']:,}",
+                        f"{item['descriptionChars'] // CHARS_PER_TOKEN:,}",
+                    )
+                    for item in ranked
+                ),
+            ),
+            "",
+        ]
 
     return "\n".join(out)
 

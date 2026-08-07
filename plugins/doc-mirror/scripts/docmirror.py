@@ -38,6 +38,7 @@ import argparse
 import json
 import re
 import sys
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable, NamedTuple
 
@@ -190,6 +191,18 @@ def measure(text: str) -> Metrics:
     )
 
 
+@lru_cache(maxsize=None)
+def measure_file(path: Path) -> Metrics:
+    """Measure a document once per run, however many checks ask for its shape.
+
+    Three passes want the same bytes: the spacer convention samples every file
+    before anything else runs, the drift comparison measures each half of a
+    pair, and the link and spacer checks walk both halves again. Reading and
+    re-parsing per question was the same file measured three times.
+    """
+    return measure(path.read_text(encoding="utf-8", errors="replace"))
+
+
 def split_suffix(stem: str) -> tuple[str, str] | None:
     """Split `README-ko` into ("README", "ko"). None when there is no suffix.
 
@@ -224,7 +237,7 @@ def discover(root: Path) -> tuple[dict[Path, Pair], dict[Path, set[str]], list[P
         if any(part in SKIP_DIRS for part in rel.parts):
             continue
         posix = rel.as_posix()
-        if any(f"{skip}/" in f"{posix}" for skip in SKIP_PATHS):
+        if any(f"{skip}/" in posix for skip in SKIP_PATHS):
             continue
         by_dir.setdefault(path.parent, {})[path.stem] = path
 
@@ -279,6 +292,21 @@ def relative_link_target(link: str) -> str | None:
     return link.split("#", 1)[0] or None
 
 
+def diverged(source_value: int, mirror_value: int) -> bool:
+    """Whether one structural count has moved away from the other.
+
+    Two guards, and both are load-bearing. `DRIFT_FLOOR` because a metric only
+    means something once there is enough of it — two headings against three is a
+    33% spread and says nothing. `DRIFT_TOLERANCE` because prose genuinely
+    differs in length between languages, and only a gap wider than that is
+    usually a section that went missing.
+    """
+    largest = max(source_value, mirror_value)
+    if largest < DRIFT_FLOOR:
+        return False
+    return abs(source_value - mirror_value) / max(largest, 1) >= DRIFT_TOLERANCE
+
+
 def finding(severity: str, code: str, path: Path, root: Path, message: str, **extra) -> dict:
     return {
         "severity": severity,
@@ -298,8 +326,8 @@ def check_pair(
 ) -> list[dict]:
     """Everything that can be said about one source document and its mirrors."""
     out: list[dict] = []
-    source_text = pair.source.read_text(encoding="utf-8", errors="replace")
-    source_metrics = measure(source_text)
+    source_metrics = measure_file(pair.source)
+    source_shape = source_metrics.comparable()
 
     for lang in sorted(langs - set(pair.mirrors)):
         if pair.source.stem.lower() in GENERATED_DOCS | AGENT_DOCS:
@@ -318,15 +346,13 @@ def check_pair(
         )
 
     for lang, mirror in sorted(pair.mirrors.items()):
-        mirror_metrics = measure(mirror.read_text(encoding="utf-8", errors="replace"))
-        drifted = []
-        for name, source_value in source_metrics.comparable().items():
-            mirror_value = mirror_metrics.comparable()[name]
-            if max(source_value, mirror_value) < DRIFT_FLOOR:
-                continue
-            spread = abs(source_value - mirror_value) / max(source_value, mirror_value, 1)
-            if spread >= DRIFT_TOLERANCE:
-                drifted.append(f"{name} {source_value} vs {mirror_value}")
+        mirror_metrics = measure_file(mirror)
+        mirror_shape = mirror_metrics.comparable()
+        drifted = [
+            f"{name} {source_value} vs {mirror_shape[name]}"
+            for name, source_value in source_shape.items()
+            if diverged(source_value, mirror_shape[name])
+        ]
         if drifted:
             out.append(
                 finding(
@@ -347,11 +373,8 @@ def check_pair(
                 )
             )
 
-    targets = [(pair.source, source_metrics)] + [
-        (m, measure(m.read_text(encoding="utf-8", errors="replace")))
-        for m in pair.mirrors.values()
-    ]
-    for path, metrics in targets:
+    for path in (pair.source, *pair.mirrors.values()):
+        metrics = measure_file(path)
         for link in metrics.links:
             target = relative_link_target(link)
             if target is None:
@@ -398,8 +421,8 @@ def spacer_convention(pairs: Iterable[Pair]) -> bool:
     """
     spaced = unspaced = 0
     for pair in pairs:
-        for path in [pair.source, *pair.mirrors.values()]:
-            metrics = measure(path.read_text(encoding="utf-8", errors="replace"))
+        for path in (pair.source, *pair.mirrors.values()):
+            metrics = measure_file(path)
             section_headings = sum(1 for level in metrics.heading_levels if level >= 2)
             unspaced += len(metrics.headings_needing_spacer)
             spaced += max(section_headings - len(metrics.headings_needing_spacer), 0)
