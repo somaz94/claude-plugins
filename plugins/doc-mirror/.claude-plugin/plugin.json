@@ -1,0 +1,20 @@
+{
+  "name": "doc-mirror",
+  "version": "0.1.0",
+  "description": "Keeps translated documentation pairs from drifting apart — finds the README whose mirror was never written, the mirror whose source moved on without it, and the half that lost a section, without ever guessing at translation quality.",
+  "author": {
+    "name": "somaz94",
+    "url": "https://github.com/somaz94"
+  },
+  "homepage": "https://github.com/somaz94/claude-plugins/tree/main/plugins/doc-mirror",
+  "repository": "https://github.com/somaz94/claude-plugins",
+  "license": "MIT",
+  "keywords": [
+    "documentation",
+    "i18n",
+    "translation",
+    "drift",
+    "readme",
+    "hooks"
+  ]
+}

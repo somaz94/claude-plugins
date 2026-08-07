@@ -17,6 +17,7 @@
 |---|---|
 | [`census`](plugins/census) | 흩어진 `.claude/` 설정을 읽기 전용으로 감사 — 가진 것을 목록화하고, 어긋난 곳을 찾고, 팀에 공유할 만큼 이식 가능한 항목을 가려냅니다 |
 | [`atlas`](plugins/atlas) | 프로젝트가 실제로 닿을 수 있는 모든 것을 HTML 지도로 — 사용자 설정과 이 저장소, 설치된 모든 플러그인에 걸친 커맨드·에이전트·스킬·훅·MCP·메모리를 한 화면에서 훑습니다 |
+| [`doc-mirror`](plugins/doc-mirror) | 번역된 문서 쌍이 어긋나지 않게 지킵니다 — 미러가 아예 안 만들어진 README, 원본이 먼저 나아가 버린 미러, 한쪽만 섹션을 잃은 쌍을 찾아냅니다 |
 | [`shell-portability`](plugins/shell-portability) | 셸 스크립트의 bash/zsh 이식성 검토 — `shellcheck`이 다루지 않는 축입니다. `shellcheck`은 shebang이 선언한 셸을 검사할 뿐, 그 스크립트가 실제로 실행될 셸은 보지 않으니까요 |
 | [`session-continuity`](plugins/session-continuity) | 컨텍스트가 리셋돼도 장기 작업을 이어 감 — 진행하면서 plan 파일을 갱신하고, 새 세션이 시작할 핸드오프 프롬프트를 만듭니다 |
 | [`release-guards`](plugins/release-guards) | 되돌릴 수 없는 릴리스 동작 앞에 확인 절차를 세웁니다 — 태그 생성·삭제와 릴리스 발행, 그리고 그 둘을 만들어 내는 자동화 파일 편집이 대상입니다 |
@@ -26,6 +27,7 @@
 
 - [`census`](plugins/census) — [English](plugins/census/README.md) · [한국어](plugins/census/README-ko.md)
 - [`atlas`](plugins/atlas) — [English](plugins/atlas/README.md) · [한국어](plugins/atlas/README-ko.md)
+- [`doc-mirror`](plugins/doc-mirror) — [English](plugins/doc-mirror/README.md) · [한국어](plugins/doc-mirror/README-ko.md)
 - [`shell-portability`](plugins/shell-portability) — [English](plugins/shell-portability/README.md) · [한국어](plugins/shell-portability/README-ko.md)
 - [`session-continuity`](plugins/session-continuity) — [English](plugins/session-continuity/README.md) · [한국어](plugins/session-continuity/README-ko.md)
 - [`release-guards`](plugins/release-guards) — [English](plugins/release-guards/README.md) · [한국어](plugins/release-guards/README-ko.md)
@@ -39,6 +41,7 @@
 
 - 설정이 갈라집니다. 같은 에이전트가 서로 다른 내용으로 두 벌 존재하는데, 어느 쪽이 이겼는지는 어디서도 알려주지 않습니다. — [`census`](plugins/census)
 - 플러그인을 설치해도 그게 뭘 추가했는지 볼 방법이 없습니다. 세션은 네 개 레이어를 한꺼번에 해석하는데 그걸 한자리에 보여주는 건 없고, 그래서 스크립트를 지운 훅이 등록된 채로 남아 설정된 것처럼 보이면서 아무 일도 하지 않습니다. — [`atlas`](plugins/atlas)
+- README 한쪽만 고치고 번역본은 그대로 둡니다. 빌드는 초록색이고 린터는 조용하고 리뷰어 눈에는 파일 하나만 들어오는데, 다른 언어 쪽은 조용히 지난 분기 지침이 되어 갑니다. — [`doc-mirror`](plugins/doc-mirror)
 - 스크립트가 다른 셸에서 돕니다. `shellcheck`은 통과시켰습니다. shebang이 선언한 셸을 검사했지 실제로 실행된 셸을 검사하지 않았으니까요. — [`shell-portability`](plugins/shell-portability)
 - 컨텍스트 창이 압축됩니다. 앞선 대화가 요약되면서 반쯤 하다 만 편집과 어떤 결정을 내린 이유가 흐려집니다. — [`session-continuity`](plugins/session-continuity)
 - 빌드가 초록불이면 태그를 다는 게 다음 순서처럼 보여서, 태그가 그냥 푸시됩니다. — [`release-guards`](plugins/release-guards)

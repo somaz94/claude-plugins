@@ -97,6 +97,9 @@ jobs:
       - name: atlas tests
         run: bash plugins/atlas/tests/run.sh
 
+      - name: doc-mirror tests
+        run: bash plugins/doc-mirror/tests/run.sh
+
   ci-result:
     name: CI Result
     if: always()

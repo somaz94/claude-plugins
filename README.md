@@ -17,6 +17,7 @@ A [Claude Code](https://code.claude.com/docs) plugin marketplace.
 |---|---|
 | [`census`](plugins/census) | Read-only audit of scattered `.claude/` configs — catalog what you have, detect drift, and triage which items are portable enough to share with a team |
 | [`atlas`](plugins/atlas) | A browsable HTML map of everything a project can actually reach — commands, agents, skills, hooks, MCP servers and memory, across your user config, this repo, and every installed plugin |
+| [`doc-mirror`](plugins/doc-mirror) | Keeps translated documentation pairs from drifting apart — finds the README whose mirror was never written, the mirror whose source moved on without it, and the half that quietly lost a section |
 | [`shell-portability`](plugins/shell-portability) | Reviews shell scripts for bash/zsh portability — the axis `shellcheck` does not cover, because it checks the shell the shebang declares, not the one the script gets run by |
 | [`session-continuity`](plugins/session-continuity) | Carries long-running work across a context reset — keeps a plan file current as you go, and generates the handoff prompt a fresh session starts from |
 | [`release-guards`](plugins/release-guards) | Puts a confirmation in front of the release actions you cannot take back — tag create/delete, release publish, and edits to the automation that generates them |
@@ -26,6 +27,7 @@ Each plugin's documentation, in both languages:
 
 - [`census`](plugins/census) — [English](plugins/census/README.md) · [한국어](plugins/census/README-ko.md)
 - [`atlas`](plugins/atlas) — [English](plugins/atlas/README.md) · [한국어](plugins/atlas/README-ko.md)
+- [`doc-mirror`](plugins/doc-mirror) — [English](plugins/doc-mirror/README.md) · [한국어](plugins/doc-mirror/README-ko.md)
 - [`shell-portability`](plugins/shell-portability) — [English](plugins/shell-portability/README.md) · [한국어](plugins/shell-portability/README-ko.md)
 - [`session-continuity`](plugins/session-continuity) — [English](plugins/session-continuity/README.md) · [한국어](plugins/session-continuity/README-ko.md)
 - [`release-guards`](plugins/release-guards) — [English](plugins/release-guards/README.md) · [한국어](plugins/release-guards/README-ko.md)
@@ -39,6 +41,7 @@ Every plugin here addresses something that goes wrong **quietly** while an assis
 
 - Your config drifts. The same agent exists twice with different content, and nothing reports which copy won. — [`census`](plugins/census)
 - You install a plugin and cannot see what it added. A session resolves four layers at once, and nothing shows them together — so a hook whose script you deleted stays registered, looking configured while doing nothing. — [`atlas`](plugins/atlas)
+- You update one README and not its translation. The build is green, the linter is quiet, the review sees one file, and the other language quietly becomes last quarter's instructions. — [`doc-mirror`](plugins/doc-mirror)
 - A script runs under the other shell. `shellcheck` cleared it, because it checked the shell the shebang declares, not the one it got run by. — [`shell-portability`](plugins/shell-portability)
 - The context window compacts. Older turns are summarized, and the half-finished edit and the reason behind a decision blur away. — [`session-continuity`](plugins/session-continuity)
 - A tag gets pushed because it looked like the next step after a green build. — [`release-guards`](plugins/release-guards)
