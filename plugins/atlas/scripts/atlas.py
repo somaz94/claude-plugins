@@ -64,6 +64,11 @@ HOOK_EVENT_ORDER = (
 
 KIND_ORDER = ("command", "agent", "skill", "hook", "mcp", "memory", "plugin")
 
+# A translation mirror directory: `agents-ko`, `commands-ja`, `skills-zh`. The
+# language is whatever suffix is there — no list of known codes, because the
+# next one someone invents should work without an edit here.
+LANG_DIR = re.compile(r"^(agents|commands|skills)-([a-z]{2,3})$")
+
 # Plural forms, because "1 memorys" reads like a bug in the tool rather than a
 # detail of English.
 KIND_PLURAL = {
@@ -191,6 +196,7 @@ class Collector:
     def __init__(self, max_body: int, include_bodies: bool) -> None:
         self.items: list[dict[str, Any]] = []
         self.notes: list[str] = []
+        self.languages: set[str] = set()
         self.max_body = max_body
         self.include_bodies = include_bodies
 
@@ -213,6 +219,49 @@ class Collector:
 
     # -- markdown-defined resources --------------------------------------
 
+    def collect_translations(self, config_dir: Path) -> dict[tuple[str, str], dict[str, Any]]:
+        """Collect `<kind>-<lang>` mirror directories, keyed by (kind, key).
+
+        A translation mirror is not a second resource — Claude Code loads only
+        the source directory, so the mirror costs nothing at runtime and must
+        not be counted as another agent. It is attached to the item it mirrors
+        and swapped in by the viewer's language selector.
+
+        Matching is by path, never by the `name:` field: a mirror whose
+        frontmatter name was translated too would otherwise fail to pair with
+        the file it is plainly a translation of.
+        """
+        found: dict[tuple[str, str], dict[str, Any]] = {}
+        if not config_dir.is_dir():
+            return found
+
+        for directory in sorted(config_dir.iterdir()):
+            if not directory.is_dir():
+                continue
+            match = LANG_DIR.match(directory.name)
+            if not match:
+                continue
+            kind_dir, lang = match.group(1), match.group(2)
+            kind = {"agents": "agent", "commands": "command", "skills": "skill"}[kind_dir]
+            paths = (
+                directory.rglob("SKILL.md") if kind == "skill" else directory.rglob("*.md")
+            )
+            for path in sorted(paths):
+                if kind == "skill":
+                    key = path.parent.relative_to(directory).as_posix()
+                else:
+                    key = ":".join(path.relative_to(directory).with_suffix("").parts)
+                meta, body = parse_frontmatter(read_text(path))
+                text, _ = self._body(body)
+                entry = found.setdefault((kind, key), {})
+                entry[lang] = {
+                    "description": meta.get("description", ""),
+                    "body": text,
+                    "path": collapse_home(path),
+                }
+                self.languages.add(lang)
+        return found
+
     def collect_config_dir(
         self, config_dir: Path, layer: str, origin: str, namespace: str | None = None
     ) -> dict[str, int]:
@@ -226,13 +275,22 @@ class Collector:
         if not config_dir.is_dir():
             return counts
 
+        mirrors = self.collect_translations(config_dir)
+        # Which languages this directory keeps mirrors in at all. An item here
+        # with no mirror is a gap only against this list.
+        here = sorted({lang for entry in mirrors.values() for lang in entry})
+
         for path in sorted((config_dir / "agents").rglob("*.md")):
             meta, body = parse_frontmatter(read_text(path))
             name = meta.get("name") or path.stem
+            key = path.relative_to(config_dir / "agents").with_suffix("").as_posix()
             text, truncated = self._body(body)
             self.add(
                 kind="agent",
                 name=name,
+                key=key,
+                translations=mirrors.get(("agent", key), {}),
+                mirrorLangs=here,
                 # An agent is not typed as a slash command; it is selected by
                 # its description. Showing a fake invocation would teach the
                 # wrong thing, so the field stays empty and the viewer says so.
@@ -260,6 +318,9 @@ class Collector:
             self.add(
                 kind="command",
                 name=local,
+                key=local,
+                translations=mirrors.get(("command", local), {}),
+                mirrorLangs=here,
                 invocation=invocation,
                 description=meta.get("description", ""),
                 layer=layer,
@@ -272,9 +333,11 @@ class Collector:
             )
             counts["command"] += 1
 
-        for path in sorted((config_dir / "skills").rglob("SKILL.md")):
+        skills_dir = config_dir / "skills"
+        for path in sorted(skills_dir.rglob("SKILL.md")):
             meta, body = parse_frontmatter(read_text(path))
             name = meta.get("name") or path.parent.name
+            key = path.parent.relative_to(skills_dir).as_posix() if skills_dir.is_dir() else name
             invocation = f"/{namespace}:{name}" if namespace else f"/{name}"
             text, truncated = self._body(body)
             bundled = sorted(
@@ -288,6 +351,9 @@ class Collector:
             self.add(
                 kind="skill",
                 name=name,
+                key=key,
+                translations=mirrors.get(("skill", key), {}),
+                mirrorLangs=here,
                 invocation=invocation,
                 description=meta.get("description", ""),
                 layer=layer,
@@ -679,6 +745,10 @@ def build_graph(
         "roots": roots,
         "items": items,
         "conflicts": conflicts,
+        # Mirror languages found anywhere. The source directory is what Claude
+        # Code loads, so these cost nothing at runtime — the viewer offers them
+        # as a reading language, never as extra resources.
+        "languages": sorted(collector.languages),
         "notes": collector.notes,
         "stats": summarize(items),
     }
@@ -831,8 +901,18 @@ summary::-webkit-details-marker { display: none; }
   padding: 2px 7px; border-radius: 999px; background: var(--chip); color: var(--muted);
 }
 .tag.warn { color: var(--warn); border: 1px solid var(--warn); background: none; }
-.desc { color: var(--muted); font-size: 13.5px; margin-top: 4px; }
+.tag.origin { text-transform: none; letter-spacing: 0; color: var(--ink); }
+/* A description is one long line on disk. Sentence breaks are inserted at
+   render time and shown with pre-wrap; the clamp keeps a 2,000-character one
+   from burying the next row until you open it. */
+.desc {
+  color: var(--muted); font-size: 13.5px; margin-top: 5px; line-height: 1.6;
+  white-space: pre-wrap; max-width: 78ch;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+details[open] .desc { display: block; overflow: visible; }
 .desc.none { font-style: italic; color: var(--warn); }
+.size { font-size: 11px; color: var(--muted); }
 .meta { padding: 0 14px 12px; border-top: 1px solid var(--line); }
 .kv { display: flex; flex-wrap: wrap; gap: 5px; margin: 10px 0; }
 .kv span { font-size: 11.5px; background: var(--chip); border-radius: 4px; padding: 2px 7px; }
@@ -880,7 +960,24 @@ const KIND_LABEL = {
   hook: 'Hooks', mcp: 'MCP servers', memory: 'Memory', plugin: 'Plugins'
 };
 const KIND_ORDER = ['command', 'agent', 'skill', 'hook', 'mcp', 'memory', 'plugin'];
-const state = { q: '', kinds: new Set(), layers: new Set(), issuesOnly: false };
+const state = { q: '', kinds: new Set(), layers: new Set(), issuesOnly: false, lang: 'source' };
+
+// A description is stored as one unbroken line. Breaking at sentence ends is
+// the only reformatting done to it — the text itself is never altered.
+function readable(text) {
+  return String(text || '').replace(/([.!?。])\\s+(?=[A-Z0-9`~/*\\[(가-힣ぁ-んァ-ヶ一-龯])/g, '$1\\n');
+}
+
+// The text to show for an item in the selected language, and whether that
+// language actually had a mirror for it.
+function inLang(item) {
+  const tr = state.lang !== 'source' && item.translations && item.translations[state.lang];
+  if (tr) return { description: tr.description, body: tr.body, path: tr.path, missing: false };
+  // "Missing" only where a mirror was expected — a plugin that keeps no
+  // translations at all is not incomplete, it just does not do that.
+  const expected = (item.mirrorLangs || []).includes(state.lang);
+  return { description: item.description, body: item.body, path: item.path, missing: expected };
+}
 
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
@@ -926,17 +1023,31 @@ function renderFilters() {
   const kinds = KIND_ORDER.filter(k => DATA.items.some(i => i.kind === k));
   const layers = ['user', 'project', 'plugin'].filter(l => DATA.items.some(i => i.layer === l));
   const el = document.getElementById('filters');
+  // Language is a radio, not a toggle — you read in one language at a time.
+  const langs = DATA.languages.length
+    ? '<span class="sep"></span>' +
+      ['source'].concat(DATA.languages).map(l =>
+        `<button class="chip" data-lang="${esc(l)}" aria-pressed="${l === 'source'}">${esc(l)}</button>`).join('')
+    : '';
   el.innerHTML =
     kinds.map(k => `<button class="chip" data-kind="${k}" aria-pressed="false">${esc(KIND_LABEL[k] || k)}</button>`).join('') +
     '<span class="sep"></span>' +
     layers.map(l => `<button class="chip" data-layer="${l}" aria-pressed="false">${esc(l)}</button>`).join('') +
     '<span class="sep"></span>' +
     '<button class="chip" data-issues="1" aria-pressed="false">needs attention</button>' +
+    langs +
     '<span class="count" id="count"></span>';
 
   el.addEventListener('click', e => {
     const b = e.target.closest('button.chip');
     if (!b) return;
+    if (b.dataset.lang) {
+      state.lang = b.dataset.lang;
+      el.querySelectorAll('button[data-lang]').forEach(other =>
+        other.setAttribute('aria-pressed', String(other === b)));
+      render();
+      return;
+    }
     const on = b.getAttribute('aria-pressed') === 'true';
     b.setAttribute('aria-pressed', String(!on));
     if (b.dataset.kind) on ? state.kinds.delete(b.dataset.kind) : state.kinds.add(b.dataset.kind);
@@ -955,29 +1066,42 @@ function matches(item) {
     if (!bad) return false;
   }
   if (!state.q) return true;
-  const hay = [item.name, item.invocation, item.description, item.path, item.origin, item.body]
+  // Search spans every language, so a Korean term finds an item whose source
+  // description is English and vice versa.
+  const translated = Object.values(item.translations || {})
+    .map(t => t.description + '\\n' + (t.body || '')).join('\\n');
+  const hay = [item.name, item.invocation, item.description, item.path, item.origin, item.body, translated]
     .join('\\n').toLowerCase();
   return state.q.split(/\\s+/).every(t => hay.includes(t));
 }
 
 function card(item) {
-  const tags = [`<span class="tag">${esc(item.layer)}</span>`];
-  if (item.namespace && item.kind !== 'plugin') tags.push(`<span class="tag">${esc(item.namespace)}</span>`);
+  const view = inLang(item);
+  // Where it lives comes first — for a repo-scoped item that is the repo name,
+  // for a global one the config directory, for a plugin's the plugin.
+  const tags = [`<span class="tag origin">${esc(item.origin)}</span>`,
+                `<span class="tag">${esc(item.layer)}</span>`];
   if (item.conflicted) tags.push('<span class="tag warn">shadowed</span>');
   if (item.resolves === false) tags.push('<span class="tag warn">missing script</span>');
   if (item.enabled === false) tags.push('<span class="tag warn">disabled</span>');
+  if (view.missing) tags.push(`<span class="tag warn">no ${esc(state.lang)} mirror</span>`);
 
   const kv = Object.entries(item.extra || {})
     .map(([k, v]) => `<span><b>${esc(k)}</b> ${esc(v)}</span>`).join('');
-  const desc = item.description
-    ? `<div class="desc">${esc(item.description)}</div>`
-    : (['agent', 'command', 'skill'].includes(item.kind)
-        ? '<div class="desc none">no description — this item cannot be routed to</div>' : '');
+  const routable = ['agent', 'command', 'skill'].includes(item.kind);
+  const desc = view.description
+    ? `<div class="desc">${esc(readable(view.description))}</div>`
+    : (routable ? '<div class="desc none">no description — this item cannot be routed to</div>' : '');
+  // Only the source description is resident in every session; a mirror is read
+  // by people, not by Claude Code, so it is never charged for.
+  const size = routable && item.description
+    ? `<span class="size">${item.descriptionChars.toLocaleString()}c · ~${item.descriptionTokens}t always on</span>`
+    : '';
 
   let body = '';
-  if (item.body) {
-    body = `<pre class="body">${esc(item.body)}${item.truncated ? '\\n\\n… truncated' : ''}</pre>`;
-  } else if (item.kind === 'agent' || item.kind === 'command' || item.kind === 'skill') {
+  if (view.body) {
+    body = `<pre class="body">${esc(view.body)}${item.truncated ? '\\n\\n… truncated' : ''}</pre>`;
+  } else if (routable) {
     body = '<div class="path">Body not included in this build.</div>';
   }
 
@@ -987,13 +1111,14 @@ function card(item) {
         <span class="name">${esc(item.name)}</span>
         ${item.invocation ? `<span class="inv mono">${esc(item.invocation)}</span>` : ''}
         ${tags.join('')}
+        ${size}
       </div>
       ${desc}
     </summary>
     <div class="meta">
       ${kv ? `<div class="kv">${kv}</div>` : ''}
       ${body}
-      <div class="path mono">${esc(item.path)}</div>
+      <div class="path mono">${esc(view.path)}</div>
     </div>
   </details>`;
 }

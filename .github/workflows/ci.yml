@@ -1072,6 +1072,85 @@ jobs:
           fi
           echo "PASS: no external reference, env reported by name only"
 
+      - name: atlas pairs a translation mirror without counting it twice
+        # Only the source directory is loaded by Claude Code, so a mirror is a
+        # reading language rather than another agent. Counting it would inflate
+        # both the resource total and the always-on context figure.
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp -d)"
+          mkdir -p "$fixture/home/.claude/agents" "$fixture/home/.claude/agents-ko" \
+                   "$fixture/home/.claude/skills/tidy" "$fixture/home/.claude/skills-ko/tidy" \
+                   "$fixture/repo"
+          printf -- '---\nname: reviewer\ndescription: Reviews things.\n---\nsource body\n' \
+            > "$fixture/home/.claude/agents/reviewer.md"
+          # The mirror translates the name too — pairing must still work, which
+          # is why it is done by path and never by the name field.
+          printf -- '---\nname: 리뷰어\ndescription: 이것저것 검토합니다.\n---\n번역된 본문\n' \
+            > "$fixture/home/.claude/agents-ko/reviewer.md"
+          printf -- '---\nname: lonely\ndescription: Has no mirror.\n---\nbody\n' \
+            > "$fixture/home/.claude/agents/lonely.md"
+          printf -- '---\nname: tidy\ndescription: Tidies up.\n---\nbody\n' \
+            > "$fixture/home/.claude/skills/tidy/SKILL.md"
+          printf -- '---\nname: tidy\ndescription: 정리합니다.\n---\n본문\n' \
+            > "$fixture/home/.claude/skills-ko/tidy/SKILL.md"
+
+          python3 plugins/atlas/scripts/atlas.py --project "$fixture/repo" \
+            --user-root "$fixture/home/.claude" scan > "$fixture/graph.json"
+          python3 - "$fixture/graph.json" <<'PY'
+          import json, sys
+
+          graph = json.load(open(sys.argv[1]))
+          items = {(i["kind"], i["name"]): i for i in graph["items"]}
+          failures = []
+
+          if graph["languages"] != ["ko"]:
+              failures.append(f"languages is {graph['languages']!r}")
+
+          agents = [i for i in graph["items"] if i["kind"] == "agent"]
+          if len(agents) != 2:
+              failures.append(f"expected 2 agents, got {[a['name'] for a in agents]}")
+          if any(a["name"] == "리뷰어" for a in agents):
+              failures.append("the mirror was collected as its own agent")
+
+          reviewer = items.get(("agent", "reviewer"))
+          if reviewer is None:
+              failures.append("reviewer missing")
+          elif reviewer["translations"].get("ko", {}).get("description") != "이것저것 검토합니다.":
+              failures.append(f"reviewer ko translation not paired: {reviewer['translations']!r}")
+
+          skill = items.get(("skill", "tidy"))
+          if skill is None or "ko" not in skill["translations"]:
+              failures.append("the skill mirror was not paired")
+
+          lonely = items.get(("agent", "lonely"))
+          if lonely is None:
+              failures.append("lonely missing")
+          else:
+              if lonely["translations"]:
+                  failures.append("an item with no mirror was given one")
+              # A gap is only a gap where mirrors are kept at all.
+              if "ko" not in lonely.get("mirrorLangs", []):
+                  failures.append("a missing mirror in a mirrored directory was not flaggable")
+
+          # The mirror must not be charged for: only the source description is
+          # resident, so the total is the two source descriptions plus the skill.
+          expected = sum(
+              len(i["name"]) + len(i["description"])
+              for i in graph["items"] if i["kind"] in ("agent", "skill")
+          )
+          if graph["stats"]["residentChars"] != expected:
+              failures.append(
+                  f"residentChars {graph['stats']['residentChars']} != {expected} "
+                  "— a translation was counted as always-on context"
+              )
+
+          for line in failures:
+              print(f"FAIL: {line}")
+          sys.exit(1 if failures else 0)
+          PY
+          echo "PASS: mirror paired by path, not counted, not charged for"
+
       - name: atlas refuses to write into a scanned tree
         # A tool that reports on your config must not become part of what it
         # reports — and a viewer committed by accident names real paths.

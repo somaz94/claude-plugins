@@ -37,12 +37,38 @@ Viewer: /tmp/claude-atlas-acme-platform.html
 
 The page itself groups every resource by kind, and each row expands to the file's own source — the Markdown Claude Code actually reads, not a paraphrase of it.
 
-- **Search** across name, description, path and body at once.
+- **Search** across name, description, path and body at once — and across every translation, so a Korean term finds an item whose source description is English.
 - **Filter** by kind (commands, agents, skills, hooks, MCP, memory, plugins) and by layer (user, project, plugin).
 - **Needs attention** — one toggle that narrows to just the shadowed names, the dead hooks, and the items with no description.
-- Every row carries its layer, the plugin that supplied it, and the path it came from.
+- **Language** — switch the whole page between the source and any translation mirror you keep. See below.
+- Every row leads with **where it lives** — the repo name for a repo-scoped item, the config directory for a global one, the plugin for a plugin's — then its layer, and the always-on cost of its description.
 
 Light and dark both, following the browser.
+
+<br/>
+
+## Reading a description that was written as one line
+
+A `description` is a single unbroken line on disk, and a mature one runs past two thousand characters. Rendered verbatim that is a wall of text that buries the next row.
+
+So the viewer inserts a line break at each sentence end — the only reformatting it does, and it never alters the text itself — and clamps the collapsed row to three lines. Open the row to read the whole thing.
+
+Each routable row also carries what its description costs: `1,329c · ~332t always on`. That is the number to look at when one row is visibly longer than its neighbours.
+
+<br/>
+
+## Translation mirrors
+
+If you keep translations as sibling directories — `agents-ko` next to `agents`, `commands-ja` next to `commands` — atlas pairs them up and the viewer gets a language selector. Any two- or three-letter suffix works; there is no list of known languages to be added to.
+
+Pairing is **by path, never by the `name:` field**. A mirror whose frontmatter name was translated too would otherwise fail to pair with the file it is plainly a translation of.
+
+Two things follow from how Claude Code actually loads config, and the viewer reflects both:
+
+- A mirror is **not a second resource**. Only the source directory is loaded, so the mirror is attached to the item it translates rather than counted as another agent — the resource count and the context figure stay honest.
+- A mirror therefore **costs nothing at runtime**. Trimming a bloated Korean description saves zero tokens; it is worth doing to keep the pair aligned, not to buy back context.
+
+Switch to a language and any item that was *expected* to have a mirror but does not is tagged `no ko mirror`. Expected means the directory it came from keeps mirrors in that language at all — a plugin that keeps no translations is not incomplete, so it is never tagged.
 
 <br/>
 
