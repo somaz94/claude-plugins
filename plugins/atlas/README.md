@@ -47,11 +47,13 @@ Light and dark both, following the browser.
 
 <br/>
 
-## Reading a description that was written as one line
+## Reading what is on disk
 
-A `description` is a single unbroken line on disk, and a mature one runs past two thousand characters. Rendered verbatim that is a wall of text that buries the next row.
+Every item is Markdown, and the viewer renders it as Markdown — headings, tables, lists, blockquotes, fenced code, and the `` `backticks` `` that fill a description. The `raw source` toggle in the toolbar switches the whole page back to the unrendered text when you want to see exactly what the file says, byte for byte.
 
-So the viewer inserts a line break at each sentence end — the only reformatting it does, and it never alters the text itself — and clamps the collapsed row to three lines. Open the row to read the whole thing.
+Rendering means the page now interprets text it did not write, so the rule is absolute: **a document can never contribute markup.** Everything is escaped first and only then formatted, a `<script>` in an agent body renders as the visible text `<script>`, and a link becomes its text plus a muted target rather than a live anchor — this page promises no external reference, and an `href` is one. A CI check lifts the renderer out of the built page and runs it against hostile input to keep that true.
+
+A `description` is a single unbroken line on disk, and a mature one runs past two thousand characters. So the viewer also inserts a line break at each sentence end — the only reformatting it does to the text itself — and clamps the collapsed row to three lines. Open the row to read the whole thing.
 
 Each routable row also carries what its description costs: `1,329c · ~332t always on`. That is the number to look at when one row is visibly longer than its neighbours.
 

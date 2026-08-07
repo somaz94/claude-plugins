@@ -923,6 +923,37 @@ pre.body {
   padding: 12px; overflow-x: auto; font-size: 12.5px; line-height: 1.5;
   max-height: 460px; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word;
 }
+/* Rendered Markdown. Deliberately smaller than page type — this is a document
+   inside a card, not the page itself, so its h1 must not outrank the row name. */
+.md {
+  background: var(--code); border: 1px solid var(--line); border-radius: 6px;
+  padding: 14px 16px; font-size: 13.5px; line-height: 1.65;
+  max-height: 460px; overflow-y: auto; overflow-x: auto;
+}
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md h1, .md h2, .md h3, .md h4 {
+  font-size: 13px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--accent); margin: 18px 0 6px;
+}
+.md h3, .md h4 { text-transform: none; letter-spacing: 0; font-size: 13.5px; color: var(--ink); }
+.md p { margin: 8px 0; }
+.md ul, .md ol { margin: 8px 0; padding-left: 20px; }
+.md li { margin: 3px 0; }
+.md blockquote {
+  margin: 10px 0; padding: 6px 0 6px 12px;
+  border-left: 3px solid var(--accent); color: var(--muted);
+}
+.md code { background: var(--chip); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+.md pre { background: var(--chip); padding: 10px 12px; border-radius: 6px; overflow-x: auto; margin: 10px 0; }
+.md pre code { background: none; padding: 0; font-size: 12px; line-height: 1.5; }
+.md table { border-collapse: collapse; margin: 10px 0; font-size: 12.5px; display: block; overflow-x: auto; }
+.md th, .md td { border: 1px solid var(--line); padding: 5px 9px; text-align: left; vertical-align: top; }
+.md th { background: var(--chip); font-weight: 600; }
+.md hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+/* A link is rendered as its text plus a muted target. Never an anchor: this
+   page promises no external reference, and a live href is one. */
+.md .url { color: var(--muted); font-size: 11.5px; }
 .empty { color: var(--muted); padding: 40px 0; text-align: center; }
 .callout {
   border: 1px solid var(--warn); border-radius: 8px; padding: 12px 14px;
@@ -949,7 +980,7 @@ footer code { background: var(--code); padding: 1px 5px; border-radius: 4px; }
 <main id="list"></main>
 <footer>
   Regenerate with <code>/atlas:view</code>. This file is self-contained — no network requests, no server.
-  Bodies are shown as the Markdown source on disk, which is what Claude Code reads.
+  Bodies render as Markdown; the raw source toggle shows the file byte for byte.
 </footer>
 </div>
 <script id="atlas-data" type="application/json">__DATA__</script>
@@ -960,7 +991,7 @@ const KIND_LABEL = {
   hook: 'Hooks', mcp: 'MCP servers', memory: 'Memory', plugin: 'Plugins'
 };
 const KIND_ORDER = ['command', 'agent', 'skill', 'hook', 'mcp', 'memory', 'plugin'];
-const state = { q: '', kinds: new Set(), layers: new Set(), issuesOnly: false, lang: 'source' };
+const state = { q: '', kinds: new Set(), layers: new Set(), issuesOnly: false, lang: 'source', raw: false };
 
 // A description is stored as one unbroken line. Breaking at sentence ends is
 // the only reformatting done to it — the text itself is never altered.
@@ -982,6 +1013,99 @@ function inLang(item) {
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Inline Markdown, applied to already-escaped text so nothing in a scanned file
+// can inject markup. A link becomes its text plus a muted target rather than an
+// anchor — this page promises no external reference, and a live href is one.
+function inline(s) {
+  return esc(s)
+    .replace(/&lt;br\\s*\\/?&gt;/gi, '<br>')
+    .replace(/`([^`\\n]+)`/g, '<code>$1</code>')
+    .replace(/\\*\\*([^*\\n]+)\\*\\*/g, '<strong>$1</strong>')
+    .replace(/(^|[^*\\w])\\*([^*\\n]+)\\*/g, '$1<em>$2</em>')
+    .replace(/\\[([^\\]\\n]+)\\]\\(([^)\\n]+)\\)/g, '$1 <span class="url">$2</span>');
+}
+
+// A deliberately small block-level Markdown renderer: headings, fences, quotes,
+// lists, tables, rules. Anything it does not know stays a paragraph, which is
+// why an unsupported construct degrades to readable text instead of vanishing.
+function mdToHtml(src) {
+  const lines = String(src || '').split('\\n');
+  const out = [];
+  let list = null, fence = null, table = null, para = [];
+
+  const closeList = () => { if (list) { out.push('</' + list + '>'); list = null; } };
+  const closeTable = () => { if (table) { out.push('</tbody></table>'); table = null; } };
+  const closePara = () => {
+    if (para.length) { out.push('<p>' + inline(para.join('\\n')).replace(/\\n/g, '<br>') + '</p>'); para = []; }
+  };
+  const closeAll = () => { closePara(); closeList(); closeTable(); };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    const fenceMark = line.match(/^\\s*(`{3,}|~{3,})(.*)$/);
+    if (fenceMark) {
+      if (fence) { out.push('</code></pre>'); fence = null; }
+      else { closeAll(); fence = fenceMark[1]; out.push('<pre><code>'); }
+      continue;
+    }
+    if (fence) { out.push(esc(line) + '\\n'); continue; }
+
+    if (!line.trim()) { closeAll(); continue; }
+
+    const heading = line.match(/^(#{1,6})\\s+(.*)$/);
+    if (heading) {
+      closeAll();
+      const level = Math.min(heading[1].length + 2, 6);
+      out.push('<h' + level + '>' + inline(heading[2]) + '</h' + level + '>');
+      continue;
+    }
+
+    if (/^\\s*(---+|\\*\\*\\*+|___+)\\s*$/.test(line)) { closeAll(); out.push('<hr>'); continue; }
+
+    // A table needs its separator row to be a table at all; without it these
+    // are just lines that happen to contain pipes.
+    if (/^\\s*\\|/.test(line)) {
+      const cells = line.trim().replace(/^\\||\\|$/g, '').split('|').map(c => c.trim());
+      if (/^[\\s|:-]+$/.test(line) && table === 'head') { out.push('<tbody>'); table = 'body'; continue; }
+      if (!table) {
+        closePara(); closeList();
+        out.push('<table><thead><tr>' + cells.map(c => '<th>' + inline(c) + '</th>').join('') + '</tr></thead>');
+        table = 'head';
+        continue;
+      }
+      out.push('<tr>' + cells.map(c => '<td>' + inline(c) + '</td>').join('') + '</tr>');
+      continue;
+    }
+    closeTable();
+
+    const quote = line.match(/^\\s*&gt;\\s?(.*)$/) || line.match(/^\\s*>\\s?(.*)$/);
+    if (quote) {
+      closePara(); closeList();
+      out.push('<blockquote>' + inline(quote[1]) + '</blockquote>');
+      continue;
+    }
+
+    const bullet = line.match(/^\\s*[-*+]\\s+(.*)$/);
+    const numbered = line.match(/^\\s*\\d+[.)]\\s+(.*)$/);
+    if (bullet || numbered) {
+      const want = bullet ? 'ul' : 'ol';
+      closePara();
+      if (list !== want) { closeList(); out.push('<' + want + '>'); list = want; }
+      out.push('<li>' + inline((bullet || numbered)[1]) + '</li>');
+      continue;
+    }
+    closeList();
+
+    para.push(line);
+  }
+  if (fence) out.push('</code></pre>');
+  closeAll();
+  // Consecutive blockquote lines render as separate elements; merging them here
+  // is cheaper and safer than tracking quote state through the loop.
+  return out.join('').replace(/<\\/blockquote><blockquote>/g, '<br>');
 }
 
 function renderSummary() {
@@ -1036,11 +1160,19 @@ function renderFilters() {
     '<span class="sep"></span>' +
     '<button class="chip" data-issues="1" aria-pressed="false">needs attention</button>' +
     langs +
+    '<span class="sep"></span>' +
+    '<button class="chip" data-raw="1" aria-pressed="false">raw source</button>' +
     '<span class="count" id="count"></span>';
 
   el.addEventListener('click', e => {
     const b = e.target.closest('button.chip');
     if (!b) return;
+    if (b.dataset.raw) {
+      state.raw = b.getAttribute('aria-pressed') !== 'true';
+      b.setAttribute('aria-pressed', String(state.raw));
+      render();
+      return;
+    }
     if (b.dataset.lang) {
       state.lang = b.dataset.lang;
       el.querySelectorAll('button[data-lang]').forEach(other =>
@@ -1090,7 +1222,7 @@ function card(item) {
     .map(([k, v]) => `<span><b>${esc(k)}</b> ${esc(v)}</span>`).join('');
   const routable = ['agent', 'command', 'skill'].includes(item.kind);
   const desc = view.description
-    ? `<div class="desc">${esc(readable(view.description))}</div>`
+    ? `<div class="desc">${inline(readable(view.description))}</div>`
     : (routable ? '<div class="desc none">no description — this item cannot be routed to</div>' : '');
   // Only the source description is resident in every session; a mirror is read
   // by people, not by Claude Code, so it is never charged for.
@@ -1100,7 +1232,10 @@ function card(item) {
 
   let body = '';
   if (view.body) {
-    body = `<pre class="body">${esc(view.body)}${item.truncated ? '\\n\\n… truncated' : ''}</pre>`;
+    const text = view.body + (item.truncated ? '\\n\\n… truncated' : '');
+    body = state.raw
+      ? `<pre class="body">${esc(text)}</pre>`
+      : `<div class="md">${mdToHtml(text)}</div>`;
   } else if (routable) {
     body = '<div class="path">Body not included in this build.</div>';
   }

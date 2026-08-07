@@ -1151,6 +1151,84 @@ jobs:
           PY
           echo "PASS: mirror paired by path, not counted, not charged for"
 
+      - name: atlas renders Markdown without letting a scanned file inject markup
+        # The viewer renders each body as Markdown rather than as raw source, so
+        # it now interprets text it did not write. Two things must hold: the
+        # output is well-formed, and nothing in a scanned file can become live
+        # markup — a `<script>` in an agent body is text, always.
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp -d)"
+          mkdir -p "$fixture/home/.claude/agents" "$fixture/repo"
+          printf -- '---\nname: alpha\ndescription: an agent\n---\nbody\n' \
+            > "$fixture/home/.claude/agents/alpha.md"
+          python3 plugins/atlas/scripts/atlas.py --project "$fixture/repo" \
+            --user-root "$fixture/home/.claude" view --out "$fixture/out.html"
+
+          # Lift the page's own renderer out and run it on hostile input.
+          python3 - "$fixture/out.html" > "$fixture/render.js" <<'PY'
+          import pathlib, re, sys
+          js = re.findall(r'<script>(.*?)</script>', pathlib.Path(sys.argv[1]).read_text(), re.S)[-1]
+          js = js[: js.index("function renderSummary")]
+          js = js.replace(
+              "const DATA = JSON.parse(document.getElementById('atlas-data').textContent);",
+              "const DATA={};")
+          print(js)
+          print("module.exports = { esc, inline, mdToHtml };")
+          PY
+
+          node -e '
+          const { inline, mdToHtml } = require(process.argv[1]);
+          const failures = [];
+
+          const hostile = [
+            "# Heading",
+            "<script>alert(1)</script>",
+            "<img src=x onerror=alert(1)>",
+            "- item with `code` and **bold**",
+            "> quoted line",
+            "| a | b |",
+            "|---|---|",
+            "| 1 | 2 |",
+            "```bash",
+            "echo \"a<b\" && exit 1",
+            "```",
+            "trailing paragraph",
+          ].join("\n");
+          const html = mdToHtml(hostile);
+
+          // The precise invariant: every tag in the output was emitted by the
+          // renderer. Checking for substrings like "onerror=" instead would fire
+          // on the escaped text `&lt;img src=x onerror=...&gt;`, which is inert.
+          const allowed = new Set(["p","br","code","strong","em","h3","h4","h5","h6",
+            "ul","ol","li","blockquote","table","thead","tbody","tr","th","td","pre","hr","span"]);
+          const emitted = [...html.matchAll(/<\/?([a-zA-Z][a-zA-Z0-9]*)/g)].map(m => m[1].toLowerCase());
+          const unexpected = [...new Set(emitted)].filter(t => !allowed.has(t));
+          if (unexpected.length) failures.push("renderer emitted unexpected tags: " + unexpected.join(", "));
+          if (!html.includes("&lt;script&gt;")) failures.push("the script tag was not escaped as text");
+          if (!html.includes("&lt;img src=x onerror=")) failures.push("the img tag was not escaped as text");
+
+          for (const tag of ["p","ul","li","blockquote","table","thead","tbody","tr","th","td","pre","code","strong"]) {
+            const open = (html.match(new RegExp("<" + tag + "[ >]", "g")) || []).length;
+            const close = (html.match(new RegExp("</" + tag + ">", "g")) || []).length;
+            if (open !== close) failures.push(`unbalanced <${tag}>: ${open} open, ${close} close`);
+          }
+          for (const want of ["<h3>", "<table>", "<pre><code>", "<blockquote>", "<li>"]) {
+            if (!html.includes(want)) failures.push(`expected ${want} in the rendered output`);
+          }
+          if (html.includes("&amp;lt;")) failures.push("double-escaped output");
+
+          // A description is rendered with inline Markdown only.
+          const desc = inline("uses `~/PrivateWork/` and **bold** <script>x</script>");
+          if (!desc.includes("<code>~/PrivateWork/</code>")) failures.push("backticks not rendered in a description");
+          if (!desc.includes("<strong>bold</strong>")) failures.push("bold not rendered in a description");
+          if (desc.includes("<script")) failures.push("a description let markup through");
+
+          for (const line of failures) console.log("FAIL: " + line);
+          process.exit(failures.length ? 1 : 0);
+          ' "$fixture/render.js"
+          echo "PASS: Markdown rendered, document markup kept inert"
+
       - name: atlas refuses to write into a scanned tree
         # A tool that reports on your config must not become part of what it
         # reports — and a viewer committed by accident names real paths.
