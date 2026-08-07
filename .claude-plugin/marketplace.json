@@ -11,7 +11,7 @@
     {
       "name": "census",
       "source": "./plugins/census",
-      "version": "0.5.1",
+      "version": "0.5.2",
       "description": "Read-only audit of scattered .claude/ configs — catalog what you have, detect drift, and triage which items are portable enough to share with a team.",
       "category": "productivity",
       "license": "MIT",
@@ -29,7 +29,7 @@
     {
       "name": "atlas",
       "source": "./plugins/atlas",
-      "version": "0.5.0",
+      "version": "0.5.1",
       "description": "A browsable HTML map of every Claude Code resource a project can reach — commands, agents, skills, hooks, MCP servers and memory across your user config, this repo, and every installed plugin, plus a ranked report of what it all costs in always-on context.",
       "category": "productivity",
       "license": "MIT",
@@ -47,7 +47,7 @@
     {
       "name": "doc-mirror",
       "source": "./plugins/doc-mirror",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "description": "Keeps translated documentation pairs from drifting apart — finds the README whose mirror was never written, the mirror whose source moved on without it, and the half that lost a section, without ever guessing at translation quality.",
       "category": "productivity",
       "license": "MIT",
@@ -65,7 +65,7 @@
     {
       "name": "shell-portability",
       "source": "./plugins/shell-portability",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "description": "Reviews shell scripts for bash/zsh portability — catches BASH_SOURCE, array indexing, glob nomatch and word-splitting differences before the other shell hits them.",
       "category": "productivity",
       "license": "MIT",
@@ -83,7 +83,7 @@
     {
       "name": "session-continuity",
       "source": "./plugins/session-continuity",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "description": "Carries long-running work across context resets — keeps a plan file current as you go, and generates the handoff prompt that lets a fresh session pick up exactly where this one stopped.",
       "category": "productivity",
       "license": "MIT",
@@ -119,7 +119,7 @@
     {
       "name": "sensitive-guard",
       "source": "./plugins/sensitive-guard",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "description": "Stops a secret at the moment of commit — a last-mile gate that scans the lines a commit adds and blocks it, plus an on-demand scan of a whole repository before you publish.",
       "category": "productivity",
       "license": "MIT",

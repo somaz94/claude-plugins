@@ -1,6 +1,6 @@
 {
   "name": "sensitive-guard",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Stops a secret at the moment of commit — a last-mile gate that scans the lines a commit adds and blocks it, plus an on-demand scan of a whole repository before you publish.",
   "author": {
     "name": "somaz94",
