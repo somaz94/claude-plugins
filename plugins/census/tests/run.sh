@@ -639,3 +639,71 @@ sys.exit(1 if failures else 0)
 PY
 echo "PASS: real call flagged, example and comment left alone"
 )
+
+step 'census does not read a fenced shell comment as a heading'
+(
+set -euo pipefail
+fixture="$(mktemp -d)"
+mkdir -p "$fixture/home/.claude/agents" "$fixture/home/.claude/agents-ko"
+
+# An agent that documents its own CLI, and a faithful Korean translation of it.
+# Both halves have the same two headings, the same one code block and the same
+# two table rows — the only difference is prose, which is what translation is.
+#
+# Inside the fence there is a `#` comment and a line starting with `|`. Counting
+# those as a heading and a table row is what a naive line scan does, and because
+# the two halves comment their example differently, the counts came out unequal
+# and a faithful pair was reported as drift.
+body_en=$'# Agent\n\n```bash\n# run it like this\n| not a table row\n```\n\n## Options\n\n| flag | what |\n|---|---|\n'
+body_ko=$'# 에이전트\n\n```bash\n# 이렇게 실행합니다\n# 주석이 하나 더 있습니다\n| 표 행이 아닙니다\n```\n\n## 옵션\n\n| 플래그 | 설명 |\n|---|---|\n'
+printf -- '---\nname: cli\ndescription: an agent\n---\n%s' "$body_en" \
+  > "$fixture/home/.claude/agents/cli.md"
+printf -- '---\nname: cli\ndescription: 에이전트\n---\n%s' "$body_ko" \
+  > "$fixture/home/.claude/agents-ko/cli.md"
+
+cat > "$fixture/census.json" <<EOF
+{
+  "userRoots": ["$fixture/home/.claude"],
+  "projectRoots": [],
+  "excludeOssForks": false,
+  "pairs": {"agents": "agents-ko"}
+}
+EOF
+
+python3 plugins/census/scripts/census.py --config "$fixture/census.json" \
+  scan > "$fixture/graph.json"
+python3 plugins/census/scripts/census.py --config "$fixture/census.json" \
+  drift --json > "$fixture/drift.json"
+
+python3 - "$fixture/graph.json" "$fixture/drift.json" <<'PY'
+import json, sys
+
+graph = json.load(open(sys.argv[1]))
+failures = []
+
+item = next((i for i in graph["items"] if i["name"] == "cli"), None)
+if item is None:
+    failures.append("the agent was not collected")
+else:
+    shape = item["structure"]
+    want = {"headings": 2, "codeBlocks": 1, "tableRows": 2}
+    if shape != want:
+        failures.append(f"structure counted inside the fence: {shape} != {want}")
+    pair = item.get("pair") or {}
+    if pair.get("headings") != 2:
+        failures.append(f"the mirror's headings were miscounted: {pair.get('headings')}")
+
+# Same shape on both halves, so there is nothing for the drift report to say.
+drifted = [
+    f for f in json.load(open(sys.argv[2]))["findings"]
+    if f["code"].startswith("pair-")
+]
+if drifted:
+    failures.append(f"a faithful pair was reported as drift: {[f['title'] for f in drifted]}")
+
+for line in failures:
+    print(f"FAIL: {line}")
+sys.exit(1 if failures else 0)
+PY
+echo "PASS: fenced samples are not counted as structure, so the pair stays quiet"
+)

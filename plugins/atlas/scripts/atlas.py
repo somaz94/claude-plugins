@@ -46,9 +46,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, NamedTuple
 
-# Same ratio the rest of this marketplace uses when it estimates resident cost.
-# It is an estimate and is always labelled as one.
-CHARS_PER_TOKEN = 4
+# Vendored beside this file, never installed. Resolved from __file__ rather than
+# relied on through sys.path[0], so the module is found whether this script is
+# executed directly, symlinked onto PATH, or imported by a test.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _shared import (  # noqa: E402
+    CHARS_PER_TOKEN,
+    SCRIPT_SUFFIXES,
+    parse_frontmatter as _parse_frontmatter_offset,
+)
 
 # Frontmatter keys worth surfacing as their own chip in the viewer. Everything
 # else parsed out of the block is still carried, under `extra`.
@@ -74,10 +80,6 @@ KIND_ORDER = ("command", "agent", "skill", "hook", "mcp", "memory", "plugin")
 # order they are collected. Everything else about them differs only in how an
 # item is named and addressed — see `_item_key` and `Collector._collect_kind`.
 KIND_DIRS = {"agent": "agents", "command": "commands", "skill": "skills"}
-
-# A hook command word ending in one of these is a script even when it is
-# written without a directory, which is what separates `guard.sh` from `jq`.
-SCRIPT_SUFFIXES = (".sh", ".bash", ".zsh", ".py", ".js", ".mjs", ".ts", ".rb", ".pl")
 
 # The three scopes an item can come from, in resolution order. The JSON keeps
 # `user` — it is the name Claude Code's own docs use for the config directory —
@@ -109,51 +111,17 @@ KIND_PLURAL = {
 # --------------------------------------------------------------------------
 
 
-def unquote_scalar(value: str) -> str:
-    """Strip a YAML scalar's surrounding quotes and undo its escaping.
-
-    A `description` is quoted on disk whenever it contains a `: ` or a leading
-    indicator character, which is most of them. Without this the viewer would
-    render the quoting syntax itself as part of the text.
-    """
-    value = value.strip()
-    if len(value) >= 2 and value[0] == value[-1]:
-        if value[0] == "'":
-            return value[1:-1].replace("''", "'")
-        if value[0] == '"':
-            return re.sub(r"\\(.)", r"\1", value[1:-1])
-    return value
-
-
 def parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
     """Return (frontmatter, body). A file without a block yields ({}, text).
 
-    Deliberately a line parser rather than a YAML one: `yaml` is not in the
-    standard library, and requiring an install to read a file that Claude Code
-    itself reads with a tolerant parser would be the wrong trade. Continuation
-    lines of a folded scalar are appended to the key they belong to, so a
-    multi-line description survives instead of being truncated at the newline.
+    The parsing itself is shared; what this adds is the body as TEXT, which is
+    what a viewer wants, over the shared parser's character offset, which is
+    what a tool measuring the block's size wants.
     """
-    if not text.startswith("---"):
-        return {}, text
-
-    parts = text.split("---", 2)
-    if len(parts) < 3:
-        return {}, text
-
-    block, body = parts[1], parts[2]
-    data: dict[str, str] = {}
-    key: str | None = None
-    for line in block.splitlines():
-        if not line.strip():
-            continue
-        match = re.match(r"^([A-Za-z0-9_-]+):\s*(.*)$", line)
-        if match:
-            key = match.group(1)
-            data[key] = unquote_scalar(match.group(2))
-        elif key and line[:1] in " \t":
-            data[key] = (data[key] + " " + line.strip()).strip()
-    return data, body.lstrip("\n")
+    fields, offset = _parse_frontmatter_offset(text)
+    if not offset:
+        return fields, text
+    return fields, text[offset:].lstrip("\n")
 
 
 # --------------------------------------------------------------------------

@@ -162,6 +162,8 @@ A mirror normally differs from its source by a constant: a house style might pre
 
 So the offset is **calibrated per mirror directory** — whatever delta most of a directory's pairs share becomes its baseline, and only files that deviate from their own siblings are reported. No house style is hardcoded, so a convention this tool has never seen calibrates away just the same. Deviation counts in both directions: a file missing the banner its fifteen siblings all have is as much an outlier as one that added a section.
 
+Shape is counted **outside fenced blocks only**. Everything inside a fence is a sample rather than structure: a `# comment` in a shell block is not a heading and a `|` in a block of example output is not a table row. Counting them made any item that documents its own command line — which is most of them — look different from a translation that was in fact faithful, because the two halves comment their examples differently.
+
 Shape is not the whole story, though. Two files can match structurally while the mirror is months behind, and content cannot settle it — a translation is *supposed* to read differently, so diffing it reports translation as drift. Git history answers it instead: a source committed since its mirror last was means the mirror is behind, in any language. Untracked or uncommitted files get no verdict rather than a wrong one.
 
 **Hooks.** A hook is a pointer, and the file it points at can be absent — the registration stays in `settings.json`, so the hook looks configured while doing nothing. Nothing else reports this.

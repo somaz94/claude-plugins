@@ -42,6 +42,12 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable, NamedTuple
 
+# Vendored beside this file, never installed. Resolved from __file__ rather than
+# relied on through sys.path[0], so the module is found whether this script is
+# executed directly, symlinked onto PATH, or imported by a test.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _shared import Metrics, measure  # noqa: E402  (re-exported for readers of this file)
+
 # A mirror suffix: `README-ko.md`, `guide.ja.md`. Two or three lowercase letters,
 # optionally with a region (`pt-br`, `zh-hans`). No list of known languages —
 # the next one someone invents should work without an edit here.
@@ -98,97 +104,6 @@ STRONG_EVIDENCE = 0.5
 DRIFT_FLOOR = 4
 
 SEVERITY_ORDER = ("critical", "warning", "suggestion")
-
-
-class Metrics(NamedTuple):
-    """The shape of a Markdown file, with prose deliberately excluded.
-
-    Every one of these survives translation unchanged: a heading is still a
-    heading in Korean, a table still has the same number of rows, a fenced block
-    still holds the same command. Word counts and character counts do not
-    survive, which is exactly why they are not here.
-    """
-
-    headings: int
-    heading_levels: tuple[int, ...]
-    fences: int
-    table_rows: int
-    list_items: int
-    links: list[str]
-    spacers: int
-    headings_needing_spacer: list[tuple[int, str]]
-
-    def comparable(self) -> dict[str, int]:
-        return {
-            "headings": self.headings,
-            "code blocks": self.fences // 2,
-            "table rows": self.table_rows,
-            "list items": self.list_items,
-            "links": len(self.links),
-        }
-
-
-def measure(text: str) -> Metrics:
-    """Read a document's shape.
-
-    Fenced regions are tracked because everything inside one is a sample, not
-    structure: a `# comment` in a shell block is not a heading, and a `|` in a
-    table of example output is not a table row.
-    """
-    headings = 0
-    levels: list[int] = []
-    fences = 0
-    table_rows = 0
-    list_items = 0
-    links: list[str] = []
-    spacers = 0
-    unspaced: list[tuple[int, str]] = []
-
-    lines = text.splitlines()
-    in_fence = False
-    for index, line in enumerate(lines):
-        if re.match(r"^\s*(```|~~~)", line):
-            fences += 1
-            in_fence = not in_fence
-            continue
-        if in_fence:
-            continue
-
-        stripped = line.strip()
-        if stripped == "<br/>" or stripped == "<br>":
-            spacers += 1
-            continue
-
-        heading = re.match(r"^(#{1,6})\s+(.*)$", line)
-        if heading:
-            headings += 1
-            levels.append(len(heading.group(1)))
-            # Only a section heading needs a spacer above it. The document's
-            # own title has nothing to be separated from.
-            if len(heading.group(1)) >= 2 and index > 0:
-                previous = next(
-                    (l.strip() for l in reversed(lines[:index]) if l.strip()), ""
-                )
-                if previous not in ("<br/>", "<br>"):
-                    unspaced.append((index + 1, stripped))
-            continue
-
-        if stripped.startswith("|"):
-            table_rows += 1
-        if re.match(r"^\s*([-*+]|\d+[.)])\s+\S", line):
-            list_items += 1
-        links.extend(re.findall(r"\[[^\]\n]*\]\(([^)\s]+)", line))
-
-    return Metrics(
-        headings=headings,
-        heading_levels=tuple(levels),
-        fences=fences,
-        table_rows=table_rows,
-        list_items=list_items,
-        links=links,
-        spacers=spacers,
-        headings_needing_spacer=unspaced,
-    )
 
 
 @lru_cache(maxsize=None)

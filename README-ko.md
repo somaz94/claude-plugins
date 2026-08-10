@@ -64,7 +64,14 @@ plugins/<name>/                   플러그인당 디렉터리 하나
   commands/<command>.md           슬래시 커맨드, /<plugin>:<command> 로 호출
   hooks/hooks.json                훅 등록, ${CLAUDE_PLUGIN_ROOT} 기준 경로
   scripts/                        번들 실행 파일, ${CLAUDE_PLUGIN_ROOT} 로 참조
+    _shared.py                    각 플러그인에 동일하게 벤더링된 공용 헬퍼
 ```
+
+`_shared.py`는 **import 가 아니라 벤더링**입니다. 플러그인은 각자 따로 설치되므로 런타임에는 자기 디렉터리 밖의 것이 디스크에 없고, import 해 올 공용 패키지도 존재하지 않습니다. 그래서 모든 사본은 바이트 단위로 동일해야 하며, 어긋나면 CI가 실패합니다.
+
+이 검사는 형식적인 절차가 아닙니다. 검사가 없던 동안 이 헬퍼들은 각각 손으로 두 번씩 쓰여 있었고, 사본끼리 이미 어긋나 있었습니다. 한쪽 frontmatter 파서는 `''` 이스케이프를 풀었지만 다른 쪽은 그대로 텍스트로 보여 줬고, 한쪽 문서 구조 계산기는 펜스 코드블록 안의 `#`을 heading 으로 셌지만 다른 쪽은 세지 않았습니다. 설정 드리프트를 잡으라고 만든 도구 두 개가 정작 서로 드리프트해 있던 셈입니다.
+
+수정은 정본인 `plugins/census/scripts/_shared.py`에 하고, `bash tests/sync-shared.sh`로 나머지에 전파하세요.
 
 여기 모든 플러그인은 **두 곳**에 버전이 적히고 그 둘은 일치해야 합니다 — 자신의 `plugin.json`과 `marketplace.json`의 항목입니다. 사용자가 실제로 받는 버전은 마켓플레이스 항목 쪽이므로, 둘이 어긋나면 CI가 빌드를 실패시킵니다.
 

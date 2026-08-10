@@ -31,6 +31,17 @@ import sys
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
+# Vendored beside this file, never installed. Resolved from __file__ rather than
+# relied on through sys.path[0], so the module is found whether this script is
+# executed directly, symlinked onto PATH, or imported by a test.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _shared import (  # noqa: E402
+    CHARS_PER_TOKEN,
+    SCRIPT_SUFFIXES,
+    measure,
+    parse_frontmatter,
+)
+
 # Config file names, searched in this order. The first hit wins outright; the
 # files are not merged, so a project-local config is a complete override.
 CONFIG_NAMES = (".census.json", "census.json")
@@ -73,14 +84,6 @@ KNOWN_KEYS = (
     "argument-hint",
     "disable-model-invocation",
 )
-
-# A hook command word ending in one of these is a script even when it is
-# written without a directory, which is what separates `guard.sh` from `jq`.
-SCRIPT_SUFFIXES = (".sh", ".bash", ".zsh", ".py", ".js", ".mjs", ".ts", ".rb", ".pl")
-
-# Rough chars-per-token ratio for English prose. Used only for order-of-magnitude
-# context-budget reporting, never for anything that must be exact.
-CHARS_PER_TOKEN = 4
 
 # Git hosts shared by everyone. An `origin` on one of these says nothing about
 # who you are, so only the account segment of such a remote is a marker.
@@ -168,57 +171,6 @@ def load_config(explicit: str | None) -> tuple[dict[str, Any], str]:
     if explicit:
         raise SystemExit(f"census: config not found: {explicit}")
     return dict(DEFAULT_CONFIG), "(built-in defaults)"
-
-
-# --------------------------------------------------------------------------
-# frontmatter
-# --------------------------------------------------------------------------
-
-_FM_DELIM = re.compile(r"^---\s*$")
-_FM_KEY = re.compile(r"^([A-Za-z0-9_-]+):\s*(.*)$")
-
-
-def _unquote(value: str) -> str:
-    value = value.strip()
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-        return value[1:-1]
-    return value
-
-
-def parse_frontmatter(text: str) -> tuple[dict[str, str], int]:
-    """Parse a YAML-ish frontmatter block.
-
-    Deliberately a subset parser, not a YAML implementation: the stdlib has no
-    YAML and pulling a dependency would break the zero-install contract. It
-    handles what Claude Code frontmatter actually uses — ``key: value`` with
-    optional quotes, indented continuation lines, and inline ``[a, b]`` lists.
-
-    Returns (fields, body_offset) where body_offset is the character index at
-    which the body starts. Files without frontmatter yield ({}, 0).
-    """
-    lines = text.splitlines(keepends=True)
-    if not lines or not _FM_DELIM.match(lines[0].rstrip("\n")):
-        return {}, 0
-
-    fields: dict[str, str] = {}
-    key: str | None = None
-    consumed = len(lines[0])
-
-    for line in lines[1:]:
-        consumed += len(line)
-        stripped = line.rstrip("\n")
-        if _FM_DELIM.match(stripped):
-            break
-        match = _FM_KEY.match(stripped)
-        if match and not stripped.startswith((" ", "\t")):
-            key = match.group(1)
-            fields[key] = _unquote(match.group(2))
-        elif key and stripped.strip():
-            # Continuation of the previous value (folded multi-line string or a
-            # block list item). Join with a space so length metrics stay honest.
-            fields[key] = (fields[key] + " " + stripped.strip()).strip()
-
-    return fields, consumed
 
 
 # --------------------------------------------------------------------------
@@ -391,16 +343,22 @@ def _read_item(
 
 
 def _structure(text: str) -> dict[str, int]:
-    """Coarse shape of a Markdown document.
+    """Coarse shape of a Markdown document, under the keys `METRICS` compares.
 
     Used to compare a document against its translation without reading either:
     a mirror that lost a section, a code block or a table row has drifted even
     when both files still look plausible on their own.
+
+    The counting is fence-aware, which is not a detail: a README documenting its
+    own CLI is mostly shell blocks, and a `# comment` in one of them is not a
+    heading. Counting those made every such document look like it had drifted
+    from a translation that was in fact faithful.
     """
+    shape = measure(text)
     return {
-        "headings": len(re.findall(r"^#{1,6} ", text, re.M)),
-        "codeBlocks": text.count("```") // 2,
-        "tableRows": len(re.findall(r"^\|", text, re.M)),
+        "headings": shape.headings,
+        "codeBlocks": shape.code_blocks,
+        "tableRows": shape.table_rows,
     }
 
 

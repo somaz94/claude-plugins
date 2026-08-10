@@ -64,7 +64,14 @@ plugins/<name>/                   one directory per plugin
   commands/<command>.md           slash commands, invoked as /<plugin>:<command>
   hooks/hooks.json                hook registrations, rooted at ${CLAUDE_PLUGIN_ROOT}
   scripts/                        bundled executables, referenced via ${CLAUDE_PLUGIN_ROOT}
+    _shared.py                    helpers vendored identically into each plugin
 ```
+
+`_shared.py` is **vendored, not imported**. A plugin is installed on its own, so at runtime nothing outside its own directory is on disk and there is no shared package to import from. Every copy is therefore byte-identical, and CI fails when they diverge.
+
+That check is not ceremony. Before it existed these helpers were each written twice by hand and the copies had drifted: one frontmatter parser undid `''` escaping and the other showed it as text, and one document-shape counter read a `#` inside a fenced shell block as a heading while the other did not. Two tools built to detect configuration drift had drifted from each other.
+
+Edit `plugins/census/scripts/_shared.py` — the canonical copy — then run `bash tests/sync-shared.sh` to propagate it.
 
 Every plugin here is versioned in **two** places that must agree — its own `plugin.json` and its entry in `marketplace.json`. The marketplace entry is the version users actually receive, so CI fails the build when the two disagree.
 
