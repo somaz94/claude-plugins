@@ -89,6 +89,13 @@ claude plugin validate ./plugins/census # validate one plugin
 
 Run `/reload-plugins` inside a session to pick up edits without restarting.
 
+```bash
+bash tests/run.sh              # every check CI runs, before pushing
+bash tests/release-status.sh   # which plugins ship a version that was never tagged
+```
+
+`release-status` exists because a forgotten tag is silent. The version users receive is the one in `marketplace.json`, so a bump that lands on main is already published — the tag only carries the history. Nothing complains until the next release of that plugin, whose notes then cover both ranges at once, because git-cliff starts from that plugin's previous tag. It never fails a build: the bump commit legitimately reaches main before the tag exists.
+
 <br/>
 
 ## License

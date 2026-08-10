@@ -39,6 +39,13 @@ for suite in "${suites[@]}"; do
   fi
 done
 
+# Informational, and deliberately outside the pass/fail tally: a version bump
+# reaches main before its tag exists, so this is a reminder of what is still
+# owed, never a verdict on the working tree. `|| true` because a reminder must
+# not be able to fail a suite that passed.
+printf '\n'
+bash tests/release-status.sh || true
+
 printf '\n'
 if [ "$failed" -eq 0 ]; then
   echo "[PASS] every local suite passed"

@@ -89,6 +89,13 @@ claude plugin validate ./plugins/census # 플러그인 하나 검증
 
 세션 안에서 `/reload-plugins`를 실행하면 재시작 없이 편집분이 반영됩니다.
 
+```bash
+bash tests/run.sh              # 푸시 전에, CI가 돌리는 모든 검사
+bash tests/release-status.sh   # 태그 없이 배포 중인 플러그인 확인
+```
+
+`release-status`가 있는 이유는 태그를 잊어도 아무 소리가 나지 않기 때문입니다. 사용자가 받는 버전은 `marketplace.json`에 적힌 값이므로, main에 올라간 bump는 이미 배포된 상태이고 태그는 이력만 담습니다. 그래서 그 플러그인을 다음에 릴리스할 때가 되어서야 문제가 드러납니다. git-cliff가 그 플러그인의 직전 태그부터 범위를 잡으니, 노트가 두 구간을 한꺼번에 담게 됩니다. 이 검사는 빌드를 실패시키지 않습니다 — bump 커밋이 태그보다 먼저 main에 도달하는 건 정상적인 순서이기 때문입니다.
+
 <br/>
 
 ## 라이선스
