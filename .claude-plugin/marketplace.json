@@ -11,7 +11,7 @@
     {
       "name": "census",
       "source": "./plugins/census",
-      "version": "0.5.2",
+      "version": "0.6.0",
       "description": "Read-only audit of scattered .claude/ configs — catalog what you have, detect drift, and triage which items are portable enough to share with a team.",
       "category": "productivity",
       "license": "MIT",
@@ -29,7 +29,7 @@
     {
       "name": "atlas",
       "source": "./plugins/atlas",
-      "version": "0.5.1",
+      "version": "0.6.0",
       "description": "A browsable HTML map of every Claude Code resource a project can reach — commands, agents, skills, hooks, MCP servers and memory across your user config, this repo, and every installed plugin, plus a ranked report of what it all costs in always-on context.",
       "category": "productivity",
       "license": "MIT",
@@ -47,7 +47,7 @@
     {
       "name": "doc-mirror",
       "source": "./plugins/doc-mirror",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "description": "Keeps translated documentation pairs from drifting apart — finds the README whose mirror was never written, the mirror whose source moved on without it, and the half that lost a section, without ever guessing at translation quality.",
       "category": "productivity",
       "license": "MIT",
