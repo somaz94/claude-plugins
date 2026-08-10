@@ -852,3 +852,92 @@ grep -q 'not a scan written by atlas' "$fixture/err.txt" \
   || { echo "FAIL: unhelpful error for a non-scan file"; cat "$fixture/err.txt"; exit 1; }
 echo "PASS: diff reports added, removed and resized items with totals that agree"
 )
+
+step 'atlas shows a mirror that mirrors nothing, and does not bill for it'
+(
+set -euo pipefail
+fixture="$(mktemp -d)"
+mkdir -p "$fixture/home/.claude/agents" \
+         "$fixture/home/.claude/agents-ko" \
+         "$fixture/home/.claude/skills-ja/tidy" \
+         "$fixture/repo/.claude"
+# A properly paired agent, a source with no mirror, and two files that live in
+# a translation directory with nothing on the source side to translate. The
+# last two used to be dropped in silence — a tree whose agents were written in
+# Korean only reported zero agents.
+printf -- '---\nname: paired\ndescription: has a mirror\n---\nbody\n' \
+  > "$fixture/home/.claude/agents/paired.md"
+printf -- '---\nname: paired\ndescription: ko mirror\n---\nbody\n' \
+  > "$fixture/home/.claude/agents-ko/paired.md"
+printf -- '---\nname: lonely\ndescription: no mirror of its own\n---\nbody\n' \
+  > "$fixture/home/.claude/agents/lonely.md"
+printf -- '---\nname: orphan\ndescription: a mirror of nothing at all here\n---\nbody\n' \
+  > "$fixture/home/.claude/agents-ko/orphan.md"
+printf -- '---\nname: tidy\ndescription: a skill kept only in japanese\n---\nbody\n' \
+  > "$fixture/home/.claude/skills-ja/tidy/SKILL.md"
+
+python3 plugins/atlas/scripts/atlas.py --project "$fixture/repo" \
+  --user-root "$fixture/home/.claude" scan > "$fixture/graph.json"
+python3 - "$fixture/graph.json" <<'PY'
+import json, sys
+
+graph = json.load(open(sys.argv[1]))
+items = {(i["kind"], i["name"]): i for i in graph["items"]}
+failures = []
+
+def need(kind, name):
+    item = items.get((kind, name))
+    if item is None:
+        failures.append(f"{kind} {name!r} was not collected at all")
+    return item
+
+# Both unpaired mirrors are now visible rather than silently dropped.
+orphan = need("agent", "orphan")
+tidy = need("skill", "tidy")
+
+for item in (orphan, tidy):
+    if item is None:
+        continue
+    what = f"{item['kind']} {item['name']!r}"
+    # Visible, but never described as something a session can reach: Claude
+    # Code reads agents/, not agents-ko/.
+    if item.get("loaded") is not False:
+        failures.append(f"{what}: marked loaded, but nothing loads it")
+    if item.get("invocation"):
+        failures.append(f"{what}: offers an invocation it cannot honour")
+    if "not loaded" not in item.get("extra", {}):
+        failures.append(f"{what}: does not say why it is not loaded")
+    # No mirror is expected OF a mirror.
+    if item.get("mirrorLangs"):
+        failures.append(f"{what}: expects a mirror of itself: {item['mirrorLangs']}")
+
+paired = need("agent", "paired")
+if paired is not None and list(paired.get("translations", {})) != ["ko"]:
+    failures.append(f"the paired agent lost its mirror: {paired.get('translations')}")
+
+# The false warning this fixture exists to pin down: `lonely` has no ko mirror,
+# and the directory does keep ko mirrors, so the gap is real and expected.
+lonely = need("agent", "lonely")
+if lonely is not None and lonely.get("mirrorLangs") != ["ko"]:
+    failures.append(f"a real mirror gap stopped being reported: {lonely.get('mirrorLangs')}")
+
+# `ja` had exactly one file and it paired with nothing, so this tree does not
+# keep Japanese mirrors — offering `ja` in the viewer would reveal nothing.
+if graph["languages"] != ["ko"]:
+    failures.append(f"languages should be ['ko'], got {graph['languages']}")
+
+for line in failures:
+    print(f"FAIL: {line}")
+sys.exit(1 if failures else 0)
+PY
+
+# An unloaded file costs nothing, and the always-on total must say so.
+python3 plugins/atlas/scripts/atlas.py --project "$fixture/repo" \
+  --user-root "$fixture/home/.claude" budget > "$fixture/budget.txt"
+if grep -q 'orphan' "$fixture/budget.txt"; then
+  echo "FAIL: an unloaded file was charged to the always-on budget"
+  cat "$fixture/budget.txt"
+  exit 1
+fi
+echo "PASS: unpaired mirrors are surfaced, unbilled, and cost no false warnings"
+)

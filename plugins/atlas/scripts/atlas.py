@@ -198,6 +198,7 @@ class _Origin(NamedTuple):
 
 # Translation mirrors, keyed by the (kind, key) of the item they translate.
 Mirrors = dict[tuple[str, str], dict[str, Any]]
+MirrorFiles = dict[tuple[str, str], dict[str, Path]]
 
 
 def _registered_hooks(hooks: Any) -> Iterable[tuple[str, str, dict[str, Any]]]:
@@ -273,7 +274,7 @@ class Collector:
 
     # -- markdown-defined resources --------------------------------------
 
-    def collect_translations(self, config_dir: Path) -> Mirrors:
+    def collect_translations(self, config_dir: Path) -> tuple[Mirrors, MirrorFiles]:
         """Collect `<kind>-<lang>` mirror directories, keyed by (kind, key).
 
         A translation mirror is not a second resource — Claude Code loads only
@@ -284,10 +285,15 @@ class Collector:
         Matching is by path, never by the `name:` field: a mirror whose
         frontmatter name was translated too would otherwise fail to pair with
         the file it is plainly a translation of.
+
+        The second return value is each mirror's file on disk. A mirror that
+        pairs with nothing has to be re-read as an item in its own right, and
+        keeping the path here is cheaper than finding the file again.
         """
         found: Mirrors = {}
+        files: MirrorFiles = {}
         if not config_dir.is_dir():
-            return found
+            return found, files
 
         for directory in sorted(config_dir.iterdir()):
             if not directory.is_dir():
@@ -301,14 +307,13 @@ class Collector:
                 key = _item_key(kind, path, directory)
                 meta, body = parse_frontmatter(read_text(path))
                 text, _ = self._body(body)
-                entry = found.setdefault((kind, key), {})
-                entry[lang] = {
+                found.setdefault((kind, key), {})[lang] = {
                     "description": meta.get("description", ""),
                     "body": text,
                     "path": collapse_home(path),
                 }
-                self.languages.add(lang)
-        return found
+                files.setdefault((kind, key), {})[lang] = path
+        return found, files
 
     def collect_config_dir(
         self, config_dir: Path, layer: str, origin: str, namespace: str | None = None
@@ -322,16 +327,40 @@ class Collector:
         if not config_dir.is_dir():
             return {kind: 0 for kind in KIND_DIRS}
 
-        mirrors = self.collect_translations(config_dir)
+        mirrors, mirror_files = self.collect_translations(config_dir)
+        # Which items exist on the source side. Listed before anything is
+        # collected rather than during, because `here` below has to be settled
+        # before the first item is added and it depends on the answer.
+        sources = {
+            (kind, _item_key(kind, path, config_dir / KIND_DIRS[kind]))
+            for kind in KIND_DIRS
+            for path in (config_dir / KIND_DIRS[kind]).rglob(_glob_for(kind))
+        }
         # Which languages this directory keeps mirrors in at all. An item here
         # with no mirror is a gap only against this list.
-        here = sorted({lang for entry in mirrors.values() for lang in entry})
+        #
+        # Counted from mirrors that PAIRED, not from every mirror file found: a
+        # directory whose only Korean file is an unpaired one does not keep
+        # Korean mirrors, and treating it as if it did put a "no ko mirror"
+        # warning on every sibling that never had a counterpart to lose.
+        here = sorted({
+            lang
+            for key, entry in mirrors.items()
+            if key in sources
+            for lang in entry
+        })
+        self.languages.update(here)
         where = _Origin(layer=layer, origin=origin, namespace=namespace or "")
 
-        return {
+        counts = {
             kind: self._collect_kind(config_dir, kind, where, mirrors, here)
             for kind in KIND_DIRS
         }
+        for kind, count in self._collect_unpaired_mirrors(
+            mirrors, mirror_files, sources, where
+        ).items():
+            counts[kind] += count
+        return counts
 
     def _collect_kind(
         self, config_dir: Path, kind: str, where: _Origin, mirrors: Mirrors, langs: list[str]
@@ -347,34 +376,107 @@ class Collector:
         directory = config_dir / KIND_DIRS[kind]
         count = 0
         for path in sorted(directory.rglob(_glob_for(kind))):
-            meta, body = parse_frontmatter(read_text(path))
             key = _item_key(kind, path, directory)
-            text, truncated = self._body(body)
-            extra = self._extra(meta)
-            name, invocation = self._identify(kind, path, meta, key, where.namespace)
-            # A skill can ship references, scripts and templates beside its
-            # SKILL.md. They are not separate resources, but their number says
-            # whether this is a prompt or a small program.
-            bundled = self._bundled(path) if kind == "skill" else None
-            if bundled:
-                extra["bundled files"] = f"{len(bundled)}"
-            self.add(
-                kind=kind,
-                name=name,
-                key=key,
-                translations=mirrors.get((kind, key), {}),
-                mirrorLangs=langs,
-                invocation=invocation,
-                description=meta.get("description", ""),
-                **where.fields(),
-                path=collapse_home(path),
-                body=text,
-                truncated=truncated,
-                extra=extra,
-                **({"bundled": bundled} if bundled is not None else {}),
+            self._collect_one(
+                kind, path, key, where, mirrors.get((kind, key), {}), langs
             )
             count += 1
         return count
+
+    def _collect_unpaired_mirrors(
+        self,
+        mirrors: Mirrors,
+        files: MirrorFiles,
+        sources: set[tuple[str, str]],
+        where: _Origin,
+    ) -> dict[str, int]:
+        """Surface mirror files that mirror nothing.
+
+        `agents-ko/reviewer.md` with no `agents/reviewer.md` beside it used to
+        vanish: it was collected as a translation, found no item to attach to,
+        and was dropped without a word — so a tree whose agents were written in
+        Korean only reported zero agents.
+
+        Reporting it as a normal item would be the opposite error. Claude Code
+        reads `agents/`, never `agents-ko/`, so this file is not loaded and
+        costs nothing; it only LOOKS like a resource. That is the same quiet
+        failure as a hook pointing at a script that is not there, and it is
+        reported the same way — present, visible, and marked unreachable.
+
+        The first language alphabetically supplies the item's own text and the
+        rest stay attached as translations, so `agents-ko` + `agents-ja` of the
+        same missing source is one finding rather than two.
+        """
+        counts = {kind: 0 for kind in KIND_DIRS}
+        for (kind, key), by_lang in sorted(files.items()):
+            if (kind, key) in sources:
+                continue
+            lang = sorted(by_lang)[0]
+            others = {
+                other: text
+                for other, text in mirrors[(kind, key)].items()
+                if other != lang
+            }
+            self._collect_one(
+                kind,
+                by_lang[lang],
+                key,
+                where,
+                others,
+                # No mirror is expected OF a mirror. Passing the directory's
+                # languages here would put "no ko mirror" on the ko file itself.
+                langs=[],
+                loaded=False,
+                note=(
+                    f"in {KIND_DIRS[kind]}-{lang}/ with no {KIND_DIRS[kind]}/ "
+                    f"counterpart — Claude Code does not load it"
+                ),
+            )
+            counts[kind] += 1
+        return counts
+
+    def _collect_one(
+        self,
+        kind: str,
+        path: Path,
+        key: str,
+        where: _Origin,
+        translations: dict[str, Any],
+        langs: list[str],
+        loaded: bool = True,
+        note: str = "",
+    ) -> None:
+        """Read one Markdown-defined item off disk and add it."""
+        meta, body = parse_frontmatter(read_text(path))
+        text, truncated = self._body(body)
+        extra = self._extra(meta)
+        name, invocation = self._identify(kind, path, meta, key, where.namespace)
+        # A skill can ship references, scripts and templates beside its
+        # SKILL.md. They are not separate resources, but their number says
+        # whether this is a prompt or a small program.
+        bundled = self._bundled(path) if kind == "skill" else None
+        if bundled:
+            extra["bundled files"] = f"{len(bundled)}"
+        if note:
+            extra["not loaded"] = note
+        self.add(
+            kind=kind,
+            name=name,
+            key=key,
+            translations=translations,
+            mirrorLangs=langs,
+            # An unreachable item has no invocation worth printing: showing the
+            # slash command would say it can be typed, and it cannot.
+            invocation=invocation if loaded else "",
+            description=meta.get("description", ""),
+            **where.fields(),
+            path=collapse_home(path),
+            body=text,
+            truncated=truncated,
+            extra=extra,
+            loaded=loaded,
+            **({"bundled": bundled} if bundled is not None else {}),
+        )
 
     @staticmethod
     def _identify(
@@ -805,6 +907,8 @@ def detect_conflicts(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
             continue
         if item["kind"] in ("command", "skill") and item["namespace"]:
             continue  # namespaced by its plugin; cannot be shadowed
+        if item.get("loaded") is False:
+            continue  # never loaded, so it can neither shadow nor be shadowed
         groups.setdefault((item["kind"], item["name"]), []).append(item)
 
     conflicts = []
@@ -843,7 +947,13 @@ def is_resident(item: dict[str, Any]) -> bool:
     A separate question from a non-zero `item_chars`: an empty CLAUDE.md costs
     nothing and is still part of its layer's bill, so the two must not be
     collapsed into one truth test.
+
+    An item Claude Code never loads is not on the bill at all — charging for a
+    file in `agents-ko/` would inflate the very number this tool exists to
+    report, and by the size of a whole translation tree.
     """
+    if item.get("loaded") is False:
+        return False
     return item["kind"] in RESIDENT_KINDS or item["kind"] == "memory"
 
 
@@ -855,6 +965,8 @@ def item_chars(item: dict[str, Any]) -> int:
     item before summing gives a total that disagrees with flooring once at the
     end — a one-token discrepancy that reads as a bug in the arithmetic.
     """
+    if not is_resident(item):
+        return 0
     if item["kind"] in RESIDENT_KINDS:
         return int(item.get("descriptionChars", 0))
     if item["kind"] == "memory":

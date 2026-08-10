@@ -474,7 +474,7 @@ function matches(item) {
   if (state.kinds.size && !state.kinds.has(item.kind)) return false;
   if (state.layers.size && !state.layers.has(item.layer)) return false;
   if (state.issuesOnly) {
-    const bad = item.conflicted || item.resolves === false ||
+    const bad = item.conflicted || item.resolves === false || item.loaded === false ||
       (!item.description && ['agent', 'command', 'skill'].includes(item.kind));
     if (!bad) return false;
   }
@@ -500,6 +500,9 @@ function card(item) {
   }
   if (item.conflicted) tags.push('<span class="tag warn">shadowed</span>');
   if (item.resolves === false) tags.push('<span class="tag warn">missing script</span>');
+  // A file sitting in a translation directory with nothing to translate. It
+  // reads as a resource and is never loaded; `extra["not loaded"]` says why.
+  if (item.loaded === false) tags.push('<span class="tag warn">not loaded</span>');
   if (item.enabled === false) tags.push('<span class="tag warn">disabled</span>');
   if (view.missing) tags.push(`<span class="tag warn">no ${esc(state.lang)} mirror</span>`);
 

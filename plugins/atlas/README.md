@@ -77,7 +77,17 @@ Two things follow from how Claude Code actually loads config, and the viewer ref
 - A mirror is **not a second resource**. Only the source directory is loaded, so the mirror is attached to the item it translates rather than counted as another agent — the resource count and the context figure stay honest.
 - A mirror therefore **costs nothing at runtime**. Trimming a bloated Korean description saves zero tokens; it is worth doing to keep the pair aligned, not to buy back context.
 
-Switch to a language and any item that was *expected* to have a mirror but does not is tagged `no ko mirror`. Expected means the directory it came from keeps mirrors in that language at all — a plugin that keeps no translations is not incomplete, so it is never tagged.
+Switch to a language and any item that was *expected* to have a mirror but does not is tagged `no ko mirror`. Expected means the directory it came from keeps mirrors in that language **that actually pair with something** — a plugin that keeps no translations is not incomplete, so it is never tagged, and neither is a directory whose only translated file turns out to translate nothing.
+
+<br/>
+
+### A mirror with nothing to mirror
+
+`agents-ko/reviewer.md` with no `agents/reviewer.md` beside it is a file that looks like a resource and is never loaded, because Claude Code reads `agents/` and not `agents-ko/`. It is shown, tagged `not loaded`, and the reason is on the item.
+
+That is deliberately neither of the two easier answers. Hiding it means a tree whose agents were only ever written in Korean reports zero agents. Listing it normally means claiming a session can reach something it cannot, and billing its description to a context budget that never pays for it. So it is present, visible under **Issues only**, and charged nothing.
+
+The usual cause is a source file that was renamed or deleted while its translation stayed behind.
 
 <br/>
 
