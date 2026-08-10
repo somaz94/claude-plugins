@@ -91,14 +91,34 @@ jobs:
       - name: Byte-compile
         run: python3 -m compileall -q plugins
 
-      - name: census tests
-        run: bash plugins/census/tests/run.sh
-
-      - name: atlas tests
-        run: bash plugins/atlas/tests/run.sh
-
-      - name: doc-mirror tests
-        run: bash plugins/doc-mirror/tests/run.sh
+      - name: Plugin test suites
+        # Discovered, not listed. Naming each suite here meant a new plugin's
+        # tests ran locally and silently did not run in CI — the one place the
+        # result is authoritative. tests/run.sh globs the same way, so the two
+        # cannot disagree about which suites exist.
+        run: |
+          set -euo pipefail
+          found=0
+          failed=0
+          for suite in plugins/*/tests/run.sh; do
+            [ -f "$suite" ] || continue
+            found=$((found + 1))
+            echo "::group::$suite"
+            if bash "$suite"; then
+              echo "::endgroup::"
+              echo "[PASS] $suite"
+            else
+              echo "::endgroup::"
+              echo "[FAIL] $suite"
+              failed=1
+            fi
+          done
+          if [ "$found" -eq 0 ]; then
+            echo "[FAIL] no plugin test suites found — the glob is wrong"
+            exit 1
+          fi
+          echo "ran $found plugin test suite(s)"
+          exit "$failed"
 
   ci-result:
     name: CI Result
