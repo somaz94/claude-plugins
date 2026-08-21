@@ -6,9 +6,18 @@
 
 `README.md` 옆에 `README-ko.md`를 두는 저장소는 지킬 방법이 없는 약속을 한 셈입니다. 한쪽만 고쳐도 모든 검사가 통과합니다. 빌드는 초록색이고, 린터는 조용하고, diff는 의도적으로 보이고, 리뷰어 눈에는 파일 하나만 들어옵니다. 그 쌍을 지켜보는 것이 어디에도 없습니다. 몇 달 뒤 미러는 박제가 되어 있고, 그 언어를 고른 독자는 지난 분기 지침을 따르고 있습니다.
 
-```bash
+Claude Code 세션 안에서:
+
+```
 /plugin marketplace add somaz94/claude-plugins
 /plugin install doc-mirror@somaz94
+```
+
+대화형 세션에 들어가지 않고 셸에서 바로 설치하려면:
+
+```bash
+claude plugin marketplace add somaz94/claude-plugins
+claude plugin install doc-mirror@somaz94
 ```
 
 설치한 뒤 아무 저장소에서나:

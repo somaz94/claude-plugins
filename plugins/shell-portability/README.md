@@ -4,9 +4,18 @@ Reviews shell scripts for one thing: whether they run correctly under **both bas
 
 > 한국어 문서는 [README-ko.md](README-ko.md)를 참고하세요.
 
-```bash
+In Claude Code:
+
+```
 /plugin marketplace add somaz94/claude-plugins
 /plugin install shell-portability@somaz94
+```
+
+Or from your shell, without an interactive session:
+
+```bash
+claude plugin marketplace add somaz94/claude-plugins
+claude plugin install shell-portability@somaz94
 ```
 
 <br/>

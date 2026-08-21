@@ -6,9 +6,18 @@
 
 사용자 수준의 `~/.claude/`에 더해 저장소마다 `.claude/` 디렉터리가 생기고 나면, 답하기 어려워지는 질문이 세 가지 생깁니다. 그런데 이 질문에 답해 주는 기본 기능은 없습니다. `census`가 답하되, 아무것도 바꾸지 않습니다.
 
-```bash
+Claude Code 세션 안에서:
+
+```
 /plugin marketplace add somaz94/claude-plugins
 /plugin install census@somaz94
+```
+
+대화형 세션에 들어가지 않고 셸에서 바로 설치하려면:
+
+```bash
+claude plugin marketplace add somaz94/claude-plugins
+claude plugin install census@somaz94
 ```
 
 <br/>

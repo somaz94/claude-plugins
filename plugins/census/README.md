@@ -6,9 +6,18 @@ Read-only audit of scattered Claude Code configuration.
 
 Once you have a user-level `~/.claude/` plus a `.claude/` directory in every repo, three questions get hard to answer and nothing built in answers them. `census` answers them and changes nothing.
 
-```bash
+In Claude Code:
+
+```
 /plugin marketplace add somaz94/claude-plugins
 /plugin install census@somaz94
+```
+
+Or from your shell, without an interactive session:
+
+```bash
+claude plugin marketplace add somaz94/claude-plugins
+claude plugin install census@somaz94
 ```
 
 <br/>

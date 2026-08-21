@@ -6,9 +6,18 @@
 
 세션은 네 개 레이어를 한꺼번에 해석합니다 — 사용자 설정, 이 저장소의 `.claude/`, 설치된 모든 플러그인, 그리고 그 사이 설정 파일들이 등록한 훅. 그런데 네 개를 한자리에 놓고 보여주는 건 어디에도 없습니다. `/help`는 커맨드를 나열할 뿐 출처를 말해 주지 않고, `claude plugin details`는 플러그인 하나만 다루며, `/plugin install` 직후 *방금 그게 여기에 뭘 추가했는지*에는 아예 답이 없습니다.
 
-```bash
+Claude Code 세션 안에서:
+
+```
 /plugin marketplace add somaz94/claude-plugins
 /plugin install atlas@somaz94
+```
+
+대화형 세션에 들어가지 않고 셸에서 바로 설치하려면:
+
+```bash
+claude plugin marketplace add somaz94/claude-plugins
+claude plugin install atlas@somaz94
 ```
 
 설치한 뒤 아무 세션에서나:

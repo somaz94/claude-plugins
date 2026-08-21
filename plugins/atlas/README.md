@@ -6,9 +6,18 @@ A browsable map of every Claude Code resource a project can reach.
 
 A session resolves four layers at once — your user config, this repo's `.claude/`, every installed plugin, and the hooks registered by the settings files in between. Nothing shows you all four together. `/help` lists commands without saying where they came from, `claude plugin details` covers one plugin, and after a `/plugin install` there is no answer at all to *what did that just add here*.
 
-```bash
+In Claude Code:
+
+```
 /plugin marketplace add somaz94/claude-plugins
 /plugin install atlas@somaz94
+```
+
+Or from your shell, without an interactive session:
+
+```bash
+claude plugin marketplace add somaz94/claude-plugins
+claude plugin install atlas@somaz94
 ```
 
 Then, in any session:

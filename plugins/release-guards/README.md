@@ -4,9 +4,18 @@ Puts a confirmation in front of the release actions you cannot take back.
 
 > 한국어 문서는 [README-ko.md](README-ko.md)를 참고하세요.
 
-```bash
+In Claude Code:
+
+```
 /plugin marketplace add somaz94/claude-plugins
 /plugin install release-guards@somaz94
+```
+
+Or from your shell, without an interactive session:
+
+```bash
+claude plugin marketplace add somaz94/claude-plugins
+claude plugin install release-guards@somaz94
 ```
 
 <br/>

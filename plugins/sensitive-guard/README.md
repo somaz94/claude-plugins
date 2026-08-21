@@ -4,9 +4,18 @@ Stops a secret at the moment of commit.
 
 > 한국어 문서는 [README-ko.md](README-ko.md)를 참고하세요.
 
-```bash
+In Claude Code:
+
+```
 /plugin marketplace add somaz94/claude-plugins
 /plugin install sensitive-guard@somaz94
+```
+
+Or from your shell, without an interactive session:
+
+```bash
+claude plugin marketplace add somaz94/claude-plugins
+claude plugin install sensitive-guard@somaz94
 ```
 
 <br/>

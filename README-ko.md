@@ -4,9 +4,18 @@
 
 > 이 문서는 [README.md](README.md)의 한국어판입니다. 내용이 어긋날 경우 영문판이 기준입니다.
 
-```bash
+Claude Code 세션 안에서:
+
+```
 /plugin marketplace add somaz94/claude-plugins
 /plugin install census@somaz94
+```
+
+대화형 세션에 들어가지 않고 셸에서 바로 설치하려면:
+
+```bash
+claude plugin marketplace add somaz94/claude-plugins
+claude plugin install census@somaz94
 ```
 
 <br/>

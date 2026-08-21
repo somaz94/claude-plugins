@@ -6,9 +6,18 @@ Keeps translated documentation pairs from drifting apart.
 
 A repository that ships `README.md` beside `README-ko.md` has made a promise it has no way to keep. Edit one half and not the other and every check still passes: the build is green, the linter is quiet, the diff looks deliberate, and the review sees one file. Nothing anywhere is watching the pair. Months later the mirror is a museum piece, and the reader who picked that language is following last quarter's instructions.
 
-```bash
+In Claude Code:
+
+```
 /plugin marketplace add somaz94/claude-plugins
 /plugin install doc-mirror@somaz94
+```
+
+Or from your shell, without an interactive session:
+
+```bash
+claude plugin marketplace add somaz94/claude-plugins
+claude plugin install doc-mirror@somaz94
 ```
 
 Then, in any repository:
