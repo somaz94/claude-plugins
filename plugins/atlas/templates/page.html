@@ -9,13 +9,13 @@
   color-scheme: light dark;
   --bg: #fbfbfa; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66;
   --line: #e3e3df; --accent: #b4551d; --warn: #a8341f; --ok: #2f6b45;
-  --chip: #f0f0ec; --code: #f5f5f2;
+  --chip: #f0f0ec; --code: #f5f5f2; --hl: #ffdf7e; --hl-ink: #1d1d1b;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #161614; --panel: #1e1e1b; --ink: #eceae5; --muted: #9c9a93;
     --line: #33322e; --accent: #e08b4f; --warn: #e07a63; --ok: #7ec295;
-    --chip: #2a2a26; --code: #232320;
+    --chip: #2a2a26; --code: #232320; --hl: #7a5f12; --hl-ink: #f7f0dd;
   }
 }
 * { box-sizing: border-box; }
@@ -41,6 +41,26 @@ header .sub code { background: var(--code); padding: 1px 5px; border-radius: 4px
   background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
 }
 #q:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+/* The query language is only worth having if it is visible. One muted line
+   under the box teaches it at less cost than a help panel nobody opens. */
+.qhelp {
+  display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
+  margin-top: 6px; color: var(--muted); font-size: 11.5px;
+}
+.qhelp code, .qhelp kbd {
+  background: var(--code); border: 1px solid var(--line); border-radius: 4px;
+  padding: 0 5px; font-size: 11px;
+}
+mark { background: var(--hl); color: var(--hl-ink); border-radius: 3px; padding: 0 1px; }
+/* Why a row matched, when the answer is not on screen. A body hit is buried in
+   a collapsed card, so the sentence that matched is lifted into the summary —
+   otherwise the row looks like a false positive. */
+.hit { display: flex; gap: 8px; align-items: baseline; margin-top: 6px; font-size: 12.5px; color: var(--muted); }
+.hit .where {
+  flex: none; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--accent);
+}
+.hit .snippet { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+details[open] .hit .snippet { white-space: normal; }
 .filters { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; align-items: center; }
 .filters .sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
 button.chip {
@@ -154,7 +174,11 @@ footer code { background: var(--code); padding: 1px 5px; border-radius: 4px; }
 </header>
 <div id="summary"></div>
 <div class="toolbar">
-  <input id="q" type="search" placeholder="Search name, description, path, or body…" autocomplete="off">
+  <input id="q" type="search" placeholder="Search everything — or narrow: kind:agent  path:hooks  &quot;exact phrase&quot;  -exclude" autocomplete="off">
+  <div class="qhelp" id="qhelp">
+    <code>kind:agent</code><code>scope:project</code><code>origin:atlas</code><code>name:review</code><code>path:hooks</code><code>desc:git</code><code>body:rebase</code><code>"exact phrase"</code><code>-exclude</code><code>is:shadowed</code>
+    <span><kbd>/</kbd> focus · <kbd>Esc</kbd> clear · <kbd>Enter</kbd> open top hit</span>
+  </div>
   <div class="filters" id="filters"></div>
 </div>
 <main id="list"></main>
@@ -179,8 +203,17 @@ const LAYER_LABEL = { user: 'Global', project: 'Project', plugin: 'Plugins' };
 const CHARS_PER_TOKEN = 4;
 const state = {
   q: '', kinds: new Set(), layers: new Set(),
-  issuesOnly: false, lang: 'source', raw: false, group: 'scope', sort: 'name'
+  issuesOnly: false, lang: 'source', raw: false, group: 'scope', sort: 'relevance',
+  // Whether a bare word is allowed to match text that is not on the row —
+  // the body, the path, the origin. On, one word can pull in half the map
+  // through bodies nobody is reading; off, the list only holds rows whose
+  // visible text matched. An explicit `body:` term ignores this: it was asked
+  // for outright.
+  deep: true
 };
+// The parsed form of state.q, refreshed once per render rather than once per
+// item. Everything downstream — matching, ranking, highlighting — reads this.
+let terms = [];
 
 // Filters survive a regenerate. Rebuilding the map is how you check whether a
 // change landed, and losing the four chips you had set every time makes that
@@ -193,7 +226,7 @@ function saveState() {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify({
       kinds: [...state.kinds], layers: [...state.layers], issuesOnly: state.issuesOnly,
-      lang: state.lang, raw: state.raw, group: state.group, sort: state.sort,
+      lang: state.lang, raw: state.raw, group: state.group, sort: state.sort, deep: state.deep,
     }));
   } catch (e) {
     // A file:// page in private mode has no storage. Not being able to remember
@@ -216,8 +249,9 @@ function loadState() {
   state.layers = new Set((saved.layers || []).filter(l => layers.has(l)));
   state.issuesOnly = !!saved.issuesOnly;
   state.raw = !!saved.raw;
+  if ('deep' in saved) state.deep = !!saved.deep;
   if (['scope', 'kind'].includes(saved.group)) state.group = saved.group;
-  if (['name', 'size'].includes(saved.sort)) state.sort = saved.sort;
+  if (['relevance', 'name', 'size'].includes(saved.sort)) state.sort = saved.sort;
   if (saved.lang === 'source' || DATA.languages.includes(saved.lang)) state.lang = saved.lang;
 }
 
@@ -415,7 +449,9 @@ function renderFilters() {
     `<button class="chip" data-group="${g}" aria-pressed="${g === state.group}">group: ${g}</button>`).join('');
   // Sorting by size answers a question the order on disk cannot: which
   // descriptions are actually paying for the context this session costs.
-  const sorts = ['name', 'size'].map(s =>
+  // Relevance is the default and does nothing until you type: with no query
+  // there is no ranking to apply, so the order on disk stands.
+  const sorts = ['relevance', 'name', 'size'].map(s =>
     `<button class="chip" data-sort="${s}" aria-pressed="${s === state.sort}">sort: ${s}</button>`).join('');
   el.innerHTML =
     kinds.map(k => `<button class="chip" data-kind="${k}" aria-pressed="${state.kinds.has(k)}">${esc(KIND_LABEL[k] || k)}</button>`).join('') +
@@ -426,6 +462,7 @@ function renderFilters() {
     sorts +
     '<span class="sep"></span>' +
     `<button class="chip" data-issues="1" aria-pressed="${state.issuesOnly}">needs attention</button>` +
+    `<button class="chip" data-deep="1" aria-pressed="${state.deep}">search bodies</button>` +
     langs +
     '<span class="sep"></span>' +
     `<button class="chip" data-raw="1" aria-pressed="${state.raw}">raw source</button>` +
@@ -434,6 +471,12 @@ function renderFilters() {
   el.addEventListener('click', e => {
     const b = e.target.closest('button.chip');
     if (!b) return;
+    if (b.dataset.deep) {
+      state.deep = b.getAttribute('aria-pressed') !== 'true';
+      b.setAttribute('aria-pressed', String(state.deep));
+      render();
+      return;
+    }
     if (b.dataset.raw) {
       state.raw = b.getAttribute('aria-pressed') !== 'true';
       b.setAttribute('aria-pressed', String(state.raw));
@@ -470,22 +513,171 @@ function renderFilters() {
   });
 }
 
-function matches(item) {
-  if (state.kinds.size && !state.kinds.has(item.kind)) return false;
-  if (state.layers.size && !state.layers.has(item.layer)) return false;
-  if (state.issuesOnly) {
-    const bad = item.conflicted || item.resolves === false || item.loaded === false ||
-      (!item.description && ['agent', 'command', 'skill'].includes(item.kind));
-    if (!bad) return false;
-  }
-  if (!state.q) return true;
+const ROUTABLE = ['agent', 'command', 'skill'];
+
+function low(v) { return String(v == null ? '' : v).toLowerCase(); }
+
+function needsAttention(item) {
+  return !!(item.conflicted || item.resolves === false || item.loaded === false ||
+    (!item.description && ROUTABLE.includes(item.kind)));
+}
+
+// The searchable text of one item, lowercased once and kept on the item. The
+// previous version rebuilt this — name, description, path, body, and every
+// translation — for every item on every keystroke, which on a 95-item config
+// meant re-joining and re-lowercasing megabytes of text per character typed.
+// Built lazily: a map nobody searches never pays for it.
+function haystack(item) {
+  if (item._hay) return item._hay;
+  const tr = Object.values(item.translations || {});
   // Search spans every language, so a Korean term finds an item whose source
   // description is English and vice versa.
-  const translated = Object.values(item.translations || {})
-    .map(t => t.description + '\n' + (t.body || '')).join('\n');
-  const hay = [item.name, item.invocation, item.description, item.path, item.origin, item.body, translated]
-    .join('\n').toLowerCase();
-  return state.q.split(/\s+/).every(t => hay.includes(t));
+  const hay = {
+    name: low(item.name) + '\n' + low(item.invocation),
+    desc: [low(item.description)].concat(tr.map(t => low(t.description))).join('\n'),
+    path: [low(item.path)].concat(tr.map(t => low(t.path))).join('\n'),
+    origin: low(item.origin),
+    kind: low(item.kind),
+    scope: low(item.layer) + '\n' + low(LAYER_LABEL[item.layer]),
+    body: [low(item.body)].concat(tr.map(t => low(t.body))).join('\n'),
+  };
+  item._hay = hay;
+  return hay;
+}
+
+// `field:term` narrows a term to one part of an item. An unknown prefix is not
+// an error — `note:` in a body is text, not a filter — so it falls back to
+// being searched literally.
+const SEARCH_FIELDS = {
+  name: 'name', desc: 'desc', description: 'desc', path: 'path', file: 'path',
+  origin: 'origin', plugin: 'origin', kind: 'kind', type: 'kind',
+  scope: 'scope', layer: 'scope', body: 'body', text: 'body',
+};
+// `is:` asks about state rather than text — the questions the chips answer, but
+// composable with the rest of a query.
+const SEARCH_FLAGS = {
+  shadowed: i => !!i.conflicted,
+  broken: i => i.resolves === false,
+  unloaded: i => i.loaded === false,
+  disabled: i => i.enabled === false,
+  nodesc: i => !i.description && ROUTABLE.includes(i.kind),
+  translated: i => !!(i.translations && Object.keys(i.translations).length),
+  issue: needsAttention,
+};
+// What a hit in each part of an item is worth. A name hit outranks a body hit
+// by an order of magnitude on purpose: two rows that both contain the word are
+// not equally what you were looking for.
+const FIELD_WEIGHT = { name: 90, desc: 30, kind: 25, scope: 25, origin: 18, path: 14, body: 5 };
+
+function parseQuery(raw) {
+  const out = [];
+  const token = /(-?)(?:([A-Za-z]+):)?(?:"([^"]*)"|(\S+))/g;
+  let m;
+  while ((m = token.exec(raw || ''))) {
+    const neg = !!m[1];
+    const prefix = (m[2] || '').toLowerCase();
+    let text = low(m[3] !== undefined ? m[3] : m[4]).trim();
+    if (prefix === 'is' || prefix === 'has') {
+      const flag = SEARCH_FLAGS[text];
+      if (flag) { out.push({ flag, neg, text }); continue; }
+    }
+    let field = SEARCH_FIELDS[prefix] || '';
+    // An unrecognised prefix belongs to the text it was typed with, so a query
+    // like `http://example` or `note:` still finds what it says.
+    if (prefix && !field) text = prefix + ':' + text;
+    if (!text) continue;
+    out.push({ text, field, neg, flag: null });
+  }
+  return out;
+}
+
+// Score one term against one item, and say where it landed. Zero means the
+// term is absent, which for a positive term disqualifies the whole item.
+function termScore(item, hay, t) {
+  const q = t.text;
+  if (t.field) return hay[t.field].includes(q) ? [FIELD_WEIGHT[t.field] || 20, t.field] : [0, ''];
+  const name = low(item.name);
+  if (name === q) return [140, 'name'];
+  if (name.startsWith(q)) return [95, 'name'];
+  if (name.includes(q) || low(item.invocation).includes(q)) return [70, 'name'];
+  if (hay.desc.includes(q)) return [30, 'desc'];
+  if (!state.deep) return [0, ''];
+  if (hay.origin.includes(q)) return [18, 'origin'];
+  if (hay.path.includes(q)) return [14, 'path'];
+  if (hay.body.includes(q)) return [5, 'body'];
+  return [0, ''];
+}
+
+// The sentence a body hit was found in. A card is collapsed and its body is not
+// even rendered yet, so without this the row shows no reason for being there.
+function excerptFor(item, needle) {
+  const view = inLang(item);
+  const sources = [view.body, item.body].concat(
+    Object.values(item.translations || {}).map(t => t.body));
+  for (const src of sources) {
+    if (!src) continue;
+    const at = low(src).indexOf(needle);
+    if (at < 0) continue;
+    const from = Math.max(0, at - 55);
+    const slice = src.slice(from, at + needle.length + 95).replace(/\s+/g, ' ').trim();
+    return (from > 0 ? '…' : '') + slice + (at + needle.length + 95 < src.length ? '…' : '');
+  }
+  return '';
+}
+
+function passesFilters(item) {
+  if (state.kinds.size && !state.kinds.has(item.kind)) return false;
+  if (state.layers.size && !state.layers.has(item.layer)) return false;
+  if (state.issuesOnly && !needsAttention(item)) return false;
+  return true;
+}
+
+// null when the item is out; otherwise its rank and the weakest place a term
+// had to be found, which is what the row reports as its reason for matching.
+function searchHit(item) {
+  if (!terms.length) return { score: 0, where: '', excerpt: '' };
+  const hay = haystack(item);
+  let score = 0, weakest = '', floor = Infinity, needle = '';
+  for (const t of terms) {
+    if (t.flag) {
+      if (t.flag(item) === t.neg) return null;
+      score += 10;
+      continue;
+    }
+    const [points, where] = termScore(item, hay, t);
+    if (t.neg) { if (points) return null; continue; }
+    if (!points) return null;
+    score += points;
+    if (points < floor) { floor = points; weakest = where; needle = t.text; }
+  }
+  return {
+    score, where: weakest,
+    excerpt: weakest === 'body' ? excerptFor(item, needle) : '',
+  };
+}
+
+// The terms to highlight inside one part of a card. A `path:` term is not
+// highlighted in the description — it did not match there.
+function hlTerms(field) {
+  const words = [];
+  for (const t of terms) {
+    if (t.neg || t.flag || !t.text) continue;
+    if (t.field && t.field !== field) continue;
+    words.push(t.text);
+  }
+  return words.sort((a, b) => b.length - a.length);
+}
+
+// Highlighting runs over already-rendered HTML, so it steps over tags and
+// character entities: a <mark> opened inside `&amp;` or inside `<div class=…>`
+// breaks the page, and a query is allowed to contain `&`, `<` or a regex
+// metacharacter without doing either.
+function mark(html, words) {
+  if (!words.length || !html) return html;
+  const alt = words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  const find = new RegExp('(' + alt + ')', 'gi');
+  return String(html).replace(/(<[^>]*>|&[#A-Za-z0-9]+;)|([^<&]+)/g, (m, skip, text) =>
+    skip !== undefined ? skip : text.replace(find, '<mark>$&</mark>'));
 }
 
 function card(item) {
@@ -510,8 +702,17 @@ function card(item) {
     .map(([k, v]) => `<span><b>${esc(k)}</b> ${esc(v)}</span>`).join('');
   const routable = ['agent', 'command', 'skill'].includes(item.kind);
   const desc = view.description
-    ? `<div class="desc">${inline(readable(view.description))}</div>`
+    ? `<div class="desc">${mark(inline(readable(view.description)), hlTerms('desc'))}</div>`
     : (routable ? '<div class="desc none">no description — this item cannot be routed to</div>' : '');
+  // A hit in the name or the description is already visible on the row. One in
+  // the body, the path or the origin is not, so it is stated outright — and for
+  // a body hit the matching sentence comes with it.
+  const found = item._hit || {};
+  const hit = found.where && found.where !== 'name' && found.where !== 'desc'
+    ? `<div class="hit"><span class="where">in ${esc(found.where)}</span>` +
+      (found.excerpt ? `<span class="snippet">${mark(esc(found.excerpt), hlTerms('body'))}</span>` : '') +
+      '</div>'
+    : '';
   // Only the source description is resident in every session; a mirror is read
   // by people, not by Claude Code, so it is never charged for.
   const size = routable && item.description
@@ -527,17 +728,18 @@ function card(item) {
   return `<details class="card">
     <summary>
       <div class="row">
-        <span class="name">${esc(item.name)}</span>
-        ${item.invocation ? `<span class="inv mono">${esc(item.invocation)}</span>` : ''}
+        <span class="name">${mark(esc(item.name), hlTerms('name'))}</span>
+        ${item.invocation ? `<span class="inv mono">${mark(esc(item.invocation), hlTerms('name'))}</span>` : ''}
         ${tags.join('')}
         ${size}
       </div>
       ${desc}
+      ${hit}
     </summary>
     <div class="meta">
       ${kv ? `<div class="kv">${kv}</div>` : ''}
       ${body}
-      <div class="path mono">${esc(view.path)}</div>
+      <div class="path mono">${mark(esc(view.path), hlTerms('path'))}</div>
     </div>
   </details>`;
 }
@@ -561,6 +763,11 @@ function byKind(items) {
     if (state.sort === 'size') {
       group = group.slice().sort((a, b) => itemTokens(b) - itemTokens(a) ||
         String(a.name).localeCompare(String(b.name)));
+    } else if (state.sort === 'relevance' && terms.length) {
+      // Best match first. Two rows that both contain the word are not equally
+      // the row you meant, and the on-disk order knows nothing about that.
+      group = group.slice().sort((a, b) => b._hit.score - a._hit.score ||
+        String(a.name).localeCompare(String(b.name)));
     }
     html += `<h2 class="kind">${esc(KIND_LABEL[kind] || kind)} (${group.length})</h2>`;
     html += group.map(card).join('');
@@ -570,11 +777,26 @@ function byKind(items) {
 
 function render() {
   saveState();
-  const shown = DATA.items.filter(matches);
+  terms = parseQuery(state.q);
+  const shown = [];
+  for (const item of DATA.items) {
+    if (!passesFilters(item)) continue;
+    const hit = searchHit(item);
+    if (!hit) continue;
+    item._hit = hit;
+    shown.push(item);
+  }
   const list = document.getElementById('list');
-  document.getElementById('count').textContent = shown.length + ' of ' + DATA.items.length;
+  // How many rows are here only because of text nobody can see from the list.
+  // A search that quietly matched thirty bodies looks broken without it.
+  const buried = shown.filter(i => i._hit.where === 'body').length;
+  document.getElementById('count').textContent = shown.length + ' of ' + DATA.items.length +
+    (buried ? ' · ' + buried + ' in body' : '');
   if (!shown.length) {
-    list.innerHTML = '<div class="empty">Nothing matches.</div>';
+    list.innerHTML = '<div class="empty">Nothing matches' +
+      (state.q ? ' <code>' + esc(state.q) + '</code>' : ' the current filters') + '.<br>' +
+      'Drop a word, clear a chip, or widen it: <code>body:' +
+      esc((terms.find(t => !t.neg && !t.flag) || { text: 'term' }).text) + '</code>.</div>';
     return;
   }
   if (state.group !== 'scope') {
@@ -595,9 +817,33 @@ function render() {
   list.innerHTML = html;
 }
 
-document.getElementById('q').addEventListener('input', e => {
-  state.q = e.target.value.trim().toLowerCase();
-  render();
+// A render rebuilds the whole list, so it is coalesced: typing a six-letter
+// word is one rebuild instead of six. Short enough that a pause between two
+// keys still feels immediate.
+let pending = null;
+function search(value, now) {
+  const next = String(value == null ? '' : value).trim().toLowerCase();
+  if (next === state.q) return;
+  state.q = next;
+  clearTimeout(pending);
+  if (now) render();
+  else pending = setTimeout(render, 90);
+}
+
+const box = document.getElementById('q');
+box.addEventListener('input', e => search(e.target.value, false));
+box.addEventListener('keydown', e => {
+  // Escape empties the box rather than only blurring it, which is what the box
+  // being non-empty is actually asking to undo.
+  if (e.key === 'Escape') { e.target.value = ''; search('', true); return; }
+  // Enter jumps to the top hit and opens it — the row the ranking just put
+  // first is usually the one that was being looked for.
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    if (pending) { clearTimeout(pending); pending = null; render(); }
+    const first = document.querySelector('#list details.card');
+    if (first) { first.open = true; first.scrollIntoView({ block: 'center' }); }
+  }
 });
 document.addEventListener('keydown', e => {
   if (e.key === '/' && document.activeElement.id !== 'q') {
@@ -616,9 +862,12 @@ function bodyHtml(item) {
       ? '<div class="path">Body not included in this build.</div>' : '';
   }
   const text = view.body + (item.truncated ? '\n\n… truncated' : '');
-  return state.raw
+  const html = state.raw
     ? `<pre class="body">${esc(text)}</pre>`
     : `<div class="md">${mdToHtml(text)}</div>`;
+  // Opening a row that matched on its body should show where. The cache is
+  // keyed by the query for the same reason it is keyed by language and raw.
+  return mark(html, hlTerms('body'));
 }
 
 // `toggle` does not bubble, so the listener has to run in the capture phase to
@@ -630,7 +879,7 @@ document.getElementById('list').addEventListener('toggle', e => {
   const slot = card.querySelector('.body-slot');
   if (!slot || slot.dataset.filled) return;
   const index = Number(slot.dataset.i);
-  const key = index + '|' + state.lang + '|' + state.raw;
+  const key = index + '|' + state.lang + '|' + state.raw + '|' + state.q;
   let html = bodyCache.get(key);
   if (html === undefined) {
     html = bodyHtml(DATA.items[index]);

@@ -47,13 +47,30 @@ Removed stale viewer: /tmp/claude-atlas-old-project.html
 
 The page groups every resource by **where it came from** — Global, Project, Plugins — with each scope carrying its own share of the always-on bill. Each row expands to the file's own source: the Markdown Claude Code actually reads, not a paraphrase of it.
 
-- **Search** across name, description, path and body at once — and across every translation, so a Korean term finds an item whose source description is English.
+- **Search** across name, description, path and body at once — and across every translation, so a Korean term finds an item whose source description is English. Hits are ranked, highlighted, and each row says where it matched.
 - **Group** by scope or by kind, one toggle. Scope answers *what does this repo add on top of my global config*; kind answers *what commands do I have here*.
 - **Filter** by kind (commands, agents, skills, hooks, MCP, memory, plugins) and by scope (Global, Project, Plugins).
-- **Sort** by name or by size. Sorting by size ranks each section by what its descriptions cost, which is the order to read in when you are looking for something to shorten.
+- **Sort** by relevance, name or size. Relevance is the default and does nothing until you type — with no query there is no ranking to apply, so the order on disk stands. Sorting by size ranks each section by what its descriptions cost, which is the order to read in when you are looking for something to shorten.
 - **Needs attention** — one toggle that narrows to just the shadowed names, the dead hooks, and the items with no description.
 - **Language** — switch the whole page between the source and any translation mirror you keep. See below.
 - Every row leads with **where it lives** — the repo name for a repo-scoped item, the config directory for a global one, the plugin for a plugin's — then the always-on cost of its description. Grouped by kind it carries its scope as a chip too; grouped by scope the heading above already says it.
+
+One word can match a name, a description, or a sentence four screens down inside a body nobody has opened. Those are not the same answer, so they are not ranked the same: a name hit sorts above a description hit above a body hit, the matching text is highlighted wherever it is visible, and a row that matched only on text you cannot see from the list says `in body` and lifts the sentence that matched into the row. The count says how many of the matches were of that kind — `24 of 78 · 19 in body` is the difference between a search that worked and one that dragged the whole map in behind it. Turn the **search bodies** chip off to drop them and match only what is on the row.
+
+Any of it can be narrowed directly, and terms combine:
+
+| Query | Finds |
+|---|---|
+| `kind:agent review` | agents matching `review` |
+| `scope:project` | everything this repo adds |
+| `name:commit` | `commit` in the name, not in someone's body text |
+| `path:hooks` · `origin:atlas` | by where it lives, or which plugin shipped it |
+| `body:rebase` · `desc:git` | one part of the file only |
+| `"exact phrase"` | the words together, in that order |
+| `-deprecated` | everything except that |
+| `is:shadowed` · `is:nodesc` · `is:broken` · `is:disabled` · `is:issue` | by state rather than by text |
+
+`/` focuses the box, `Esc` empties it, `Enter` opens the top hit. An unknown prefix is not an error — `note:` is searched as the text it is, so a query that happens to contain a colon still finds what it says.
 
 Your filters are remembered per project. Regenerating the map is how you check whether a change landed, and having to re-set four chips every time made that loop tedious. The search box is deliberately not remembered — a query restored from yesterday looks like a viewer that has lost most of its contents.
 
@@ -72,6 +89,8 @@ A `description` is a single unbroken line on disk, and a mature one runs past tw
 Each routable row also carries what its description costs: `1,329c · ~332t always on`. That is the number to look at when one row is visibly longer than its neighbours.
 
 A body is rendered the first time you open its row, not when the page loads. Rendering all of them up front cost about 17ms and 1.25MB of string on a 95-item config — repeated on every keystroke in the search box, for text sitting inside collapsed rows nobody was looking at. Search still spans every body, because that is matched against the data rather than the page.
+
+Searching that data is indexed rather than rescanned: the lowercased text of each item is built once, the first time you search, instead of re-joining name, description, path, every body and every translation for every item on every keystroke. Renders are also coalesced, so typing a six-letter word rebuilds the list once instead of six times.
 
 <br/>
 

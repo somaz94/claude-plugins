@@ -789,6 +789,95 @@ PROBE
 node "$fixture/store.js" "$fixture/out.html"
 echo "PASS: filters persist per project, stale or impossible state is dropped"
 )
+step 'atlas viewer search ranks a hit and says where it landed'
+(
+set -euo pipefail
+fixture="$(mktemp -d)"
+mkdir -p "$fixture/home/.claude/agents" "$fixture/home/.claude/commands" "$fixture/repo"
+printf -- '---\nname: rebase-helper\ndescription: Rewrites history safely\n---\nnothing notable here\n' \
+  > "$fixture/home/.claude/agents/rebase-helper.md"
+printf -- '---\nname: shell-reviewer\ndescription: Reviews shell scripts for portability\n---\nrun shellcheck first\n' \
+  > "$fixture/home/.claude/agents/shell-reviewer.md"
+printf -- '---\nname: note-taker\ndescription: Takes notes\n---\nWhen a branch drifts you rebase it onto main.\n' \
+  > "$fixture/home/.claude/agents/note-taker.md"
+printf -- '---\ndescription: Deploys the thing\n---\nbody\n' \
+  > "$fixture/home/.claude/commands/deploy.md"
+printf -- '---\n---\nno description at all\n' \
+  > "$fixture/home/.claude/commands/mystery.md"
+python3 plugins/atlas/scripts/atlas.py --project "$fixture/repo" \
+  --user-root "$fixture/home/.claude" view --out "$fixture/out.html"
+
+# A word in a name and the same word buried in a body are not the same answer.
+# This asserts the ranking, the query language, and that a row which matched on
+# text nobody can see from the list says so.
+cat > "$fixture/search.js" <<'PROBE'
+const fs = require('fs');
+const html = fs.readFileSync(process.argv[2], 'utf8');
+const data = html.match(/<script id="atlas-data" type="application\/json">([\s\S]*?)<\/script>/);
+const script = html.match(/<script>\n([\s\S]*?)\n<\/script>/);
+const captured = {};
+const make = id => ({
+  set innerHTML(v) { captured[id] = v; }, get innerHTML() { return captured[id] || ''; },
+  set textContent(v) { captured[id] = v; },
+  get textContent() { return id === 'atlas-data' ? data[1] : (captured[id] || ''); },
+  addEventListener() {}, querySelectorAll() { return []; },
+});
+const els = {};
+global.document = { getElementById: id => els[id] || (els[id] = make(id)),
+                    addEventListener() {}, activeElement: { id: '' } };
+const checks = `
+const failures = [];
+const list = () => document.getElementById('list').innerHTML;
+const names = () => [...list().matchAll(/<span class="name">([\\s\\S]*?)<\\/span>/g)]
+  .map(m => m[1].replace(/<[^>]*>/g, ''));
+const go = q => { state.q = q; render(); return names().join(); };
+const want = (q, expected, why) => { const got = go(q); if (got !== expected) failures.push(why + ': ' + got); };
+
+// A name hit outranks a body hit for the same word.
+want('rebase', 'rebase-helper,note-taker', 'ranking did not put the name hit first');
+if (!/<span class="where">in body<\\/span>/.test(list()))
+  failures.push('a body-only hit did not say where it matched');
+if (!/<span class="snippet">[^<]*<mark>rebase<\\/mark>/.test(list()))
+  failures.push('a body-only hit carried no highlighted excerpt');
+if (!/1 in body/.test(document.getElementById('count').textContent))
+  failures.push('the count did not report how many rows matched only in a body');
+
+// The query language.
+want('kind:command', 'deploy,mystery', 'kind: did not narrow to one kind');
+want('rebase -note', 'rebase-helper', '- did not exclude');
+want('"takes notes"', 'note-taker', 'a quoted phrase did not match as a phrase');
+want('takes notes', 'note-taker', 'two bare words did not AND together');
+want('is:nodesc', 'mystery', 'is:nodesc did not find the undescribed item');
+want('name:note', 'note-taker', 'name: matched outside the name');
+want('body:rebase', 'note-taker', 'body: matched outside the body');
+
+// A word that is only in a body is gone when bodies are excluded, but an
+// explicit body: term still means what it says.
+state.deep = false;
+want('rebase', 'rebase-helper', 'search-bodies-off still matched a body');
+want('body:rebase', 'note-taker', 'an explicit body: term was suppressed');
+state.deep = true;
+
+// Highlighting is escaped-HTML-safe and a query is not a regex.
+go('shell');
+if (!/<span class="name"><mark>shell<\\/mark>-reviewer<\\/span>/.test(list()))
+  failures.push('the name hit was not highlighted');
+try {
+  want('c++ (x)', '', 'a regex metacharacter in the query matched something');
+  if (!/Nothing matches/.test(list())) failures.push('no empty state for a query that matches nothing');
+} catch (e) {
+  failures.push('a regex metacharacter in the query threw: ' + e.message);
+}
+
+for (const f of failures) console.log('FAIL: ' + f);
+process.exit(failures.length ? 1 : 0);
+`;
+eval(script[1] + checks);
+PROBE
+node "$fixture/search.js" "$fixture/out.html"
+echo "PASS: search ranks name over body, honours the query language, and shows its evidence"
+)
+
 step 'atlas diff reports what a rewrite campaign actually changed'
 (
 set -euo pipefail
