@@ -260,7 +260,7 @@ set -euo pipefail
 # hint. Blocking on it alone would make the guard cry wolf on every homelab
 # note; the scanner still reports it, so audit visibility is unaffected.
 repo="$(new_repo)"
-printf 'the box lives at 10.10.10.5\n' > "$repo/topology.md"
+printf 'the box lives at 10.99.99.99\n' > "$repo/topology.md"
 git -C "$repo" add -A
 
 expect_hook 1 "$repo" "git commit -m x" "a lone private IP" || exit 1
