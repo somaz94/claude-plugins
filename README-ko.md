@@ -31,6 +31,7 @@ claude plugin install census@somaz94
 | [`session-continuity`](plugins/session-continuity) | 컨텍스트가 리셋돼도 장기 작업을 이어 감 — 진행하면서 plan 파일을 갱신하고, 새 세션이 시작할 핸드오프 프롬프트를 만듭니다 |
 | [`release-guards`](plugins/release-guards) | 되돌릴 수 없는 릴리스 동작 앞에 확인 절차를 세웁니다 — 태그 생성·삭제와 릴리스 발행, 그리고 그 둘을 만들어 내는 자동화 파일 편집이 대상입니다 |
 | [`sensitive-guard`](plugins/sensitive-guard) | 비밀값을 커밋되는 순간에 차단 — 커밋이 추가하는 줄만 훑는 마지막 관문, 그리고 공개 전에 요청해서 돌리는 전체 스캔을 제공합니다 |
+| [`korean-prose`](plugins/korean-prose) | 맞춤법 검사기가 볼 수 없는 어색함을 검토 — 한국어 문장 안에 남은 영어 골격, 생성된 텍스트의 흔적, 그리고 한 줄을 이웃과 대조해야만 드러나는 findings 를 잡습니다 |
 
 플러그인별 문서 — 영어와 한국어 두 벌:
 
@@ -41,6 +42,7 @@ claude plugin install census@somaz94
 - [`session-continuity`](plugins/session-continuity) — [English](plugins/session-continuity/README.md) · [한국어](plugins/session-continuity/README-ko.md)
 - [`release-guards`](plugins/release-guards) — [English](plugins/release-guards/README.md) · [한국어](plugins/release-guards/README-ko.md)
 - [`sensitive-guard`](plugins/sensitive-guard) — [English](plugins/sensitive-guard/README.md) · [한국어](plugins/sensitive-guard/README-ko.md)
+- [`korean-prose`](plugins/korean-prose) — [English](plugins/korean-prose/README.md) · [한국어](plugins/korean-prose/README-ko.md)
 
 <br/>
 
@@ -55,6 +57,7 @@ claude plugin install census@somaz94
 - 컨텍스트 창이 압축됩니다. 앞선 대화가 요약되면서 반쯤 하다 만 편집과 어떤 결정을 내린 이유가 흐려집니다. — [`session-continuity`](plugins/session-continuity)
 - 빌드가 초록불이면 태그를 다는 게 다음 순서처럼 보여서, 태그가 그냥 푸시됩니다. — [`release-guards`](plugins/release-guards)
 - 아무도 다시 읽지 않은 diff에 비밀값이 묻어갑니다. — [`sensitive-guard`](plugins/sensitive-guard)
+- 번역된 문서가 영어 골격을 그대로 안고 갑니다. 철자도 맞고 문법도 온전해서 아무것도 이걸 잡아내지 못하는데, 읽는 문서가 아니라 해독하는 문서가 됩니다. — [`korean-prose`](plugins/korean-prose)
 
 하나같이 실수를 값싸게 잡을 수 있는 지점에 놓인 게이트나 보고서이지, 일이 벌어진 뒤에 오는 요약이 아닙니다. 더 나은 도구가 이미 있는 영역에서는 — 비밀값 탐지에는 `gitleaks`, 셸 린트에는 `shellcheck` — 그 도구들을 대체하지 않습니다. 그 도구들이 닿지 않는 곳에서 돌 뿐입니다. 세션 안, 커밋이 반환되기 전에요.
 
