@@ -41,7 +41,7 @@ The newer half of the problem is not translation at all. Text that was **generat
 | `간접화` | `indirection` rendered as a word that does not exist | `분리` |
 | `~하는 것이 가능하다` | Calque of "it is possible to" | `~할 수 있다` |
 | `되어지다`, `보여지다` | Passive applied twice | `되다`, `보이다` |
-| `GitHub Actions 의` | A particle detached from its word by a space | `GitHub Actions의` |
+| `무변경`, `무사고` | A stiff `無X` back-translation of "zero-/no-X" | `변경 없이`, `사고 없이` |
 
 The middle rows are the ones worth the install. `압력`, `정렬`, `수렴`, `재활용`, `함정`, `완주` are all real Korean words that a dictionary will happily offer for the English term — and all six point somewhere else once they land in a technical sentence. The translation happened, and destroyed the meaning on the way. The plugin ships that substitution dictionary with the reason each one fails.
 
