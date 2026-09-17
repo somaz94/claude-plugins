@@ -1658,6 +1658,11 @@ def wrong_language_findings(repo: Repo) -> list[dict[str, Any]]:
         if not doc.pair or doc.cls == "fixture":
             continue
         edits = []
+        # A line that already links the right-language half is a language switcher: "[guide](a.md) ([English](a-en.md))".
+        line_targets: dict[int, set[str]] = {}
+        for link, target in doc.resolved:
+            if target.status == "file" and target.doc and link.form != "mention":
+                line_targets.setdefault(link.line, set()).add(target.doc)
         for link, target in doc.resolved:
             if target.status != "file" or not target.doc or link.form == "mention":
                 continue
@@ -1669,7 +1674,7 @@ def wrong_language_findings(repo: Repo) -> list[dict[str, Any]]:
                 wanted = repo.pairs.get(target.doc, {}).get(code)
             elif target.doc in repo.mirrors:
                 wanted = repo.mirrors[target.doc][0]
-            if not wanted or wanted == target.doc:
+            if not wanted or wanted == target.doc or wanted in line_targets.get(link.line, ()):
                 continue
             new_raw = render_destination(link.raw, link.form, target.style, doc.path, wanted, repo.root.name, repo.root)
             edit = link_edit(doc, link, new_raw, doc.path, "wrong-language")
@@ -2872,7 +2877,8 @@ PLAN_PATH_REF = re.compile(
 BARE_PLAN_REF = re.compile(r"(?<![\w./-])plans/(?P<slug>[A-Za-z0-9][A-Za-z0-9._-]*?)\.md\b")
 REF_EXTENSIONS = (".md", ".json", ".sh", ".py", ".txt", ".yml", ".yaml")
 REF_DIR_PATTERN = re.compile(r"^(?:agents|commands|skills|output-styles)(?:-[a-z]{2,3})?$")
-REF_SKIP_DIRS = frozenset({"synced", "__pycache__", "node_modules", ".git"})
+# Test suites hold fixture plan paths, not references.
+REF_SKIP_DIRS = frozenset({"synced", "__pycache__", "node_modules", ".git", "tests", "test", "fixtures", "testdata"})
 MAX_REF_BYTES = 5 * 1024 * 1024
 
 

@@ -572,8 +572,9 @@ class ReachTest(Workspace):
 
     def test_wrong_language_link_fix(self) -> None:
         root = self.repo(files={
-            "README.md": "[admin](docs/admin-guide.md)\n",
-            "README-en.md": "[admin](docs/admin-guide.md#setup) and [admin](docs/admin-guide.md#setup)\n",
+            "README.md": "[admin](docs/admin-guide.md)\n[x](docs/x.md) ([English](docs/x-en.md))\n",
+            "README-en.md": "[admin](docs/admin-guide.md#setup) and [admin](docs/admin-guide.md#setup)\n"
+                            "[x](docs/x-en.md) ([Korean](docs/x.md))\n",
             "docs/admin-guide.md": "# 관리자 가이드\n", "docs/admin-guide-en.md": "# Admin guide\n",
             "docs/x.md": "# X\n[en](other-en.md)\n", "docs/x-en.md": "# X EN\n",
             "docs/other.md": "#", "docs/other-en.md": "#",
@@ -586,6 +587,7 @@ class ReachTest(Workspace):
                          ("(docs/admin-guide.md#setup)", "(docs/admin-guide-en.md#setup)", 2, True))
         self.assertTrue(fix[0]["anchorNeedsReview"])
         self.assertEqual(wrong["docs/x.md"]["fix"][0]["new"], "(other.md)")
+        self.assertNotIn("README.md", wrong)
         self.assertIn("docs/admin-guide-en.md", [f["path"] for f in self.codes(findings, "unreachable-pair-half")])
 
     def test_agent_only_grouped_by_nearest_readme_and_unindexed_dir(self) -> None:
@@ -983,6 +985,8 @@ class PlansTest(Workspace):
         (config / "projects" / "-x" / "session.jsonl").write_text('"~/.claude/plans/in-transcript.md"\n', encoding="utf-8")
         (config / "skills" / "synced" / "x").mkdir(parents=True)
         (config / "skills" / "synced" / "x" / "SKILL.md").write_text("~/.claude/plans/synced-plan.md\n", encoding="utf-8")
+        (config / "skills" / "y" / "tests").mkdir(parents=True)
+        (config / "skills" / "y" / "tests" / "test_y.py").write_text('"~/.claude/plans/fixture-plan.md"\n', encoding="utf-8")
         (config / ".last-cleanup").write_text("2026-09-17T03:15:48Z\n", encoding="utf-8")
 
         code, report = self.run_plans("--config-dir", str(config), "--strict")
