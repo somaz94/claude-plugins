@@ -104,65 +104,38 @@ If a fact looks wrong, **flag it as a fact-check callout** — do not silently c
 
 ## 3. Awkward-Korean pattern library
 
-The detector. Each pattern has a 🔴 / 🟡 / 🟢 severity baseline (the actual severity in any one finding can be adjusted based on context).
+The detector has two halves, and they fail in different ways.
 
-### 🔴 직역체 / 번역체 — clear awkwardness
+- **Token patterns** — a fixed word or construction that is awkward wherever it appears (`~에 있어서`, `되어지다`, `압력` for load). They live in the **lexicon** that ships with this plugin, not in this file: `${CLAUDE_PLUGIN_ROOT}/lexicon/patterns.tsv` (tokens) and `terms.tsv` (one referent, several spellings). The scanner runs them and attaches each row's `why` and `suggestion` to every hit — see [§ 4](#4-pattern-detection-technique). A hit is a **candidate**; you confirm it by reading.
+- **Judgement patterns** — awkwardness a regex cannot express, because it depends on meaning, on the EN half, or on the neighbouring lines. They are below, and they are found only by reading.
+
+Severity baseline for both halves: 🔴 clear awkwardness · 🟡 common improvable · 🟢 style. The actual severity of any one finding can move with context.
+
+### 🔴 영어 개념 1:1 치환 — the substance evaporates
+
+The **highest-signal pattern in bilingual docs.** An English concept is swapped for a same-dictionary-entry Korean word that does **not** carry the concept (`압력`, `정렬`, `수렴`, `완주`, `간접화`). Unlike an English word left as English, here the translation *happened* — and destroyed the meaning. The reader hits a word that looks Korean but points nowhere.
+
+The confirmed substitutions are lexicon rows with category `calque`, each carrying why the Korean word fails. When one comes back, restore the concrete action rather than swapping in a synonym: `압력을 완화 → 디스크 부하를 완화`. A new one found by reading is a lexicon row to propose ([§ Output — 감사 모드](#output--감사-모드)).
+
+### 🔴 직역체 / 번역체 — judgement
+
+Token-level 직역체 (`~에 있어서`, `~에 의해 ~되었다`, `의` chains, `~함으로써`, `검토 진행`, untranslated common nouns, …) is lexicon category `translationese`. What stays here needs the EN half or the meaning:
 
 | Pattern | Why it's awkward | Natural Korean |
 |---|---|---|
-| `~에 있어서` | Japanese-syntax (~において) residue. Almost never natural in modern Korean technical writing. | `~에서`, `~의 경우`, drop entirely |
-| `~을/를 가지다` + 추상명사 (`중요성을 가지다`, `의미를 가지다`) | Direct from English "to have X". Korean prefers `~다`, `~하다`. | `중요하다`, `의미 있다` |
-| `그것은 ~이다` / `이것은 ~이다` at sentence start without antecedent context | English "It is" / "This is" direct translation. Korean drops the explicit subject. | Drop the subject; restructure as `~이다` |
-| `~에 의해 ~되었다` (수동태 남발) | English passive direct translation. Korean prefers active voice unless the agent is unknown or irrelevant. | Active voice: `~을 ~했다` |
-| `~의 ~의 ~의 ~` (3개 이상 `의` chain) | English possessive chain ("X's Y's Z's W"). Reads as a syntactic stack in Korean. | Restructure with verbs or possession via context |
-| `~을 통해서 ~을 통해 ~을 통해` (한 문서 내 `통해/통해서` 반복 남발) | Direct from English "through/via". Often replaceable with an instrumental case. | `~로`, `~으로`, `~에서` |
-| `~함으로써` 과다 | Direct from English "by doing X". One use per paragraph is fine; clustered use reads stilted. | `~해서`, `~로`, restructure |
-| `검토 진행` / `구축 진행` / `개선 진행` (명사화 + `진행/수행`) | Japanese-style 명사화 잔재. `검토하다` / `구축하다` are already verbs. | `검토`, `구축`, `구축했다`, `검토했다` |
-| `~화 시키다` (`자동화 시키다`) | Causative + `시키다` is overformal. `자동화하다` is the direct verb. | `~화하다`, `~화` (noun form) |
-| `~할 것이다` (미래 단순 표현이 아닌 단정·계획에서) | Direct from English "will". Korean prefers `~할 예정`, `~한다`, present tense for plans. | `~할 예정`, `~한다`, present |
-| `~의 일환으로` / `~의 차원에서` / `~을 위시한` | Overly formal, Japanese-Korean hybrid residue. | Drop or simplify (`~의 일부로`, `~를 포함한`) |
-| Untranslated English common noun mid-Korean-sentence (`incident`, `issue`, `silent failure`, `estate`) | A plain English word left inside Korean prose where a Korean word exists — reads as lazy translation. **Distinct from intentionally-kept English tech labels** (`Kubernetes`, `buildx`, `cutover`) which stay. That exception covers **product and proper names**; it does **not** license a bare English *concept* term the document would normally gloss — see 용어 도입 관례 in 대조 검사. `Kubernetes` is a name; `fail-fast` is a concept, and a file that writes `부분 장애(gray failure)` has already decided how concepts are introduced. | Translate the common noun: `incident → 장애`, `silent failure → 감지되지 않는 장애`, `estate → 환경 / 인프라`. Keep genuine tech identifiers in English. |
-| **영어 개념 1:1 치환 — the substance evaporates** (`압력`, `정렬`, `수렴`, `완주`, `간접화`) | The **highest-signal pattern in bilingual docs.** An English concept is swapped for a same-dictionary-entry Korean word that does **not** carry the concept. Unlike the row above (English left *as* English), here the translation *happened* — and destroyed the meaning. The reader hits a word that looks Korean but points nowhere. | See the **1:1 치환 사전** below. Restore the concrete action: `압력을 완화 → 디스크 부하를 완화`. |
 | **목적어 탈락 — KO dropped an object the EN half still has** | Korean compression drops the object (`무엇을?`) that English states explicitly, leaving a verb hanging. **In a bilingual doc this is mechanically detectable: diff the KO against the EN half.** | Restore from the EN: EN `pivoting **events** to one row per user` → KO `이벤트를 사용자당 1행으로 집계`. |
 | **호응 오류 — 목적어와 술어가 안 맞음** (`비용을 확보`, `대량 삭제를 축소`) | The verb cannot take that object. Often born when `·` joins two objects and only one of them fits the verb, or when compression swaps the real object for a nearby noun. | Split the verbs: `정확도는 지키고 저장 비용은 절감`. Or restore the true object: `대량 삭제 **리스크**를 축소`. |
+| **실체 없는 상위어 — 자기 하위를 못 덮음** (`보안 체계` 아래 항목이 SSO·VPN 둘뿐, `~가용성`, `~수준`, `~기반`) | The scanner catches the stock forms (`체계를 구축`, `기반 구축`, `성숙도`), not whether the umbrella fits. An abstract heading whose children are two concrete tools claims more than it holds, and no single line shows it — read the heading against its items. | Name the real thing — `롤아웃이 멈추지 않습니다`, `클러스터 하나`, `인프라` — or narrow the heading to what its items actually are. |
 
-### 🔴 영어 개념 1:1 치환 사전 — the substitutions that killed the meaning
+### 🔴 AI 티 패턴 — judgement
 
-Confirmed in the field. When any of these appears in Korean prose, read the surrounding line — it is almost always this pattern.
-
-| KO (wrong) | Original EN | Why the Korean word fails | Natural Korean |
-|---|---|---|---|
-| `압력` | pressure | Korean `압력` = physical pressure (air/water) only. Never I/O load or contention. | `부하`, `경합` |
-| `정렬` | align | Korean `정렬` = line-up / sorting only. Never "make two configs agree". | `서로 맞춰`, `일치시켜` |
-| `수렴` | converge | Korean `수렴` is dominated by "수렴하다 = gather opinions". Also: you converge *state*, not *drift*. | `바로잡다`, `통합하다` |
-| `재활용` | repurpose | Korean `재활용` carries a **waste/garbage** connotation — reads as "I scavenged leftovers", destroying the "zero extra investment" selling point. | `확장`, `이미 있던 X를 …에 활용` |
-| `자산화` | turn into assets | Abstract nominalization that leaves no picture. The real act is "write it down so it does not recur". | `기록으로 남겨`, `팀이 함께 쓰는 자료로 축적` |
-| `간접화` | indirection | **Not a Korean word at all.** Pure coinage. | `분리`, `직접 참조하지 않도록 …` |
-| `경로` | path (as in "a hand-off path") | Korean `경로` = physical route / file path. A hand-off is not a route. | `인수인계까지 문서로 남김` |
-| `함정` | pitfall | Korean `함정` = a trap someone **deliberately dug**. Nobody dug it; you hit it. | `시행착오`, `직접 부딪힌 문제` |
-| `완주` | complete (an upgrade) | Marathon metaphor — wrong register for operations prose. Also drags the object wrong: you complete the *upgrade*, not the *stack*. | `완료` + fix the object |
-| `전 주기` | lifecycle | `주기를 설계·운영한다` does not hold — a cycle is not an operable object. | `전 과정` |
-| `통제 릴리스` | controlled release | English stacks adjective+noun freely; Korean does not form this compound. Reads as "is it controlled, or controlling?" | `승인을 거쳐 …만 릴리스해` |
-| `노이즈 최적화` | noise optimization | You do not optimize noise — you reduce it. | `노이즈 정리`, `노이즈 감소` |
-| `무변경` / `무사고` / `불변` | unchanged / incident-free / immutable | Stiff `無X` back-translation. (`무중단` is idiomatic — keep.) | `변경 없이`, `사고 없이`, `그대로 유지한 채` |
-| `구조가 쌓였습니다` | layering more dependence | Korean stacks **부채 / 피로 / 데이터** — not `구조`. Same failure as `성숙도 레이어를 얹었다`. | `의존이 계속 깊어졌습니다` |
-| `template화` | templatize | English stem + Korean `~화` suffix hybrid. | `템플릿화` |
-| `~성숙도 레이어`, `~가용성`, `~체계`, `~기반`, `~수준` | maturity layer / availability / system / foundation / level | Empty abstract nouns standing where a concrete noun belongs. **Watch for the umbrella that does not actually cover its own children** (a `보안 체계` heading whose sub-items are SSO and VPN). | Name the real thing: `롤아웃이 멈추지 않습니다`, `클러스터 하나`, `인프라` |
-
-### 🔴 AI 티 패턴 — the tells that say a machine drafted this
-
-These are distinct from 직역체: nothing was translated, the text was **generated**, and it carries generator habits. High signal in drafts the user asked an assistant to write.
+Nothing was translated — the text was **generated**, and it carries generator habits. Token-level tells (`~하는 것이 가능`, `결론적으로`, 이중 피동, 사물 의인화, 실체 없는 구조어) are lexicon category `ai-tell`. What stays here is the shape no single line shows:
 
 | Pattern | Why it reads as AI | Natural Korean |
 |---|---|---|
-| `~하는 것이 가능하다`, `~하는 것이 중요하다` (`것` 구문 남발) | Calque of "it is possible/important to X". Korean has a direct verb. | `~할 수 있다`, `~해야 한다` |
-| `결론적으로`, `궁극적으로`, `혁신적인`, `획기적인`, `핵심적인` | Filler discourse markers and inflation adjectives a human writing operations prose does not reach for. | Delete the marker; replace the adjective with the concrete claim |
 | `첫째 … 둘째 … 셋째` in a short passage, or every bullet opening with the same grammatical shape | Mechanical parallelism. Human lists vary their openings. | Vary the openings; drop the enumerators unless order is load-bearing |
-| `~이 아니라 ~이다` 남발 (한 문단 2회+) | The generator's favourite contrast frame. One is rhetoric; three is a tic. | State the positive directly; keep at most one per section |
-| `~하고,` / `~하며,` — comma right after a connective ending | The connective already joins; the comma is an English habit. | Drop the comma: `~하고 `, `~하며 ` |
-| 사물 의인화 (`서버가 죽다`, `장비가 쓰러지다`, `A가 B를 이긴다`) | Casual anthropomorphism in a document that is otherwise formal. Mixed register. | `서버가 중단되다`, `장비 장애`, `A가 B보다 유리하다` |
-| 이중 피동 (`되어지다`, `보여지다`, `불려지다`) | `되다` is already passive; `~어지다` doubles it. | `되다`, `보이다`, `불리다` |
-| 실체 없는 구조어 (`축`, `갈래`, `레이어`, `관점에서`) standing in for a concrete noun | The generator reaches for a structural metaphor when it has no specific noun. | Name the thing. See the 1:1 치환 사전 row on empty abstract nouns. |
+
+⚠️ **Do NOT flag a comma after a connective ending (`~하고,`, `~하며,`).** A comma there is permitted Korean punctuation in a long sentence, and on already-corrected copy the rule produced nothing but noise.
 
 ⚠️ **Do NOT flag a spaced em-dash ` — `.** It is a deliberate device in technical prose and is used throughout this very file. A rule against it buries every real finding under false positives.
 
@@ -175,33 +148,23 @@ These are distinct from 직역체: nothing was translated, the text was **genera
 | **형제 구조 이탈** | One item in a list is shaped unlike its siblings — two sentences where the rest are one, a `~하기 위해 … 달성` frame where the rest are `문제. 해결`, a lead verb where the rest lead with the outcome. The item is fine alone and wrong in place. | Read **all** siblings in the array / section before judging one. Count sentences, note the lead pattern and the ending form. Flag the outlier, and say which shape the majority uses. |
 | **이웃 중복** | Two items in the same block state the same thing, often in near-identical words — typically a "how we approached it" item and a "what it achieved" item, or a heading and the sentence under it. | Diff each item against its 3–4 neighbours for a shared clause of 8+ characters, then run **two filters before reporting anything**. **(1) What is shared?** Three kinds, and only the first is a finding. An *argument* — the reasoning behind a decision, an explanation already given in full elsewhere — belongs to one section by role, so the other copy is taking up space: **a finding**. A *technology name or subject* is **not** one: an outcome line is read on its own and often by a machine, so naming the technology in both halves is required rather than redundant. An *outcome statement* — what the work achieved, often a restatement of its own title — is **not** one either: the approach half says how it was done, the outcome half says it happened, and a reader skimming only outcomes needs it there. Measured on a real corpus: of five raw hits one was an argument and was rewritten, three were technology names and one was an outcome statement — none of those four should have been touched. When a shared phrase does not land cleanly in any of the three, say so and leave it: an unclassifiable overlap is not evidence of a defect. **(2) Does the `en:` half share it too?** Read the EN sibling of both items. Symmetric duplication across the two languages is the document's structure, not a KO defect — **report it as a bilingual decision and propose no KO-only rewrite**, because rewriting one half is itself the drift a pair checker will flag next. Only when KO duplicates and EN does not do you propose a KO rewrite, naming which copy keeps the clause by role. |
 | **과장 드리프트** | A strengthening word appears that the evidence does not carry — `최소화`, `차단`, `완전`, `원천`, `대폭`, `급증`, `취약점` where the truth is `경감`, `방지`, `분리`, `증가`. Also a *pre-existing* condition described as a *defect that was fixed*. | For every intensifier ask: did this happen, or was it designed so it could not happen? "있던 취약점을 막았다" and "애초에 그렇게 만들지 않았다" are different claims. Also check the same intensifier is not already used by a neighbouring item. |
-| **표기 일관성 (file-wide)** | `Pod` vs `파드`, `Fail-fast` vs `fail-open` — the same referent spelled two ways. Local edits are where this enters: a new line follows the writer's habit, not the file's. | `grep -c` both spellings across the whole file, and separately within the enclosing block. Report the counts. The **block** convention wins over the file when the two disagree — a block that is internally consistent is not drift. |
-| **용어 도입 관례** | A bare English concept term sits in prose that introduces every other concept as `한국어(English)` — `부분 장애(gray failure)`, `영향 범위(blast radius)`. The spelling-consistency check above **passes it trivially**, because a term written one way is not written two ways. The question is not "is it spelled consistently" but "does it enter the document the way the document enters concepts". | Collect every `한국어(English)` pair in the file — that is the convention, stated by example. Then list the bare English terms in Korean prose and split them: **names** (`Kubernetes`, `Terraform`) stay bare; **concepts** (`fail-fast`, `blast radius`) should carry the Korean-first form **only when a natural Korean equivalent already exists** — one ordinary Korean uses outside this document, or one the file itself already uses elsewhere. **Never mint a calque to satisfy this rule**: `fail-open → 개방 실패` is a worse finding than the bare term, because `fail open` means "fails *into* the open state", not "an open failure". `fail-fast` glosses cleanly as `즉시 실패` and `fail-open` does not — a pair that looks parallel in English does not guarantee parallel treatment in Korean. When no natural form exists, leave the term bare and say why. (`cutover` is deliberately absent from this list and named as a kept label in the token table above; the two lists must never both claim a term.) Report the convention count as evidence. Flag hardest when a glossed term and a bare concept term sit **in the same sentence**. |
+| **표기 일관성 (file-wide)** | One referent spelled two ways — Hangul transliteration vs English (`Pod` vs `파드`, `Canary` vs `카나리`), or English in two letter cases (`Canary` vs `canary`, `Pull-GitOps` vs `pull-GitOps`). Local edits are where this enters: a new line follows the writer's habit, not the file's. | Start from the scanner's `terms` and `case_variants` ([§ 4](#4-pattern-detection-technique)) — they already carry the per-spelling counts and line numbers. Decide three things per group before reporting. **(1) Same referent?** `Helm` the product and `helm` the CLI, or `Secret` the resource kind and `secret` the generic noun, are two things spelled alike — not drift. **(2) Innocent capitalisation?** A word capitalised only where it opens a label, or only inside a capitalised setting name (`Deregistration Delay`), is not drift — the scanner marks these with a `hint`. **(3) Which spelling wins?** The **block** convention wins over the file when the two disagree — a block that is internally consistent is not drift. Report the counts. A pair the scanner cannot see — no seed in `terms.tsv` and no letter-case difference, such as `LB` vs `로드밸런서` — still needs a manual `grep -c` of both spellings, and is a `terms.tsv` row worth proposing. |
+| **용어 도입 관례** | A bare English concept term sits in prose that introduces every other concept as `한국어(English)` — `부분 장애(gray failure)`, `영향 범위(blast radius)`. The spelling-consistency check above **passes it trivially**, because a term written one way is not written two ways. The question is not "is it spelled consistently" but "does it enter the document the way the document enters concepts". | Collect every `한국어(English)` pair in the file — that is the convention, stated by example. Then list the bare English terms in Korean prose and split them: **names** (`Kubernetes`, `Terraform`) stay bare; **concepts** (`fail-fast`, `blast radius`) should carry the Korean-first form **only when a natural Korean equivalent already exists** — one ordinary Korean uses outside this document, or one the file itself already uses elsewhere. **Never mint a calque to satisfy this rule**: `fail-open → 개방 실패` is a worse finding than the bare term, because `fail open` means "fails *into* the open state", not "an open failure". `fail-fast` glosses cleanly as `즉시 실패` and `fail-open` does not — a pair that looks parallel in English does not guarantee parallel treatment in Korean. When no natural form exists, leave the term bare and say why. (`cutover` is deliberately absent from this list: it is a `keep` row in `terms.tsv`, and `scan.py --check-lexicon` fails if any pattern flags a kept label, so the two lists cannot both claim a term.) Report the convention count as evidence. Flag hardest when a glossed term and a bare concept term sit **in the same sentence**. |
 
 Each of these is reported with the **evidence**, not just the verdict: cite the sibling lines you compared against, or the two counts you got. A 대조 finding without its comparison is unfalsifiable, and the user cannot check it.
 
-### 🟡 어색한 명사화 / 조사 오용 — common improvable
+### 🟡 어색한 명사화 / 조사 오용 — judgement
+
+Token-level cases (`개선 작업을 수행`, `~에 대한` clusters, `~을 통한`, 무(無)-prefix, `친숙`, 조사 앞 공백, 단위 탈락, …) are lexicon categories `nominalization` and `spacing`; spellings of one referent are `terms.tsv`. What stays here:
 
 | Pattern | Why it's awkward | Natural Korean |
 |---|---|---|
-| `개선 작업을 수행`, `관리 업무를 담당`, `구축 작업을 진행` | Double abstraction (작업/업무 + 수행/담당/진행) — both halves nominalize the same action. | `개선`, `관리`, `구축` (noun) OR `개선했다`, `관리했다`, `구축했다` (verb) |
-| `~에 대한` 남발 (한 문단/항목 안에 2회 이상) | English "about/regarding" direct translation. One use is fine; clustered is stilted. | `~의`, `~을`, restructure |
-| `~에 대해 ~을 진행` | Doubles down on awkwardness — abstract object + weak verb. | Direct verb form |
-| `~을 통한 ~의 ~` | English "X's Y via Z" direct translation. | Restructure with verbs |
-| `~로 인한` / `~에 따른` 과다 (한 단락 내 3회+) | Causal markers stacked — reads bureaucratic. | Vary with `~로`, `~때문에`, restructure |
 | 문서 안 종결법 혼용 (한 문단/리스트 안에 `구축` + `~했습니다` + `~함`) | Mixed sentence-ending registers inside one section break readability. | Pick one style per section (noun form or 했/합니다-form), stick to it. |
-| 외래어 표기 불일치 within one document (`쿠버네티스` 와 `Kubernetes` 둘 다 등장) | The reader stumbles. Pick one and stick. | Audit the document; the common convention is English-label-with-Hangul-particle (`Kubernetes를`) — match the document's dominant choice. |
 | 호응 오류 (`~뿐만 아니라 ~` 뒤에 `~도` 누락, `비록 ~지만` 호응 깨짐) | Grammar mismatch. | Restore the response particle / restructure. |
 | 주어/술어 불일치 (긴 문장 안에 주어가 사라지거나 도중에 바뀜) | Subject drift inside one sentence. | Insert the subject explicitly or split the sentence. |
 | 조사 누락 (`을/를`, `이/가` drop where it changes meaning) | Korean tolerates 조사 drop in informal speech, but in documentation it can be ambiguous. | Restore the 조사. |
-| 무(無)-prefix Sino-Korean negation (`무사고`, `무변경`, `무손실`) | `無X` reads as a stiff back-translation of "zero-/no-X". | `사고 없이`, `변경 없이`, `데이터 손실 없이`. Note: `무중단` is idiomatic and accepted — but if it claims zero-downtime where a maintenance window actually existed, that is a **fact-check callout** (Rule 1), not just style. |
-| 친숙 vs 익숙 misuse + inanimate anthropomorphism (`Ansible에 친숙한 운영 환경`) | `친숙` = emotional intimacy; tool proficiency wants `익숙`. Environments do not "befriend" — reads as translationese for "an environment familiar with X". | `익숙` for tooling familiarity; reframe so the team is the one accustomed: `Ansible 기반 운영에 이미 익숙한 …`. |
-| Wrong Sino-Korean word choice (`교정` for a code/config fix, `산재` for "scattered") | `교정` = proofreading / orthopedic correction; `산재` = formal "dispersed" — both read stiff in operations prose. | `교정 → 수정` (fix), `산재 → 흩어진 / 흩어져 있어`. |
-| 조사 중복 + Konglish verb (`kubespray로 node로 join`) | A duplicated `로` particle plus an English verb conjugated directly reads awkward. | Remove the duplicate particle and give the verb a proper Korean target: `클러스터에 join하고`. |
 | Semantic redundancy / tautology (`헬스체크로 검증 시간 단축`, `운영 업무 자동화`) | The two halves mean the same thing — a health check *is* verification; `업무` duplicates `운영`. Reads circular. | Make the lever distinct from the outcome: `헬스체크 자동화로 검증 시간 단축`; drop the redundant noun: `운영 자동화`. |
-| **조사 앞 공백** (`GitHub Actions 의`, `DNS 는`, `BigQuery 로`) | Korean orthography attaches 조사 to the preceding word **with no space — including after an English word or a closing tag** (`</code>를`). A space makes the particle read as a standalone word. Usually clustered in one legacy block while the rest of the document already writes it correctly — self-contradiction inside one file. | `GitHub Actions의`, `DNS는`, `</code>를`. Fix file-wide, then re-scan; do not leave a mixed file. |
 | **명사 3개 이상 무조사 연쇄** (`서비스 가용성 안정 유지`, `외부 이미지 crane Harbor 미러링`) | The reader cannot reconstruct which noun modifies which. Compression squeezed out every 조사. Common in bullet lists and summary items. | Restore particles and verbs: `서비스를 안정적으로 유지`, `외부 이미지는 crane으로 Harbor에 미러링해`. |
-| **단위 탈락** (`QA 전달 90% 단축`, `문서 관리 80% 단축`) | What shrank was the **time**, not the delivery itself. The EN half usually still has it (`QA delivery-**time**`). | `QA 전달 **시간** 90% 단축` |
 
 ### 🟢 Style suggestion — voice / cadence
 
@@ -212,45 +175,36 @@ Each of these is reported with the **evidence**, not just the verdict: cite the 
 | 시제 혼용 (`도입했다` 와 `도입한다` 한 문단 안 혼재) | Tense inconsistency. | Past for completed, present for ongoing — be consistent inside one section. |
 | 영어 따옴표와 한글 따옴표 혼용 | Typography drift. | Match the document's existing convention. |
 | `등` 의 위치 — `A, B, C 등 ~을 ~`은 자연스럽지만 `등을` 단독 사용은 어색 | `등` as a floating word reads thin. | `A, B, C 등 N가지 도구` 식으로 명확한 후속어와 함께. |
-| Bare `첫 + 명사` where an ordinal reads better (`첫 잡`) | `첫 잡` reads clipped; `첫 번째 잡` is more natural for "the first job/run". | `첫 번째 잡`, `첫 번째 실행`. |
 
 ## 4. Pattern detection technique
 
-Use `grep -nE` on the target file(s) for the high-signal patterns:
+Run the scanner over the target instead of hand-writing greps:
 
 ```bash
-# 직역체 high-signal
-grep -nE "에 있어서|을 가지다|를 가지다|에 의해.*되었|함으로써|의.*의.*의.*의" <file>.md
-# 일본어식 명사화 + 진행/수행/실시
-grep -nE "(검토|구축|개선|관리|운영|설계|도입|분석) (진행|수행|실시|작업|업무)" <file>.md
-# 통해/통해서 클러스터
-grep -nE "통해서|통해" <file>.md | wc -l
-# ~화 시키다
-grep -nE "화 시키다|화시키다" <file>.md
-# 외래어 표기 일관성 — 한 문서 내 한글화 / 영문 혼용
-grep -nE "쿠버네티스|쿠버네이트" <file>.md
-# 무(無)-prefix 한자 부정 (무중단은 관용 — 문맥/사실 확인)
-grep -nE "무사고|무변경|무손실|무정지" <file>.md
-# 한국어 문장 속 미번역 영어 일반명사 (tech label 과 구분 필요)
-grep -nE "incident|silent failure|이슈 발생" <file>.md
-# 친숙 vs 익숙, 부적절 한자어 (교정/산재)
-grep -nE "친숙|교정|산재" <file>.md
-# 조사 중복 + Konglish 동사 (~로 <english>하고/하여/해서)
-grep -nE "로 [a-zA-Z]+(하고|하여|해서|함)" <file>.md
-# 영어 개념 1:1 치환 — 최우선 (위 사전 참고). 전부 오탐 가능하니 반드시 문맥 확인
-grep -nE "압력|정렬|수렴|재활용|자산화|간접화|함정|완주|전 주기|통제 [가-힣]+|노이즈 최적화|template화|화 시켜" <file>.md
-# 실체 없는 추상 명사 — 특히 상위 항목이 자기 하위를 못 덮는지 확인
-grep -nE "성숙도|~?체계를|기반 구축|가능 수준|레이어를 (얹|쌓)" <file>.md
-# 조사 앞 공백 (영어/닫는태그 뒤 포함) — 파일 전역 스캔 후 일괄 수정
-grep -nE "[A-Za-z0-9)] (은|는|이|가|을|를|로|으로|의|와|과|에|에서|까지|만)[ ,.·]" <file>.md
-grep -nE "</(code|strong|a)> (은|는|을|를|로|으로|의)" <file>.md
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/scan.py" --json <file> [<file> ...]
 ```
 
-Grep is the first pass — false positives are expected. Always read the surrounding line to confirm. A `~함으로써` inside a clean, formal context may be fine; clustered `함으로써` is the red flag.
+- **The lane comes from the extension** — `.md` / `.markdown` → Markdown, `.yml` / `.yaml` → the `ko:` half only (`en:` is never read), anything else → plain text. Override with `--lane md|yaml|text`.
+- **Already excluded**: front matter, fenced code, inline code, `<code>` spans, HTML tags, link targets, bare URLs — and **every line with no Hangul**, because a line of pure English inside a Korean document is a command, a code-like cell, or an English sentence kept on purpose (Hard rule 2).
+- **If the invoking command already ran the scan** and put its JSON in your prompt, use that; do not run it again.
 
-**Markdown-aware reading**: when you read the file to confirm, skip what is inside fenced code blocks, indented code, and inline-code spans — those are content, not prose. Only flag Korean that lives in headings, paragraphs, list items, table cells, blockquotes, and link text.
+The JSON holds three lists per file:
 
-For patterns grep cannot reliably catch (subject drift, tense inconsistency, modifier chains), do a focused read of the densest prose sections first — the opening overview paragraphs, long 배경 / 개요 / 동작 방식 sections, and table-cell descriptions.
+| Key | What it holds | How to use it |
+|---|---|---|
+| `patterns` | Lexicon hits — `id`, `severity`, `category`, `why`, `suggestion`, `occurrences[{line, col, match}]`. A row with `min_count` above 1 reports only the paragraphs that reached it — or, when written `file:N`, only a file that reached it. | Read each line. Drop the hit when context makes it natural — `정렬` that really is a sort, `에 있어서` that is a location. |
+| `terms` | One referent spelled two or more ways, with a count and line list per spelling. | Evidence for the 표기 일관성 check in [§ 대조 검사](#-대조-검사--the-findings-a-token-scan-cannot-see). |
+| `case_variants` | English words written in more than one letter case, with a `hint` when there is an innocent explanation (`label-capitalization`, `title-case-phrase`). | Unhinted groups first; same check. |
+
+The scan is the first pass, not the review. The judgement patterns in [§ 3](#3-awkward-korean-pattern-library) and the whole 대조 pass are found only by reading — and a clean scan is exactly when they are the only findings left. For those, do a focused read of the densest prose first: the opening overview paragraphs, long 배경 / 개요 / 동작 방식 sections, and table-cell descriptions.
+
+**Self-check with the same scanner.** Before reporting an AFTER, pipe it through:
+
+```bash
+printf '%s\n' '<your AFTER line>' | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/scan.py" --stdin --json
+```
+
+**Never edit the lexicon files.** When you confirm a finding the scanner did not raise and it is a fixed word or construction rather than a judgement, propose a row under `사전 추가 후보` in the report. The user decides whether it lands.
 
 ## 5. Suggestion shape — KO only, never invent
 
@@ -272,7 +226,7 @@ Constraints on the AFTER suggestion:
 - Match the document's existing tone in adjacent sentences (read 2–3 neighbours before drafting).
 - Preserve Markdown structure on the line: keep list markers (`- `, `1. `), heading hashes (`## `), table pipes (`|`), bold/italic markers, and `[text](url)` link syntax — rewrite only the Korean inside.
 - One sentence's fix should not cascade into another's rewrite — keep changes local.
-- **The AFTER must itself pass the pattern library.** Every rule in [§ Hard rule 3](#3-awkward-korean-pattern-library) applies to the sentence *you* wrote, not only to the one you were given. Writing a rewrite puts you in the position of the author, which is the position least able to see its own awkwardness — so this is checked mechanically, not by feel. See the self-check step in both workflows.
+- **The AFTER must itself pass the pattern library.** Every rule in [§ Hard rule 3](#3-awkward-korean-pattern-library) applies to the sentence *you* wrote, not only to the one you were given. Writing a rewrite puts you in the position of the author, which is the position least able to see its own awkwardness — so this is checked mechanically, not by feel: pipe the AFTER through `scan.py --stdin` ([§ 4](#4-pattern-detection-technique)), then run the judgement and 대조 checks on it by reading. See the self-check step in both workflows.
 
 ## 6. Section-internal consistency — pick one style
 
@@ -345,9 +299,11 @@ If the user has not approved and asks you to "just do it", that counts as approv
 - ✅ Allowed (read-only):
   - `git status`, `git diff`, `git log -p`, `git show <commit>`
   - `grep -n`, `grep -nE`, `grep -c`, `find`, `head`, `wc -l`, `wc -w`
+  - `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/scan.py"` — read-only lexicon scan ([§ 4](#4-pattern-detection-technique))
   - A YAML parse check after an approved 판정-mode edit
 - ❌ Forbidden:
   - `Write` on any file — this agent proposes, and in 판정 모드 edits one approved line
+  - Editing the lexicon (`${CLAUDE_PLUGIN_ROOT}/lexicon/*.tsv`) — propose rows instead
   - `git add` / `git commit` / `git push`
   - Any build target
   - Any external API call, any network request
@@ -360,11 +316,11 @@ If the user has not approved and asks you to "just do it", that counts as approv
 
 1. **Confirm scope** — the file is Korean-content and in scope (not `*-en.md`, not an English document). If it is English, stop and say so. On a cold or broad invocation do not carpet-bomb a repository: take the highest-density Korean file(s) and expand only on direction. With no argument, scope to what `git diff` changed — Korean `.md` **and** `ko:` lines in bilingual YAML, both lanes.
 2. **Read** the relevant Korean sections plus 2–3 adjacent items for tone calibration, skipping code blocks. In Lane B read the `en:` sibling of every `ko:` you intend to touch.
-3. **Pattern grep pass** — the snippets in [§ Hard rule 4](#4-pattern-detection-technique). Tally raw hits.
-4. **Confirm by reading** — for each hit, read the surrounding line. A grep hit inside a code block or a legitimate idiom is not a finding.
+3. **Scan** — run `scan.py --json` per [§ Hard rule 4](#4-pattern-detection-technique), or use the result the invoking command passed in. Tally the hits.
+4. **Confirm by reading** — for each hit, read the surrounding line. A hit whose context makes it natural (a real sort for `정렬`, a locative `에 있어서`) is not a finding; neither is a spelling group whose two forms name different things.
 5. **대조 pass** — [§ 대조 검사](#-대조-검사--the-findings-a-token-scan-cannot-see). This is a separate pass **after** the token pass, because it needs the siblings in mind rather than one line at a time. Do not skip it when the token pass came back clean — a clean token sweep is exactly when 대조 findings are the only ones left.
 6. **Categorize** 🔴 / 🟡 / 🟢 and draft KO-only rewrites for every 🔴 and 🟡.
-7. **Self-check every AFTER you just wrote** — re-run the token patterns and the 대조 checks on your own rewrites as if a user had handed them to you. A rewrite is new Korean prose and gets no exemption; the redundancy, the empty abstract noun and the un-glossed concept term enter here as readily as anywhere — **and so does the opposite failure, a gloss you just minted.** For every Korean term your AFTER introduces, ask whether the language uses that phrase outside this document. If you cannot point to it in ordinary Korean or elsewhere in the file, it is a coinage — precisely what 음역 조어 (`키리스`, `무침습`) is flagged for. Holding the user's prose to a standard your own rewrite breaks is the specific failure this step exists to catch. Rewrite anything that fails and check again. **Never report an AFTER that has not been through this step.**
+7. **Self-check every AFTER you just wrote** — pipe your rewrites through `scan.py --stdin`, then re-run the 대조 checks on them by reading, as if a user had handed them to you. A rewrite is new Korean prose and gets no exemption; the redundancy, the empty abstract noun and the un-glossed concept term enter here as readily as anywhere — **and so does the opposite failure, a gloss you just minted.** For every Korean term your AFTER introduces, ask whether the language uses that phrase outside this document. If you cannot point to it in ordinary Korean or elsewhere in the file, it is a coinage — precisely what 음역 조어 (`키리스`, `무침습`) is flagged for. Holding the user's prose to a standard your own rewrite breaks is the specific failure this step exists to catch. Rewrite anything that fails and check again. **Never report an AFTER that has not been through this step.**
 8. **Privacy scan** on your proposed rewrites.
 9. **Report** — [§ Output — 감사 모드](#output--감사-모드). Read-only; end by offering to apply via 판정 mode, item by item.
 
@@ -373,7 +329,7 @@ If the user has not approved and asks you to "just do it", that counts as approv
 1. **Read the item in place** — open the file and find it. Judging a pasted string without its neighbours is what makes 대조 findings invisible, and they are the ones the user cannot see for themselves.
 2. **Read its siblings** — every other item in the same array / list / section. Note sentence count, lead pattern, ending form, and any clause that repeats.
 3. **Diff the user's version against the original** — list what they changed. Sort it into *improvements to keep*, *neutral*, and *regressions*. The default is that their version wins; you are looking for the specific places it does not.
-4. **Run the token patterns** over the proposed text only — not the file.
+4. **Scan the proposed text only** — `scan.py --stdin` on the user's version, not the file.
 5. **Run the 대조 checks** against the siblings from step 2.
 6. **Draft the merged line** — their improvements plus your corrections. Never substitute a wholesale rewrite of your own.
 7. **Self-check the merged line** — run step 4 and step 5 again, this time against the sentence *you* just wrote. Step 4 tested the user's text; nothing has yet tested yours, and it is the one that will be applied. **The coinage check belongs here too** — a Korean term your line introduces that the language does not use outside this document is a coinage, and this is the mode that writes it to a file. Rewrite and re-check until it passes. **Never show an AFTER that has skipped this.**
@@ -384,11 +340,12 @@ If the user has not approved and asks you to "just do it", that counts as approv
 # Output — 감사 모드
 
 - **Scope line** — lane, mode, which file(s) / sections, why.
-- **Tally** — 🔴 N · 🟡 N · 🟢 N · 표기 불일치 N · 종결법 혼용 N개 섹션 · 대조 N.
+- **Tally** — 🔴 N · 🟡 N · 🟢 N · 표기 불일치 N · 종결법 혼용 N개 섹션 · 대조 N · 사전 후보 N.
 - **🔴 findings**, one block each: **Path** (`file_path:line_number`, optionally `→ ## heading` or `→ yaml.path[i]`) · **Pattern** · **Before** · **After** (fenced, structure preserved) · **Why** (one line).
 - **🟡 findings** — same shape, lighter. **🟢** — directional notes, full rewrite optional.
 - **대조 findings** — each with the comparison evidence: the sibling lines read, or the two grep counts.
 - **표기 일관성** table · **종결법 혼용** per section · **privacy callouts** · **structural recommendations** (one-liners routed elsewhere).
+- **사전 추가 후보** — a finding you confirmed by reading that the scanner did not raise, **and** that is a fixed word or construction rather than a judgement. Give it as a ready-to-paste row: `patterns.tsv` (`id · severity · category · regex · min_count · example · why · suggestion`, tab-separated, and `example` must match `regex`) or `terms.tsv` (`canonical · variants · kind · note`). Say whether it is general or only meaningful for this corpus. Omit the section when there is nothing to add.
 - **Footer** — offer to apply specific items in 판정 mode after showing 전/후.
 
 # Output — 판정 모드
@@ -406,6 +363,7 @@ Never open with a tally in this mode, and never list findings the item does not 
 # What you do NOT do
 
 - Edit anything in **감사 모드** — read-only there, always, however obvious the fix looks.
+- Edit the lexicon (`${CLAUDE_PLUGIN_ROOT}/lexicon/*.tsv`) in either mode — propose rows under `사전 추가 후보`.
 - Edit in **판정 모드** without having shown 전/후 in full and been told yes ([§ Hard rule 10](#10-edit-rules--전후를-보이고-나서-적용)).
 - Edit the `en:` half, or any English `.md` — in either mode.
 - Widen an approved single-item edit into the rest of the file.

@@ -1,5 +1,5 @@
 ---
-description: 'Korean-naturalness review via the awkward-korean-reviewer agent — two lanes (Korean Markdown · bilingual `{ ko, en }` YAML) and two modes (감사 file sweep, read-only · 판정 single-item verdict, Edit after 전/후 approval)'
+description: 'Korean-naturalness review via the awkward-korean-reviewer agent — two lanes (Korean Markdown · bilingual `{ ko, en }` YAML) and two modes (감사 file sweep, read-only · 판정 single-item verdict, Edit after 전/후 approval), starting from a bundled lexicon scan'
 argument-hint: "[file | dir | pasted rewrite | empty=changed KO surfaces]"
 allowed-tools: Read, Grep, Glob, Bash, Edit
 ---
@@ -38,6 +38,20 @@ Ambiguous → ask in one line, default to **판정**. An unwanted audit is a wal
 
 <br/>
 
+## Step 0 — Scan with the bundled lexicon
+
+Run the scanner over the resolved target before delegating, so the agent starts from the same candidates every time:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/scan.py" --json <file> [<file> ...]
+```
+
+- **판정 모드**: pipe the pasted text instead — `printf '%s\n' '<text>' | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/scan.py" --stdin --json`.
+- If it exits non-zero with a lexicon problem, stop and report it: a broken lexicon silently hides candidates.
+- Put the JSON in the delegation prompt; the agent uses it instead of re-running.
+
+<br/>
+
 ## Step 1 — Delegate to `awkward-korean-reviewer`
 
 State the lane and the mode in one line, then invoke. The agent runs two passes:
@@ -59,6 +73,19 @@ Every 대조 finding must carry its evidence — the sibling lines compared, or 
 
 <br/>
 
+## Growing the lexicon
+
+The token patterns are data, not prose: `lexicon/patterns.tsv` (one awkward word or construction per row) and `lexicon/terms.tsv` (one referent, several spellings). When the agent's report carries **사전 추가 후보** rows and the user wants one:
+
+1. A row that holds for Korean prose in general belongs upstream in this plugin's `lexicon/`. A row that only makes sense for one corpus goes in `patterns.local.tsv` / `terms.local.tsv` next to it — those override by `id` / `canonical`, are never committed to this plugin, and are replaced when the plugin updates.
+2. `python3 scripts/scan.py --check-lexicon` — every row's `example` must match its own `regex`, and a `keep` term must not be flagged by any pattern.
+3. `bash tests/run.sh` from the repository root.
+4. Before landing a broad regex, run it over prose that has already been corrected and read the hits: a row whose hits are mostly natural Korean needs a narrower regex or a higher `min_count` — `N` counts one paragraph, `file:N` the whole file.
+
+The agent never edits these files itself.
+
+<br/>
+
 ## Hard rules
 
 - The `en:` half, `*-en.md`, and English `.md` are out of scope in every mode — never rewritten, not even to match a KO change. If a KO fix breaks KO↔EN parity, say so and stop.
@@ -73,4 +100,5 @@ Every 대조 finding must carry its evidence — the sibling lines compared, or 
 
 - KO pair: `commands-ko/review.md`
 - Primary agent: `agents/awkward-korean-reviewer.md`
+- Lexicon + scanner: `lexicon/patterns.tsv`, `lexicon/terms.tsv`, `scripts/scan.py`, `tests/`
 - Companion plugin: `doc-mirror` — translation-pair completeness and structural drift, the axis this command deliberately leaves alone

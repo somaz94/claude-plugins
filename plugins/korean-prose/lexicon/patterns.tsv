@@ -1,0 +1,97 @@
+# Token patterns for the Korean-naturalness reviewer, read by scripts/scan.py.
+# One row per pattern. Tab-separated; lines starting with # are comments.
+#   severity   red | yellow | green
+#   regex      Python re, run per line of prose with markup blanked;
+#              prefix (?#raw) to run it on the line with markup kept
+#   min_count  N: report only when one paragraph holds N hits (a blank-line block
+#              in Markdown/text, one ko: value in YAML); file:N counts the whole file
+#   example    a string the regex must match (checked by --check-lexicon)
+# Hits are candidates: the reviewer confirms each by reading the line.
+# Personal-corpus rows go in patterns.local.tsv, which overrides by id.
+id	severity	category	regex	min_count	example	why	suggestion
+e-isseoseo	red	translationese	에 있어서	1	운영에 있어서 중요한 점	Japanese-syntax (~において) residue; a locative `저장소에 있어서` (because it is in the repository) is a false positive.	`~에서`, `~의 경우`, or drop it
+gajida-abstract	red	translationese	(?:중요성|의미|가치|장점|단점|한계|책임|목적|특징|특성|영향력|효과|능력|경험)(?:을|를) 가(?:지다|지고|지며|지는|진|짐|졌)	1	중요한 의미를 가지고 있다	Direct from English "to have X" with an abstract noun; Korean prefers a predicate.	`중요하다`, `의미 있다`, `경험이 있다`
+it-is-subject	red	translationese	(?:^\s*|[.!?]\s+)(?:그것은|이것은) 	1	이것은 캐시 계층이다	English "It is" / "This is" rendered literally; Korean drops a subject the context already supplies.	Drop the subject and restructure as `~이다`
+passive-by	red	translationese	에 의해(?:서)? [^.]{0,40}?(?:되었|됐|되어|된다|된)	1	운영팀에 의해 배포되었다	English passive translated literally; Korean prefers active voice unless the agent is unknown or irrelevant.	Active voice: `~을 ~했다`
+ui-chain	red	translationese	\S+의 \S+의 \S+의 	1	서비스의 설정의 변경의 영향	Three or more chained possessives read as a syntactic stack ("X's Y's Z's W").	Restructure with a verb: `X가 운영하는 Y의 Z`
+tonghae-cluster	red	translationese	통해서?	2	API를 통해 배포하고 CLI를 통해 확인	`통해/통해서` from English "through/via"; repeated within one paragraph it reads as a translation tic.	`~로`, `~으로`, `~에서`, or restructure
+hameuro-cluster	red	translationese	함으로써	2	자동화함으로써 시간을 줄이고 표준화함으로써 실수를 막았다	Direct from English "by doing X"; one per paragraph is fine, clustered use reads stilted.	`~해서`, `~로`, or restructure
+nominal-progress	red	translationese	(?:검토|구축|개선|관리|운영|설계|도입|분석|점검|배포|이관) (?:진행|수행|실시)	1	구축 진행	Japanese-style nominalization plus `진행/수행/실시`; the noun is already a verb stem.	`구축`, `구축했다`, `검토했다`
+hwa-sikida	red	translationese	화 ?시(?:키|켜|켰|킨|킬|킴)	1	자동화 시켰다	Causative `시키다` after `~화` is overformal; `~화하다` is the direct verb.	`~화하다`, or the noun `~화`
+future-geot	red	translationese	(?:할|될|볼|줄|갈|올|있을|없을) 것(?:이다|입니다)	1	다음 분기에 도입할 것이다	English "will" rendered literally in a plan or assertion; Korean states plans in the present or with `예정`.	`~할 예정`, `~한다`
+ilhwan	red	translationese	의 일환으로|의 차원에서|[을를] 위시한	1	개선의 일환으로	Overly formal Japanese-Korean hybrid residue.	Drop it, or `~의 일부로`, `~를 포함한`
+untranslated-noun	red	translationese	(?i:(?<![A-Za-z(])(?:incidents?|silent failures?|estate)(?![A-Za-z]))|이슈 발생	1	incident 대응 절차	A plain English common noun left in Korean prose where a Korean word exists; distinct from product names and kept tech labels.	`incident → 장애`, `silent failure → 감지되지 않는 장애`, `estate → 환경 / 인프라`
+calque-apryeok	red	calque	압력	1	디스크 압력을 완화	Korean `압력` is physical pressure only, never I/O load or contention.	`부하`, `경합`
+calque-jeongnyeol	red	calque	정렬	1	두 설정을 정렬	Korean `정렬` is lining up or sorting, never "make two configs agree"; a real sort is a false positive.	`서로 맞춰`, `일치시켜`
+calque-suryeom	red	calque	수렴	1	드리프트를 수렴	Korean `수렴` is dominated by "gather opinions"; and you converge state, not drift.	`바로잡다`, `통합하다`
+calque-jaehwaryong	red	calque	재활용	1	기존 노드를 재활용	Korean `재활용` carries a waste/garbage connotation and undercuts a "no extra investment" point.	`확장`, `이미 있던 X를 …에 활용`
+calque-jasanhwa	red	calque	자산화	1	노하우를 자산화	Abstract nominalization that leaves no picture; the real act is writing it down so it does not recur.	`기록으로 남겨`, `팀이 함께 쓰는 자료로 축적`
+calque-ganjeophwa	red	calque	간접화	1	의존성을 간접화	Not a Korean word at all; a coinage for "indirection".	`분리`, `직접 참조하지 않도록 …`
+calque-gyeongno	red	calque	(?:인수인계|전달|학습|승인) 경로	1	인수인계 경로를 마련	Korean `경로` is a physical route or file path; a hand-off is not a route.	`인수인계까지 문서로 남김`
+calque-hamjeong	red	calque	함정	1	운영 중 만난 함정	Korean `함정` is a trap someone dug on purpose; nobody dug it, you hit it.	`시행착오`, `직접 부딪힌 문제`
+calque-wanju	red	calque	완주	1	업그레이드를 완주	Marathon metaphor in operations prose, and it usually drags the object wrong (the upgrade, not the stack).	`완료` and fix the object
+calque-jeonjugi	red	calque	전 주기	1	배포 전 주기를 설계	`주기를 설계·운영한다` does not hold; a cycle is not an operable object.	`전 과정`
+calque-tongje-release	red	calque	통제(?:된)? (?:릴리[스즈]|배포)	1	통제 릴리스	English stacks adjective+noun freely; Korean does not form this compound (controlled or controlling?).	`승인을 거쳐 …만 릴리스해`
+calque-noise-opt	red	calque	노이즈 최적화	1	알림 노이즈 최적화	You do not optimize noise; you reduce it.	`노이즈 정리`, `노이즈 감소`
+calque-gujo-ssaim	red	calque	구조가 쌓	1	의존 구조가 쌓였습니다	Korean stacks 부채 / 피로 / 데이터, not `구조`.	`의존이 계속 깊어졌습니다`
+calque-template-hwa	red	calque	(?i:template)화	1	template화	English stem with the Korean `~화` suffix.	`템플릿화`
+calque-empty-abstract	red	calque	성숙도(?: 레이어)?|체계를 (?:구축|확립|마련)|기반 구축|가능 수준|레이어를 (?:얹|쌓)	1	보안 체계를 구축	Empty abstract noun standing where a concrete one belongs; check the umbrella actually covers its own children.	Name the real thing: `롤아웃이 멈추지 않습니다`, `클러스터 하나`, `인프라`
+ai-geot-ganeung	red	ai-tell	(?:하는|되는|할|있는) 것이 (?:가능|중요|필요)	1	확장하는 것이 가능하다	Calque of "it is possible/important to X"; Korean has a direct verb.	`~할 수 있다`, `~해야 한다`
+ai-filler	red	ai-tell	결론적으로|궁극적으로|혁신적인|획기적인|핵심적인	1	결론적으로 안정성이 높아졌다	Filler discourse markers and inflation adjectives a human writing operations prose does not reach for.	Delete the marker; replace the adjective with the concrete claim
+ai-contrast-frame	red	ai-tell	[이가] 아니라	2	속도가 아니라 안정성이고 비용이 아니라 시간이다	The generator's favourite contrast frame; one is rhetoric, two in a paragraph is a tic.	State the positive directly; keep at most one per section
+ai-double-passive	red	ai-tell	(?:되어|보여|불려|쓰여)(?:지|진|질|짐|져|졌)	1	자동으로 처리되어진다	`되다` is already passive; `~어지다` doubles it.	`되다`, `보이다`, `불리다`, `쓰이다`
+ai-structural-metaphor	red	ai-tell	(?<![가-힣])(?:축|갈래)(?=\s|으로|로|이|가|을|를|의|은|는)|관점에서	1	두 갈래로 나눠	A structural metaphor standing in for a noun the writer did not name.	Name the thing
+ai-personify	red	ai-tell	(?:서버|노드|장비|프로세스|컨테이너|DB)(?:가|이) (?:죽|쓰러[지진질졌져])	1	서버가 죽으면	Casual anthropomorphism in otherwise formal prose; mixed register.	`서버가 중단되면`, `장비 장애`
+double-abstraction	yellow	nominalization	(?:개선|관리|구축|운영|점검|분석) (?:작업|업무)(?:을|를)? ?(?:수행|담당|진행)	1	구축 작업을 진행	Double abstraction: both halves nominalize the same action.	`구축` (noun) or `구축했다` (verb)
+e-daehan-cluster	yellow	nominalization	에 대한	2	장애에 대한 대응과 원인에 대한 분석	English "about/regarding"; one is fine, two in a paragraph is stilted.	`~의`, `~을`, or restructure
+e-daehae-progress	yellow	nominalization	에 대해(?:서)? [^.]{0,20}?(?:진행|수행)	1	원인에 대해 분석을 진행	Abstract object plus a weak verb doubles the awkwardness.	Direct verb: `원인을 분석`
+eul-tonghan	yellow	nominalization	[을를] 통한	1	API를 통한 배포	English "X via Z" rendered as a noun modifier.	Restructure with a verb: `API로 배포`
+causal-stack	yellow	nominalization	(?:으로|로) 인한|에 따른	3	장애로 인한 지연에 따른 재시도로 인한 부하	Three causal markers in one paragraph read bureaucratic.	Vary with `~로`, `~때문에`, or restructure
+mu-prefix	yellow	nominalization	무(?:변경|사고|정지)	1	무변경 배포	`無X` reads as a stiff back-translation of "zero-/no-X"; the established terms `무중단` and `무손실` are not flagged.	`변경 없이`, `사고 없이`, `데이터 손실 없이`
+chinsuk	yellow	nominalization	친숙	1	Ansible에 친숙한 운영 환경	`친숙` is emotional intimacy; tool proficiency wants `익숙`, and an environment does not befriend anything.	`Ansible 기반 운영에 이미 익숙한 …`
+sino-word-choice	yellow	nominalization	(?<![가-힣])교정|(?<![가-힣])산재(?:한|된|되어|해)	1	설정 교정	`교정` is proofreading or orthopedics and `산재` is formal "dispersed"; both read stiff for a fix or "scattered".	`교정 → 수정`, `산재 → 흩어진 / 흩어져 있어`
+konglish-verb-ro	yellow	nominalization	로 [A-Za-z]+(?:하고|하여|해서|함|한다|했다)	1	node로 join하고	A `로` particle plus an English verb conjugated directly; often paired with a duplicated `로`.	Give the verb a proper Korean target: `클러스터에 join하고`
+unit-drop	yellow	nominalization	(?<![가-힣A-Za-z])(?!약 )(?![가-힣A-Za-z]*시간[을이가]? )[가-힣A-Za-z]+ (?:약 )?\d+(?:\.\d+)?% ?단축	1	QA 전달 90% 단축	What shrank was the time, not the delivery itself; the EN half usually still has the unit.	`QA 전달 시간 90% 단축`
+particle-space-latin	yellow	spacing	[A-Za-z0-9)%] (?:은|는|이|가|을|를|로|으로|의|와|과|에|에서|까지|만)(?=[ ,.·]|$)	1	DNS 는 내부에서	Korean attaches a particle to the preceding word with no space, including after an English word, a closing parenthesis or a percent sign.	`DNS는`, `GitHub Actions의`; fix file-wide, then re-scan
+particle-space-tag	yellow	spacing	(?#raw)(?:</(?:code|strong|a|b|em)>|`) (?:은|는|이|가|을|를|로|으로|의|와|과|에|에서|까지|만)(?=[ ,.·]|$)	1	<code>make test</code> 를 실행	A particle after closing markup still attaches with no space.	`</code>를`, `` `x`를 ``
+cheot-bare	green	style	(?<![가-힣])첫 (?:잡|실행|배포|빌드|런)(?=[이을은의가를에]|[\s.,]|$)	1	첫 잡이 실패	Bare `첫 + noun` reads clipped for "the first run".	`첫 번째 잡`, `첫 번째 실행`
+wonchun-block	yellow	ai-tell	원천\s?(?:적으로\s?)?(?:차단|제거|봉쇄|방지)	1	키 유출 위험을 원천 차단	'Blocked at the source' is an absolute claim that almost always overstates what one mechanism does.	Name the path actually closed: `~ 경로를 없앰`, `사전에 제거`, `노출면을 줄임`
+risk-block	yellow	calque	리스크(?:를|가)?\s?(?:차단|제거|해소)	1	자격증명 유출 리스크 차단	A risk is a likelihood, not an object; it cannot be blocked or removed - name the path or exposure that was closed.	`~ 유출 경로를 없앰`, `위험을 줄임`, `노출을 막음`
+ro-ui	yellow	translationese	(?<![경도회통항진수미철선대으])로의\s|(?<!앞)으로의\s	1	GCP로의 대규모 이전	`로의` stacks a directional particle on the genitive, a construction Korean expresses with a verb; `앞으로의` is not flagged.	`GCP로 이전`, `후속 컨트롤러로 이관`, `~로 옮기는`
+hangye-existed	yellow	ai-tell	(?:구조적\s)?한계(?:가|를)\s?(?:있었|존재|도출)|한계로\s?인(?:해|한)|의\s한계로	1	추적하기 어려운 구조적 한계가 있었습니다	'There was a (structural) limitation' wraps a plain failure in an abstract noun instead of saying what could not be done.	Say what failed with a verb: `추적하기 어려웠습니다`, `~해서 503 에러가 발생했습니다`
+bujae	yellow	nominalization	부재(?:했|하였|합니다|하여|해서)|의\s부재로|부재로\s인(?:해|한)	1	통합 관측 체계의 부재로	`부재` (absence) as a predicate or cause noun is stiff Sino-Korean for 'did not exist'.	`체계가 없어`, `기준이 없었습니다`
+mi-noun	green	nominalization	(?<![가-힣])미(?:감지|부여|발생|인지|생성)(?![가-힣])	1	수집기 미감지 장애	A `미-` prefix noun compresses a negated verb into note-taking shorthand; a table cell or checklist is a false positive.	`감지하지 못한 장애`, `일부러 부여하지 않아`, `스케일아웃이 일어나지 않음`
+bulga-fragment	green	nominalization	[가-힣]\s불가(?:능)?(?:\.|\s및\s)	1	HTTP 환경에서 로그인 불가.	Ending a sentence or clause on the noun `불가` leaves a note fragment where prose needs a predicate; terse notes are a false positive.	`로그인이 막히는 문제`, `~할 수 없었습니다`
+abstract-hwakbo	yellow	ai-tell	(?:무결성|정확도|가시성|안정성|신뢰성|일관성|확장성|추적성)(?:을|를)?\s?(?:확보|담보)	file:2	데이터 무결성 확보	'Secured X-ness' names a quality instead of the concrete effect; repeated through a document it reads as generated.	Say what changed: `로그 중복·누락 방지`, `값이 실제와 어긋나지 않게 함`
+hwalyong	green	ai-tell	(?:을|를)\s?활용(?:한|하여|해|하고|하며|하는)	file:2	Terraform을 활용한 IaC 자동화	`X을 활용한` is a padded instrumental where `로` already carries the meaning; a non-tool object (`시간을 활용해`) is natural.	`Terraform으로`, `Kaniko로 빌드`, `~를 써서`
+suhaeng-particle	yellow	nominalization	(?:을|를)\s?(?:수행|실시)(?:하|했|한|해|함)	file:2	비용 분석을 수행한 결과	`X을 수행하다` turns the real verb into the object of a dummy 'perform' verb.	`비용을 분석한 결과`, `교육을 맡았습니다`
+jinhaeng-particle	green	nominalization	(?:을|를)\s?진행(?:하|했|한|해|함)	file:2	전환을 진행했으며	`X을 진행하다` is filler that delays the real verb (the particle form of `nominal-progress`).	`전환했으며`, `교육했습니다`
+giban-ui	green	nominalization	기반의\s	file:3	Shell/awk 기반의 인프라 모노레포	`X 기반의 Y` stacked as an adnominal calques 'X-based Y' and usually hides a simpler instrumental.	`Shell/awk로 만든 모노레포`, `커스텀 헤더로 분기하는 규칙`
+en-gloss-dup	green	style	[가-힣]{2,}\([A-Z][a-z]+(?:[ -][A-Za-z]+){0,3}\)	file:5	설정 드리프트(Configuration Drift)	An English gloss after a plain Korean word adds noise; keep a gloss only on the first mention of a genuinely unfamiliar term (see 용어 도입 관례).	Drop the gloss: `환경 불일치`, `영향 범위`, `허용 목록`
+en-idiom	yellow	calque	(?i:\b(?:root cause|single source of truth|human-in-the-loop|fat image|lead ?time)\b)|리드\s?타임	1	배포 리드타임 67% 단축	An untranslated English idiom inside Korean prose where a plain Korean phrase exists.	`근본 원인`, `단일 기준`, `사람이 직접 확인`, `용량이 큰 이미지`, `배포 시간`
+danil-calque	yellow	calque	단일\s?(?:뷰|화면|인터페이스|체계)	1	Kibana 단일 뷰에서 추적	`단일 뷰/체계` is word-for-word 'single view/system'; Korean says 'one screen' or 'one'.	`한 화면에서`, `클러스터 하나로만`
+dajung-calque	green	calque	다중\s?(?:인스턴스|replica|레플리카|컨트롤러|ingress)	1	Collector 다중 replica에서	`다중 X` for 'multiple X' is a technical-translation calque; plain Korean uses `여러`. A game-term `다중 인스턴스` is a false positive.	`여러 replica로 띄우면`, `여러 ingress-nginx 인스턴스`
+tilde-approx	yellow	style	(?<![\d.])(?<![\d.]\s)(?<!\|\s)~\s?\d	1	apiserver가 ~30초간 5xx 반환	In Korean copy the tilde marks a range (`9~14초`); as an 'approximately' prefix it is an English habit.	`약 30초간`, `약 10초로`
+silent-calque	yellow	calque	조용(?:한|히)\s?(?:[가-힣]+\s)?(?:유실|실패|멈|중단|장애|사라)	1	조용한 트레이스 유실을 감시	`조용한 실패/유실` is a literal 'silent failure/loss'; Korean describes what the reader could not see.	`아무 표시 없이 사라지는 트레이스`, `에러 없이 멈춘 수집`, `감지되지 않는 장애`
+risk-define	yellow	ai-tell	(?:리스크|위험|문제)(?:로|으로)\s?정의(?:하|했|해|함|\s|\.)	1	롤백 불능 상태를 핵심 운영 리스크로 정의.	'Defined X as the core risk/problem' is consultant framing standing in for the judgment itself.	`진짜 위험은 ~라고 판단`, `~가 문제였습니다`
+irueojida	yellow	translationese	이루어(?:지|진|질|짐|져|졌)	1	전달이 수동으로 이루어져	`~이 이루어지다` (to be carried out) is a translationese passive that hides who did what.	`수동으로 전달하다 보니`, `직접 동기화하다 보니`
+binbeon	yellow	translationese	빈번(?:하게|히)\s?(?:발생|일어)	1	장애가 빈번하게 발생했습니다	`빈번하게 발생했다` is a literal 'frequently occurred'; one adjective carries it.	`장애가 잦았습니다`, `누락도 빈번했습니다`
+isyu-clause	yellow	calque	(?:지\s않던|지\s않는|못하던|못하는)\s이슈	1	brokering이 작동하지 않던 이슈	A clause-modified `이슈` for a malfunction calques 'an issue where X did not work'; Korean says `문제`.	`작동하지 않던 문제`, `네트워크 카드를 못 잡던 문제`
+gongsu	yellow	calque	공수(?:를|가|는|\s)	1	수동 갱신 공수를 50% 절감	`공수` (工数, man-hours) is Japanese project-management jargon; plain Korean says work or time.	`수동 갱신 작업을 절반으로 줄임`, `연간 약 50시간 절감`
+zerohwa	yellow	calque	제로화	1	설정 드리프트 이슈 제로화	`제로화` is a coined 'zero-ization'; a count reads cleaner.	`환경 불일치 0건`
+seonggong	green	ai-tell	성공적으로	1	마이그레이션을 성공적으로 완료했습니다	'Successfully' adds nothing to a completed action and is a common generated-text tell.	Delete it and state the result: `무중단으로 이전했습니다`, `5개 고객사에 납품`
+daepok	green	ai-tell	대폭(?!발)	1	원인 규명 시간 대폭 단축	An unquantified intensifier where a number, or nothing, is stronger.	A figure (`약 139초 → 약 30초`) or delete
+hyeondaehwa	green	ai-tell	현대화	1	선언적 로깅 인프라 현대화	`현대화` is a vague headline noun that says nothing about what changed.	State the change: `ELK → EFK 전환`, `3단계 고도화`
+seonsunhwan	green	ai-tell	선순환	1	리소스 선순환 구조 구축	'Virtuous cycle' is a buzzword that inflates a single causal step.	`절감분은 신규 프로젝트에 재투자됐습니다`
+chegyejeok	green	ai-tell	체계적(?:인|으로)	1	체계적인 버전 거버넌스	`체계적인` asserts rigor instead of showing it.	Delete it and describe the structure: `4단계 버전 관리`
+bonyeon	green	ai-tell	본연의	1	개발팀이 본연의 기능 개발에 집중	`본연의` is ornamental filler.	`기능 개발에 집중`
+silhyeon	green	ai-tell	실현(?:하|했|해)	1	일관된 인프라 관리를 실현했습니다	'Realized X' is an inflated verb for an ordinary result.	`관리 체계를 갖췄습니다`, or the concrete result
+dongsie	green	translationese	(?:함과|하는|되는)\s?동시에	1	SSD로 이전함과 동시에	`~함과 동시에` is a literal 'at the same time as' that a plain `~고` handles.	`SSD로 옮기고`, `이전하면서`
+ireul-wihae	green	ai-tell	이를\s해결하기\s위해	1	이를 해결하기 위해 외부 watchdog	'To solve this, …' is a scaffold transition; the causal link is already clear.	Join to the previous sentence: `~를 도출하고`, `그래서`
+jikmyeon	green	translationese	에\s?직면	1	순환 의존에 직면해	`~에 직면하다` is a literal 'faced with' that dramatizes an ordinary blocker.	`순환 의존 때문에`, `~가 막혀`
+jonjae-limit	yellow	translationese	(?:한계|문제|제약|이슈)(?:가|이)\s?존재(?:했|합|하였|한다)	1	확장의 한계가 존재했습니다	'A limitation existed' translates 'there existed'; Korean uses `있다` or a verb for the failure.	`확장하기도 어려웠습니다`, `문제가 있었습니다`
+ege-isseo	yellow	translationese	에게\s있어(?:서)?\s	1	운영자에게 있어 중요한 것은	`~에게 있어(서)` is 'for/to someone' translationese, the variant `e-isseoseo` misses.	`운영자에게는`, `운영자가 보기에`
+jung-e-itda	yellow	translationese	(?:하|되)는\s중에\s있	1	검토하는 중에 있습니다	`~하는 중에 있다` is a literal progressive.	`검토하고 있습니다`, `검토 중입니다`
+dareum-ani	yellow	translationese	에\s다름\s아니	1	실패에 다름 아니다	`~에 다름 아니다` is a Japanese-derived 'is nothing other than'.	`사실상 실패다`, `실패나 마찬가지다`
+rago-haneun	yellow	translationese	(?:이)?라고\s하는\s것(?:은|이)	1	GitOps라고 하는 것은	`X라고 하는 것은` is a wordy topic frame for 'what is called X'.	`GitOps는`
+wichi	green	translationese	에\s위치(?:한|하는|해|하고|한다)	1	서울 리전에 위치한 클러스터	`~에 위치한` is 'located in' translationese.	`서울 리전의 클러스터`, `맨 아래에 둔다`

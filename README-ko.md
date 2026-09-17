@@ -77,6 +77,7 @@ plugins/<name>/                   플러그인당 디렉터리 하나
   hooks/hooks.json                훅 등록, ${CLAUDE_PLUGIN_ROOT} 기준 경로
   scripts/                        번들 실행 파일, ${CLAUDE_PLUGIN_ROOT} 로 참조
     _shared.py                    각 플러그인에 동일하게 벤더링된 공용 헬퍼
+  <data>/                         번들 스크립트가 자기 __file__ 기준으로 찾는 데이터
 ```
 
 `_shared.py`는 **import 가 아니라 벤더링**입니다. 플러그인은 각자 따로 설치되므로 런타임에는 자기 디렉터리 밖의 것이 디스크에 없고, import 해 올 공용 패키지도 존재하지 않습니다. 그래서 모든 사본은 바이트 단위로 동일해야 하며, 어긋나면 CI가 실패합니다.

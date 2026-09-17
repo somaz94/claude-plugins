@@ -45,6 +45,8 @@ The newer half of the problem is not translation at all. Text that was **generat
 
 The middle rows are the ones worth the install. `압력`, `정렬`, `수렴`, `재활용`, `함정`, `완주` are all real Korean words that a dictionary will happily offer for the English term — and all six point somewhere else once they land in a technical sentence. The translation happened, and destroyed the meaning on the way. The plugin ships that substitution dictionary with the reason each one fails.
 
+The patterns are **data, not prompt text**: `lexicon/patterns.tsv` holds one awkward word or construction per row — its regex, a severity, an example it must match, why it reads wrong, and what to write instead — and `lexicon/terms.tsv` holds one referent and its spellings. A standard-library scanner, `scripts/scan.py`, runs both before the agent reads anything, so every review starts from the same candidates. It reads only Korean prose: code, links and markup are blanked, the `en:` half of a bilingual YAML file is skipped, and a line with no Hangul is left alone. A new pattern is one row, and `python3 scripts/scan.py --check-lexicon` refuses a row whose example does not match its own regex.
+
 <br/>
 
 ## The pass a token scan cannot do
@@ -54,7 +56,7 @@ Every pattern above is visible inside one line. The findings that survive a clea
 - **형제 구조 이탈** — one bullet in a list is two sentences where the rest are one, or leads with a verb where the rest lead with the outcome. It is fine alone and wrong in place.
 - **이웃 중복** — two items in the same block say the same thing. Not every overlap is a defect: a technology name repeated across an approach line and an outcome line is required, not redundant. The plugin sorts the three kinds and reports only the one that is a finding.
 - **과장 드리프트** — `차단` where the evidence says `방지`, or a condition that never existed described as a defect that was fixed.
-- **표기 일관성** — `Pod` in one paragraph and `파드` in the next, usually because a later edit followed the writer's habit rather than the file's.
+- **표기 일관성** — `Pod` in one paragraph and `파드` in the next, or `Canary` beside `canary`, usually because a later edit followed the writer's habit rather than the file's. The scanner counts every spelling, including English words written in two letter cases; whether two spellings name the same thing — `Helm` the product, `helm` the CLI — is still a reading job.
 - **용어 도입 관례** — a bare `fail-fast` in prose that writes `부분 장애(gray failure)` everywhere else. Spelling-consistency passes it trivially; the document's own convention does not.
 
 Each is reported with its evidence — the sibling lines compared, or the two counts. A finding you cannot check is not a finding.

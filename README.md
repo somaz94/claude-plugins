@@ -77,6 +77,7 @@ plugins/<name>/                   one directory per plugin
   hooks/hooks.json                hook registrations, rooted at ${CLAUDE_PLUGIN_ROOT}
   scripts/                        bundled executables, referenced via ${CLAUDE_PLUGIN_ROOT}
     _shared.py                    helpers vendored identically into each plugin
+  <data>/                         data a bundled script reads, found from its own __file__
 ```
 
 `_shared.py` is **vendored, not imported**. A plugin is installed on its own, so at runtime nothing outside its own directory is on disk and there is no shared package to import from. Every copy is therefore byte-identical, and CI fails when they diverge.

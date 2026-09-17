@@ -1,0 +1,56 @@
+# One referent, several spellings, read by scripts/scan.py.
+# A term is reported when two or more of its spellings occur in one file.
+#   variants   |-separated; English spellings match any letter case, so
+#              list only spellings that differ beyond case (Hangul, hyphens)
+#   kind       name | k8s-kind | concept | keep (an English label never flagged
+#              as untranslated - --check-lexicon enforces it)
+# Personal-corpus rows go in terms.local.tsv, which overrides by canonical.
+canonical	variants	kind	note
+Canary	카나리	concept	deployment strategy
+Blue-Green	Blue/Green|Blue Green|블루그린|블루 그린|블루-그린	concept	deployment strategy
+GitOps	깃옵스	concept	lower-case `gitops` is usually a repository or path identifier
+pull-GitOps		concept	letter case only; the corpus form is lower-case `pull-`
+Kubernetes	K8s|쿠버네티스|쿠버네이트	name	`쿠버네이트` is a misspelling in any case
+ArgoCD	Argo CD	name	the upstream brand is `Argo CD`; lower-case `argocd` is a CLI or namespace identifier
+Helm	헬름	name	`helm` in prose may be the CLI; confirm the referent
+Terraform	테라폼	name	
+Docker	도커	name	
+Prometheus	프로메테우스	name	
+Grafana	그라파나	name	
+Fluent Bit	Fluent-bit|FluentBit	name	the upstream brand is `Fluent Bit`; lower-case `fluent-bit` is a chart or namespace identifier
+Linux	리눅스	name	`리눅스` inside a proper noun (a certificate name) is not drift
+Node Exporter	node-exporter|node_exporter	name	the hyphenated form is a chart or binary identifier
+Target Group	타깃 그룹|타겟 그룹	name	load balancer target group
+Readiness Gate		name	load balancer controller feature; letter case only
+Pod	파드	k8s-kind	resource kind
+Deployment	디플로이먼트	k8s-kind	resource kind; lower-case `deployment` in prose is often the generic noun
+Namespace	네임스페이스	k8s-kind	resource kind
+Ingress	인그레스	k8s-kind	resource kind
+ConfigMap	컨피그맵	k8s-kind	resource kind
+Secret	시크릿	k8s-kind	resource kind
+StatefulSet	스테이트풀셋	k8s-kind	resource kind
+DaemonSet	데몬셋	k8s-kind	resource kind
+NodePool	노드 풀|노드풀	keep	do not unify: `NodePool` is the Karpenter / EKS resource kind, `노드 풀` the generic node-pool concept
+Stateless	무상태|스테이트리스	concept	
+관측성	옵저버빌리티|Observability	concept	lower-case `observability` is usually a path or label
+End-to-End	엔드투엔드|엔드 투 엔드|E2E	concept	
+헬스체크	헬스 체크|Health Check|healthcheck	concept	
+컨트롤플레인	컨트롤 플레인|Control Plane	concept	the node-role label `control-plane` is an identifier, not prose
+멀티 아키텍처	멀티아키텍처|Multi-arch|멀티아치	concept	
+멀티클러스터	멀티 클러스터	concept	
+Load Balancer	로드밸런서|로드 밸런서	concept	`AWS Load Balancer Controller` is a product name, not drift
+릴리스	릴리즈	concept	standard loanword spelling is `릴리스`
+알림	알람	concept	
+저장소	레포|리포지토리|레포지토리|repo	concept	flag only in running prose; a compact label may use `repo`
+지연 시간	레이턴시|latency	concept	
+템플릿	template	concept	
+매니페스트	메니페스트|manifest	concept	
+디렉터리	디렉토리	concept	standard spelling is `디렉터리`
+워크플로	워크플로우	concept	standard spelling is `워크플로`
+애플리케이션	어플리케이션|application	concept	
+쿼터	quota	concept	
+선언적	선언형	concept	
+드리프트	drift	concept	
+영향 범위	blast radius|blast-radius	concept	keep English at most once, as a first-mention gloss
+작은따옴표	단일따옴표|홑따옴표	concept	
+cutover	컷오버	keep	kept as an English label; do not translate

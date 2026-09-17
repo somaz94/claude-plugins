@@ -1,5 +1,5 @@
 ---
-description: '`awkward-korean-reviewer` 에이전트를 통한 한국어 자연스러움 리뷰 — 레인 2개 (한국어 Markdown · bilingual `{ ko, en }` YAML) 와 모드 2개 (감사 파일 스윕, read-only · 판정 단일 항목 판정, 전/후 승인 후 Edit)'
+description: '`awkward-korean-reviewer` 에이전트를 통한 한국어 자연스러움 리뷰 — 레인 2개 (한국어 Markdown · bilingual `{ ko, en }` YAML) 와 모드 2개 (감사 파일 스윕, read-only · 판정 단일 항목 판정, 전/후 승인 후 Edit), 번들 사전 스캔에서 출발'
 argument-hint: "[file | dir | pasted rewrite | empty=변경된 KO 표면]"
 allowed-tools: Read, Grep, Glob, Bash, Edit
 ---
@@ -42,6 +42,20 @@ allowed-tools: Read, Grep, Glob, Bash, Edit
 
 <br/>
 
+## 0단계 — 번들 사전으로 스캔
+
+위임하기 전에 확정된 대상에 스캐너를 돌려, 에이전트가 매번 같은 후보에서 출발하게 합니다:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/scan.py" --json <file> [<file> ...]
+```
+
+- **판정 모드**: 붙여넣은 텍스트를 대신 통과시킵니다 — `printf '%s\n' '<텍스트>' | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/scan.py" --stdin --json`.
+- 사전 문제로 0 이 아닌 코드로 끝나면 멈추고 보고합니다: 깨진 사전은 후보를 조용히 감춥니다.
+- JSON 을 위임 프롬프트에 넣습니다. 에이전트는 다시 돌리지 않고 그걸 씁니다.
+
+<br/>
+
 ## 1단계 — `awkward-korean-reviewer` 에 위임
 
 레인과 모드를 한 줄로 밝힌 뒤 호출합니다. 에이전트는 두 개의 패스를 돌립니다:
@@ -63,6 +77,19 @@ allowed-tools: Read, Grep, Glob, Bash, Edit
 
 <br/>
 
+## 사전 키우기
+
+토큰 패턴은 산문이 아니라 데이터입니다: `lexicon/patterns.tsv`(행마다 어색한 단어·구문 하나)와 `lexicon/terms.tsv`(한 대상의 여러 표기). 에이전트 보고서에 **사전 추가 후보** 행이 있고 사용자가 원하면:
+
+1. 한국어 산문 일반에 통하는 행은 이 플러그인의 `lexicon/` 으로 올립니다. 한 코퍼스에서만 의미 있는 행은 그 옆의 `patterns.local.tsv` / `terms.local.tsv` 에 둡니다 — `id` / `canonical` 기준으로 덮어쓰고, 이 플러그인에 커밋하지 않으며, 플러그인이 갱신되면 교체됩니다.
+2. `python3 scripts/scan.py --check-lexicon` — 모든 행의 `example` 이 자기 `regex` 에 매치해야 하고, `keep` 용어를 어떤 패턴도 플래그하면 안 됩니다.
+3. 저장소 루트에서 `bash tests/run.sh`.
+4. 넓은 정규식을 넣기 전에 이미 교정이 끝난 글에 돌려 hit 를 읽습니다: hit 가 대부분 자연스러운 한국어인 행은 정규식을 좁히거나 `min_count` 를 올려야 합니다 — `N` 은 한 단락, `file:N` 은 파일 전체를 셉니다.
+
+에이전트는 이 파일들을 직접 편집하지 않습니다.
+
+<br/>
+
 ## 하드 룰
 
 - `en:` 절반, `*-en.md`, 영어 `.md` 는 모든 모드에서 범위 밖입니다 — KO 변경에 맞추기 위해서라도 재작성하지 않습니다. KO 수정이 KO↔EN parity 를 깬다면 그렇다고 말하고 멈춥니다.
@@ -77,4 +104,5 @@ allowed-tools: Read, Grep, Glob, Bash, Edit
 
 - EN 원본: `commands/review.md`
 - 주 에이전트: `agents/awkward-korean-reviewer.md`
+- 사전 + 스캐너: `lexicon/patterns.tsv`, `lexicon/terms.tsv`, `scripts/scan.py`, `tests/`
 - 짝 플러그인: `doc-mirror` — 번역 pair 완전성과 구조 drift, 이 커맨드가 의도적으로 건드리지 않는 축
