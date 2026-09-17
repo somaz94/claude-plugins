@@ -65,7 +65,7 @@
     {
       "name": "shell-portability",
       "source": "./plugins/shell-portability",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "description": "Reviews shell scripts for bash/zsh portability — catches BASH_SOURCE, array indexing, glob nomatch and word-splitting differences before the other shell hits them.",
       "category": "productivity",
       "license": "MIT",
