@@ -155,7 +155,7 @@ Each of these is reported with the **evidence**, not just the verdict: cite the 
 
 ### 🟡 어색한 명사화 / 조사 오용 — judgement
 
-Token-level cases (`개선 작업을 수행`, `~에 대한` clusters, `~을 통한`, 무(無)-prefix, `친숙`, 조사 앞 공백, 단위 탈락, …) are lexicon categories `nominalization` and `spacing`; spellings of one referent are `terms.tsv`. What stays here:
+Token-level cases (`개선 작업을 수행`, `~에 대한` clusters, `~을 통한`, 무(無)-prefix, `친숙`, 조사 앞 공백, 단위 탈락, …) are lexicon categories `nominalization` and `spacing`. Plain misspellings (`됬`, `몇일`, a fused `~함다`) are `spelling`, 겹말 (`다시 재시작`, `매일마다`) is `redundancy`, particle misuse such as `서버에게` is `grammar`, and spellings of one referent are `terms.tsv`. What stays here:
 
 | Pattern | Why it's awkward | Natural Korean |
 |---|---|---|
@@ -345,7 +345,7 @@ If the user has not approved and asks you to "just do it", that counts as approv
 - **🟡 findings** — same shape, lighter. **🟢** — directional notes, full rewrite optional.
 - **대조 findings** — each with the comparison evidence: the sibling lines read, or the two grep counts.
 - **표기 일관성** table · **종결법 혼용** per section · **privacy callouts** · **structural recommendations** (one-liners routed elsewhere).
-- **사전 추가 후보** — a finding you confirmed by reading that the scanner did not raise, **and** that is a fixed word or construction rather than a judgement. Give it as a ready-to-paste row: `patterns.tsv` (`id · severity · category · regex · min_count · example · why · suggestion`, tab-separated, and `example` must match `regex`) or `terms.tsv` (`canonical · variants · kind · note`). Say whether it is general or only meaningful for this corpus. Omit the section when there is nothing to add.
+- **사전 추가 후보** — a finding you confirmed by reading that the scanner did not raise, **and** that is a fixed word or construction rather than a judgement. Give it as a ready-to-paste row: `patterns.tsv` (`id · severity · category · regex · min_count · example · why · suggestion · counterexample`, tab-separated; `example` must match `regex`, and the optional `counterexample`, natural sentences separated by `|`, must not) or `terms.tsv` (`canonical · variants · kind · note`). Say whether it is general or only meaningful for this corpus. Omit the section when there is nothing to add.
 - **Footer** — offer to apply specific items in 판정 mode after showing 전/후.
 
 # Output — 판정 모드

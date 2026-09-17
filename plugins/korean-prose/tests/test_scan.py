@@ -24,13 +24,18 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import scan  # noqa: E402
 
-P_HEADER = "\t".join(scan.PATTERN_COLUMNS)
+P_HEADER = "\t".join(scan.PATTERN_COLUMNS + scan.PATTERN_OPTIONAL_COLUMNS)
+LEGACY_P_HEADER = "\t".join(scan.PATTERN_COLUMNS)
 T_HEADER = "\t".join(scan.TERM_COLUMNS)
 
 
 def pattern_row(pid="p1", severity="red", category="translationese", regex="에 있어서",
-                min_count="1", example="운영에 있어서", why="why", suggestion="try") -> str:
-    return "\t".join((pid, severity, category, regex, min_count, example, why, suggestion))
+                min_count="1", example="운영에 있어서", why="why", suggestion="try",
+                counterexample: str | None = None) -> str:
+    cells = [pid, severity, category, regex, min_count, example, why, suggestion]
+    if counterexample is not None:
+        cells.append(counterexample)
+    return "\t".join(cells)
 
 
 def term_row(canonical="Canary", variants="카나리", kind="concept", note="") -> str:
@@ -86,6 +91,16 @@ class ShippedLexiconTest(unittest.TestCase):
             with self.subTest(pattern=pattern.id):
                 self.assertEqual([hit["id"] for hit in report["patterns"]], [pattern.id])
 
+    def test_no_shipped_counterexample_is_reported_by_a_scan(self):
+        patterns, _, _ = scan.load_lexicon(scan.LEXICON_DIR)
+        guarded = [p for p in patterns if p.counterexamples]
+        self.assertTrue(guarded)
+        for pattern in guarded:
+            for counterexample in pattern.counterexamples:
+                text = "\n".join([counterexample] * pattern.min_count)
+                with self.subTest(pattern=pattern.id, counterexample=counterexample):
+                    self.assertEqual(scan.scan_text(text, "md", [pattern], [])["patterns"], [])
+
     def test_canary_spelled_three_ways_is_reported(self):
         # Regression: the reviewer missed `카나리` next to `Canary` until the user pointed at it.
         patterns, terms, _ = scan.load_lexicon(scan.LEXICON_DIR)
@@ -110,7 +125,9 @@ class ShippedLexiconTest(unittest.TestCase):
 
 
     def test_corpus_false_positives_stay_fixed(self):
-        # Each line was a false positive measured on a real Korean corpus (resume and internal docs).
+        # Each line was a false positive measured on a real Korean corpus (resume and internal docs),
+        # and must stay quiet under every row. A guard that concerns one row belongs in that row's
+        # counterexample cell instead.
         patterns, _, _ = scan.load_lexicon(scan.LEXICON_DIR)
         quiet = [
             "감시 대상과 같은 클러스터 안에 있어 함께 멈췄습니다",
@@ -148,7 +165,37 @@ class LexiconValidationTest(unittest.TestCase):
         self.assertIn("missing header", self.problems(raw_patterns="# only a comment\n")[0])
 
     def test_wrong_column_count(self):
-        self.assertIn("expected 8 columns", self.problems(patterns=["a\tb"])[0])
+        self.assertIn("expected 8 to 9 columns, got 2", self.problems(patterns=["a\tb"])[0])
+        self.assertIn("got 10", self.problems(patterns=[pattern_row(counterexample="가\t나")])[0])
+
+    def test_legacy_header_without_the_optional_column(self):
+        raw = LEGACY_P_HEADER + "\n" + pattern_row() + "\n"
+        self.assertEqual(self.problems(raw_patterns=raw), [])
+        raw = LEGACY_P_HEADER + "\n" + pattern_row(counterexample="운영에서") + "\n"
+        self.assertIn("expected 8 columns, got 9", self.problems(raw_patterns=raw)[0])
+
+    def test_header_names_the_optional_column(self):
+        self.assertIn("[<TAB>counterexample]", self.problems(raw_patterns="id\tregex\n")[0])
+
+    def test_counterexamples_are_split_trimmed_and_optional(self):
+        with LexiconDir(patterns=[pattern_row(counterexample=" 운영에서 | | 운영의 경우 "),
+                                  pattern_row(pid="p2", counterexample=""), pattern_row(pid="p3")]) as path:
+            patterns, _, problems = scan.load_lexicon(path)
+        self.assertEqual(problems, [])
+        self.assertEqual({p.id: p.counterexamples for p in patterns},
+                         {"p1": ("운영에서", "운영의 경우"), "p2": (), "p3": ()})
+
+    def test_counterexample_must_not_match_regex(self):
+        found = self.problems(patterns=[pattern_row(counterexample="운영에서|배포에 있어서 중요한 점")])
+        self.assertIn("p1 counterexample '배포에 있어서 중요한 점' matches its regex", found[0])
+
+    def test_counterexample_is_checked_the_way_the_scanner_reads_it(self):
+        # Markup is blanked for an ordinary row, and kept for a (?#raw) row.
+        self.assertEqual(self.problems(patterns=[pattern_row(counterexample="`에 있어서` 를 검색")]), [])
+        raw_row = pattern_row(regex="(?#raw)</code> 를", example="</code> 를", counterexample="<code>x</code>를")
+        self.assertEqual(self.problems(patterns=[raw_row]), [])
+        raw_row = pattern_row(regex="(?#raw)</code> 를", example="</code> 를", counterexample="<code>x</code> 를")
+        self.assertIn("matches its regex", self.problems(patterns=[raw_row])[0])
 
     def test_empty_id(self):
         self.assertIn("empty id", self.problems(patterns=[pattern_row(pid="")])[0])
@@ -494,6 +541,30 @@ class CliTest(unittest.TestCase):
         self.assertIn("[spelling] Canary (concept): Canary×1, 카나리×1", out)
         self.assertIn("[case, likely label-capitalization] Sidecar/sidecar", out)
         self.assertIn("(no candidates)", out)
+
+    def test_severity_floor_limits_pattern_hits(self):
+        text = "운영에 있어서 API를 통한 배포\n"
+        ids = lambda argv: [p["id"] for p in json.loads(run_main(argv, stdin=text)[1])["files"][0]["patterns"]]
+        self.assertEqual(ids(["--stdin", "--json", "--severity", "red"]), ["e-isseoseo"])
+        self.assertEqual(ids(["--stdin", "--json", "--severity", "yellow"]), ["e-isseoseo", "eul-tonghan"])
+
+    def test_category_filter_is_repeatable_and_comma_separated(self):
+        text = "운영에 있어서 메세지를 확인하고 서버에게 보낸다\n"
+        ids = lambda argv: {p["id"] for p in json.loads(run_main(argv, stdin=text)[1])["files"][0]["patterns"]}
+        self.assertEqual(ids(["--stdin", "--json", "--category", "spelling"]), {"loanword-spelling"})
+        both = {"loanword-spelling", "ege-inanimate"}
+        self.assertEqual(ids(["--stdin", "--json", "--category", "spelling,grammar"]), both)
+        self.assertEqual(ids(["--stdin", "--json", "--category", "spelling", "--category", "grammar"]), both)
+
+    def test_unknown_category_is_a_usage_error(self):
+        code, _, err = run_main(["--stdin", "--category", "spelling,nope"], stdin="본문\n")
+        self.assertEqual(code, scan.EXIT_USAGE)
+        self.assertIn("unknown category nope", err)
+
+    def test_filters_leave_the_spelling_pass_alone(self):
+        code, out, _ = run_main(["--stdin", "--json", "--severity", "red"], stdin="카나리 배포와 Canary\n")
+        report = json.loads(out)["files"][0]
+        self.assertEqual((code, report["terms"][0]["canonical"]), (scan.EXIT_OK, "Canary"))
 
     def test_stdin_defaults_to_text_lane(self):
         code, out, _ = run_main(["--stdin", "--json"], stdin="이것은 테스트이다\n")

@@ -26,6 +26,8 @@ from pathlib import Path
 LEXICON_DIR = Path(__file__).resolve().parent.parent / "lexicon"
 
 PATTERN_COLUMNS = ("id", "severity", "category", "regex", "min_count", "example", "why", "suggestion")
+PATTERN_OPTIONAL_COLUMNS = ("counterexample",)
+COUNTEREXAMPLE_SEPARATOR = "|"
 TERM_COLUMNS = ("canonical", "variants", "kind", "note")
 SEVERITIES = ("red", "yellow", "green")
 TERM_KINDS = ("name", "k8s-kind", "concept", "keep")
@@ -87,6 +89,9 @@ class Pattern:
     ``min_count`` is counted per paragraph (a tic repeated in one place), or
     across the whole file when written ``file:N`` (a habit spread through a
     document).
+
+    ``counterexamples`` are strings the regex must not match at all: the
+    natural Korean a narrowed regex was narrowed to leave alone.
     """
 
     id: str
@@ -96,6 +101,7 @@ class Pattern:
     min_count: int
     per_file: bool
     example: str
+    counterexamples: tuple[str, ...]
     why: str
     suggestion: str
     source: str
@@ -135,32 +141,44 @@ class ProseLine:
 # ---------------------------------------------------------------------------
 
 
-def read_tsv(path: Path, columns: tuple[str, ...], problems: list[str]) -> list[tuple[int, dict[str, str]]]:
-    """Read a TSV whose first non-comment line is the header ``columns``."""
+def read_tsv(
+    path: Path, columns: tuple[str, ...], problems: list[str], optional: tuple[str, ...] = ()
+) -> list[tuple[int, dict[str, str]]]:
+    """Read a TSV whose first non-comment line is the header ``columns``.
+
+    Trailing ``optional`` columns may be left out of the header, so a file
+    written before they existed still reads. A row may also leave out the
+    optional cells its header declares; every missing cell reads as ``""``.
+    """
     rows: list[tuple[int, dict[str, str]]] = []
-    header_seen = False
+    header: tuple[str, ...] | None = None
+    accepted = [columns + optional[:n] for n in range(len(optional) + 1)]
     for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
         if not line.strip() or line.lstrip().startswith("#"):
             continue
         cells = line.split("\t")
-        if not header_seen:
-            if tuple(cells) != columns:
-                problems.append(f"{path.name}:{lineno}: header must be {'<TAB>'.join(columns)}")
+        if header is None:
+            if tuple(cells) not in accepted:
+                shape = "<TAB>".join(columns) + "".join(f"[<TAB>{name}]" for name in optional)
+                problems.append(f"{path.name}:{lineno}: header must be {shape}")
                 return rows
-            header_seen = True
+            header = tuple(cells)
             continue
-        if len(cells) != len(columns):
-            problems.append(f"{path.name}:{lineno}: expected {len(columns)} columns, got {len(cells)}")
+        if not len(columns) <= len(cells) <= len(header):
+            expected = f"{len(columns)}" if len(header) == len(columns) else f"{len(columns)} to {len(header)}"
+            problems.append(f"{path.name}:{lineno}: expected {expected} columns, got {len(cells)}")
             continue
-        rows.append((lineno, dict(zip(columns, (c.strip() for c in cells)))))
-    if not header_seen:
+        row = dict.fromkeys(columns + optional, "")
+        row.update(zip(header, (c.strip() for c in cells)))
+        rows.append((lineno, row))
+    if header is None:
         problems.append(f"{path.name}: missing header row")
     return rows
 
 
 def parse_patterns(path: Path, problems: list[str]) -> dict[str, Pattern]:
     patterns: dict[str, Pattern] = {}
-    for lineno, row in read_tsv(path, PATTERN_COLUMNS, problems):
+    for lineno, row in read_tsv(path, PATTERN_COLUMNS, problems, PATTERN_OPTIONAL_COLUMNS):
         where = f"{path.name}:{lineno}"
         pid = row["id"]
         if not pid:
@@ -193,6 +211,15 @@ def parse_patterns(path: Path, problems: list[str]) -> dict[str, Pattern]:
         if not regex.search(row["example"]):
             problems.append(f"{where}: {pid} example {row['example']!r} does not match its regex")
             continue
+        counterexamples = tuple(
+            text.strip() for text in row["counterexample"].split(COUNTEREXAMPLE_SEPARATOR) if text.strip()
+        )
+        # Checked against what the scanner would see: markup blanked unless the row reads the raw line.
+        on_raw = row["regex"].startswith(RAW_TARGET_MARK)
+        matched = [text for text in counterexamples if regex.search(text if on_raw else strip_markup(text))]
+        if matched:
+            problems.append(f"{where}: {pid} counterexample {matched[0]!r} matches its regex")
+            continue
         patterns[pid] = Pattern(
             id=pid,
             severity=row["severity"],
@@ -201,6 +228,7 @@ def parse_patterns(path: Path, problems: list[str]) -> dict[str, Pattern]:
             min_count=min_count,
             per_file=per_file,
             example=row["example"],
+            counterexamples=counterexamples,
             why=row["why"],
             suggestion=row["suggestion"],
             source=path.name,
@@ -553,6 +581,19 @@ def _case_hint(forms: dict[str, dict]) -> str | None:
 # ---------------------------------------------------------------------------
 
 
+def select_patterns(patterns: list[Pattern], severity: str | None, categories: set[str]) -> list[Pattern]:
+    """Narrow the pattern pass to a severity floor and a set of categories.
+
+    The spelling and letter-case passes are not patterns and are unaffected.
+    """
+    if severity is not None:
+        floor = SEVERITIES.index(severity)
+        patterns = [p for p in patterns if SEVERITIES.index(p.severity) <= floor]
+    if categories:
+        patterns = [p for p in patterns if p.category in categories]
+    return patterns
+
+
 def korean_lines(lines: list[ProseLine]) -> list[ProseLine]:
     """Keep only lines with Korean in their prose.
 
@@ -606,6 +647,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--lane", choices=("auto", "md", "yaml", "text"), default="auto")
     parser.add_argument("--stdin", action="store_true", help="scan text from standard input")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
+    parser.add_argument(
+        "--severity",
+        choices=SEVERITIES,
+        help="report pattern hits at this severity or above (red > yellow > green)",
+    )
+    parser.add_argument(
+        "--category",
+        action="append",
+        metavar="NAME",
+        help="report pattern hits in these categories only; repeat it or separate names with commas",
+    )
     parser.add_argument("--check-lexicon", action="store_true", help="validate the lexicon and exit")
     parser.add_argument("--lexicon", type=Path, default=LEXICON_DIR, help=argparse.SUPPRESS)
     return parser
@@ -637,6 +689,14 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_usage(sys.stderr)
         print("scan.py: give one or more files, or --stdin", file=sys.stderr)
         return EXIT_USAGE
+
+    categories = {name.strip() for value in args.category or () for name in value.split(",") if name.strip()}
+    unknown = categories - {p.category for p in patterns}
+    if unknown:
+        known = ", ".join(sorted({p.category for p in patterns}))
+        print(f"scan.py: unknown category {', '.join(sorted(unknown))}; known: {known}", file=sys.stderr)
+        return EXIT_USAGE
+    patterns = select_patterns(patterns, args.severity, categories)
 
     report: dict = {"files": []}
     if args.stdin:

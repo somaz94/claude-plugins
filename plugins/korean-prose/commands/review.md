@@ -78,9 +78,9 @@ Every 대조 finding must carry its evidence — the sibling lines compared, or 
 The token patterns are data, not prose: `lexicon/patterns.tsv` (one awkward word or construction per row) and `lexicon/terms.tsv` (one referent, several spellings). When the agent's report carries **사전 추가 후보** rows and the user wants one:
 
 1. A row that holds for Korean prose in general belongs upstream in this plugin's `lexicon/`. A row that only makes sense for one corpus goes in `patterns.local.tsv` / `terms.local.tsv` next to it — those override by `id` / `canonical`, are never committed to this plugin, and are replaced when the plugin updates.
-2. `python3 scripts/scan.py --check-lexicon` — every row's `example` must match its own `regex`, and a `keep` term must not be flagged by any pattern.
+2. `python3 scripts/scan.py --check-lexicon` — every row's `example` must match its own `regex`, no `counterexample` may match it, and a `keep` term must not be flagged by any pattern.
 3. `bash tests/run.sh` from the repository root.
-4. Before landing a broad regex, run it over prose that has already been corrected and read the hits: a row whose hits are mostly natural Korean needs a narrower regex or a higher `min_count` — `N` counts one paragraph, `file:N` the whole file.
+4. Before landing a broad regex, run it over prose that has already been corrected and read the hits: a row whose hits are mostly natural Korean needs a narrower regex or a higher `min_count` — `N` counts one paragraph, `file:N` the whole file. Once a narrowed regex leaves a natural sentence alone, add that sentence to the row's `counterexample` cell (`|`-separated) so a later edit cannot bring the hit back.
 
 The agent never edits these files itself.
 

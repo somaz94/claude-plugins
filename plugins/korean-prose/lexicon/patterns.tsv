@@ -6,9 +6,13 @@
 #   min_count  N: report only when one paragraph holds N hits (a blank-line block
 #              in Markdown/text, one ko: value in YAML); file:N counts the whole file
 #   example    a string the regex must match (checked by --check-lexicon)
+#   counterexample
+#              optional, |-separated strings the regex must not match at all:
+#              the natural Korean a narrowed regex was narrowed to leave alone
+#              (checked by --check-lexicon; a row may leave the cell out)
 # Hits are candidates: the reviewer confirms each by reading the line.
 # Personal-corpus rows go in patterns.local.tsv, which overrides by id.
-id	severity	category	regex	min_count	example	why	suggestion
+id	severity	category	regex	min_count	example	why	suggestion	counterexample
 e-isseoseo	red	translationese	에 있어서	1	운영에 있어서 중요한 점	Japanese-syntax (~において) residue; a locative `저장소에 있어서` (because it is in the repository) is a false positive.	`~에서`, `~의 경우`, or drop it
 gajida-abstract	red	translationese	(?:중요성|의미|가치|장점|단점|한계|책임|목적|특징|특성|영향력|효과|능력|경험)(?:을|를) 가(?:지다|지고|지며|지는|진|짐|졌)	1	중요한 의미를 가지고 있다	Direct from English "to have X" with an abstract noun; Korean prefers a predicate.	`중요하다`, `의미 있다`, `경험이 있다`
 it-is-subject	red	translationese	(?:^\s*|[.!?]\s+)(?:그것은|이것은) 	1	이것은 캐시 계층이다	English "It is" / "This is" rendered literally; Korean drops a subject the context already supplies.	Drop the subject and restructure as `~이다`
@@ -42,24 +46,24 @@ ai-geot-ganeung	red	ai-tell	(?:하는|되는|할|있는) 것이 (?:가능|중요
 ai-filler	red	ai-tell	결론적으로|궁극적으로|혁신적인|획기적인|핵심적인	1	결론적으로 안정성이 높아졌다	Filler discourse markers and inflation adjectives a human writing operations prose does not reach for.	Delete the marker; replace the adjective with the concrete claim
 ai-contrast-frame	red	ai-tell	[이가] 아니라	2	속도가 아니라 안정성이고 비용이 아니라 시간이다	The generator's favourite contrast frame; one is rhetoric, two in a paragraph is a tic.	State the positive directly; keep at most one per section
 ai-double-passive	red	ai-tell	(?:되어|보여|불려|쓰여)(?:지|진|질|짐|져|졌)	1	자동으로 처리되어진다	`되다` is already passive; `~어지다` doubles it.	`되다`, `보이다`, `불리다`, `쓰이다`
-ai-structural-metaphor	red	ai-tell	(?<![가-힣])(?:축|갈래)(?=\s|으로|로|이|가|을|를|의|은|는)|관점에서	1	두 갈래로 나눠	A structural metaphor standing in for a noun the writer did not name.	Name the thing
+ai-structural-metaphor	red	ai-tell	(?<![가-힣])(?:축|갈래)(?=\s|으로|로|이|가|을|를|의|은|는)|관점에서	1	두 갈래로 나눠	A structural metaphor standing in for a noun the writer did not name.	Name the thing	중심축으로 회전한다
 ai-personify	red	ai-tell	(?:서버|노드|장비|프로세스|컨테이너|DB)(?:가|이) (?:죽|쓰러[지진질졌져])	1	서버가 죽으면	Casual anthropomorphism in otherwise formal prose; mixed register.	`서버가 중단되면`, `장비 장애`
 double-abstraction	yellow	nominalization	(?:개선|관리|구축|운영|점검|분석) (?:작업|업무)(?:을|를)? ?(?:수행|담당|진행)	1	구축 작업을 진행	Double abstraction: both halves nominalize the same action.	`구축` (noun) or `구축했다` (verb)
 e-daehan-cluster	yellow	nominalization	에 대한	2	장애에 대한 대응과 원인에 대한 분석	English "about/regarding"; one is fine, two in a paragraph is stilted.	`~의`, `~을`, or restructure
 e-daehae-progress	yellow	nominalization	에 대해(?:서)? [^.]{0,20}?(?:진행|수행)	1	원인에 대해 분석을 진행	Abstract object plus a weak verb doubles the awkwardness.	Direct verb: `원인을 분석`
 eul-tonghan	yellow	nominalization	[을를] 통한	1	API를 통한 배포	English "X via Z" rendered as a noun modifier.	Restructure with a verb: `API로 배포`
 causal-stack	yellow	nominalization	(?:으로|로) 인한|에 따른	3	장애로 인한 지연에 따른 재시도로 인한 부하	Three causal markers in one paragraph read bureaucratic.	Vary with `~로`, `~때문에`, or restructure
-mu-prefix	yellow	nominalization	무(?:변경|사고|정지)	1	무변경 배포	`無X` reads as a stiff back-translation of "zero-/no-X"; the established terms `무중단` and `무손실` are not flagged.	`변경 없이`, `사고 없이`, `데이터 손실 없이`
+mu-prefix	yellow	nominalization	무(?:변경|사고|정지)	1	무변경 배포	`無X` reads as a stiff back-translation of "zero-/no-X"; the established terms `무중단` and `무손실` are not flagged.	`변경 없이`, `사고 없이`, `데이터 손실 없이`	무중단 배포와 무손실 이전
 chinsuk	yellow	nominalization	친숙	1	Ansible에 친숙한 운영 환경	`친숙` is emotional intimacy; tool proficiency wants `익숙`, and an environment does not befriend anything.	`Ansible 기반 운영에 이미 익숙한 …`
 sino-word-choice	yellow	nominalization	(?<![가-힣])교정|(?<![가-힣])산재(?:한|된|되어|해)	1	설정 교정	`교정` is proofreading or orthopedics and `산재` is formal "dispersed"; both read stiff for a fix or "scattered".	`교정 → 수정`, `산재 → 흩어진 / 흩어져 있어`
 konglish-verb-ro	yellow	nominalization	로 [A-Za-z]+(?:하고|하여|해서|함|한다|했다)	1	node로 join하고	A `로` particle plus an English verb conjugated directly; often paired with a duplicated `로`.	Give the verb a proper Korean target: `클러스터에 join하고`
-unit-drop	yellow	nominalization	(?<![가-힣A-Za-z])(?!약 )(?![가-힣A-Za-z]*시간[을이가]? )[가-힣A-Za-z]+ (?:약 )?\d+(?:\.\d+)?% ?단축	1	QA 전달 90% 단축	What shrank was the time, not the delivery itself; the EN half usually still has the unit.	`QA 전달 시간 90% 단축`
-particle-space-latin	yellow	spacing	[A-Za-z0-9)%] (?:은|는|이|가|을|를|로|으로|의|와|과|에|에서|까지|만)(?=[ ,.·]|$)	1	DNS 는 내부에서	Korean attaches a particle to the preceding word with no space, including after an English word, a closing parenthesis or a percent sign.	`DNS는`, `GitHub Actions의`; fix file-wide, then re-scan
-particle-space-tag	yellow	spacing	(?#raw)(?:</(?:code|strong|a|b|em)>|`) (?:은|는|이|가|을|를|로|으로|의|와|과|에|에서|까지|만)(?=[ ,.·]|$)	1	<code>make test</code> 를 실행	A particle after closing markup still attaches with no space.	`</code>를`, `` `x`를 ``
-cheot-bare	green	style	(?<![가-힣])첫 (?:잡|실행|배포|빌드|런)(?=[이을은의가를에]|[\s.,]|$)	1	첫 잡이 실패	Bare `첫 + noun` reads clipped for "the first run".	`첫 번째 잡`, `첫 번째 실행`
+unit-drop	yellow	nominalization	(?<![가-힣A-Za-z])(?!약 )(?![가-힣A-Za-z]*시간[을이가]? )[가-힣A-Za-z]+ (?:약 )?\d+(?:\.\d+)?% ?단축	1	QA 전달 90% 단축	What shrank was the time, not the delivery itself; the EN half usually still has the unit.	`QA 전달 시간 90% 단축`	QA 전달 시간 90% 단축
+particle-space-latin	yellow	spacing	[A-Za-z0-9)%] (?:은|는|이|가|을|를|로|으로|의|와|과|에|에서|까지|만)(?=[ ,.·]|$)	1	DNS 는 내부에서	Korean attaches a particle to the preceding word with no space, including after an English word, a closing parenthesis or a percent sign.	`DNS는`, `GitHub Actions의`; fix file-wide, then re-scan	DNS는 내부에서
+particle-space-tag	yellow	spacing	(?#raw)(?:</(?:code|strong|a|b|em)>|`) (?:은|는|이|가|을|를|로|으로|의|와|과|에|에서|까지|만)(?=[ ,.·]|$)	1	<code>make test</code> 를 실행	A particle after closing markup still attaches with no space.	`</code>를`, `` `x`를 ``	<code>make test</code>를 실행
+cheot-bare	green	style	(?<![가-힣])첫 (?:잡|실행|배포|빌드|런)(?=[이을은의가를에]|[\s.,]|$)	1	첫 잡이 실패	Bare `첫 + noun` reads clipped for "the first run".	`첫 번째 잡`, `첫 번째 실행`	첫 번째 잡이 실패했다
 wonchun-block	yellow	ai-tell	원천\s?(?:적으로\s?)?(?:차단|제거|봉쇄|방지)	1	키 유출 위험을 원천 차단	'Blocked at the source' is an absolute claim that almost always overstates what one mechanism does.	Name the path actually closed: `~ 경로를 없앰`, `사전에 제거`, `노출면을 줄임`
 risk-block	yellow	calque	리스크(?:를|가)?\s?(?:차단|제거|해소)	1	자격증명 유출 리스크 차단	A risk is a likelihood, not an object; it cannot be blocked or removed - name the path or exposure that was closed.	`~ 유출 경로를 없앰`, `위험을 줄임`, `노출을 막음`
-ro-ui	yellow	translationese	(?<![경도회통항진수미철선대으])로의\s|(?<!앞)으로의\s	1	GCP로의 대규모 이전	`로의` stacks a directional particle on the genitive, a construction Korean expresses with a verb; `앞으로의` is not flagged.	`GCP로 이전`, `후속 컨트롤러로 이관`, `~로 옮기는`
+ro-ui	yellow	translationese	(?<![경도회통항진수미철선대으])로의\s|(?<!앞)으로의\s	1	GCP로의 대규모 이전	`로의` stacks a directional particle on the genitive, a construction Korean expresses with a verb; `앞으로의` is not flagged.	`GCP로 이전`, `후속 컨트롤러로 이관`, `~로 옮기는`	앞으로의 계획
 hangye-existed	yellow	ai-tell	(?:구조적\s)?한계(?:가|를)\s?(?:있었|존재|도출)|한계로\s?인(?:해|한)|의\s한계로	1	추적하기 어려운 구조적 한계가 있었습니다	'There was a (structural) limitation' wraps a plain failure in an abstract noun instead of saying what could not be done.	Say what failed with a verb: `추적하기 어려웠습니다`, `~해서 503 에러가 발생했습니다`
 bujae	yellow	nominalization	부재(?:했|하였|합니다|하여|해서)|의\s부재로|부재로\s인(?:해|한)	1	통합 관측 체계의 부재로	`부재` (absence) as a predicate or cause noun is stiff Sino-Korean for 'did not exist'.	`체계가 없어`, `기준이 없었습니다`
 mi-noun	green	nominalization	(?<![가-힣])미(?:감지|부여|발생|인지|생성)(?![가-힣])	1	수집기 미감지 장애	A `미-` prefix noun compresses a negated verb into note-taking shorthand; a table cell or checklist is a false positive.	`감지하지 못한 장애`, `일부러 부여하지 않아`, `스케일아웃이 일어나지 않음`
@@ -73,7 +77,7 @@ en-gloss-dup	green	style	[가-힣]{2,}\([A-Z][a-z]+(?:[ -][A-Za-z]+){0,3}\)	file
 en-idiom	yellow	calque	(?i:\b(?:root cause|single source of truth|human-in-the-loop|fat image|lead ?time)\b)|리드\s?타임	1	배포 리드타임 67% 단축	An untranslated English idiom inside Korean prose where a plain Korean phrase exists.	`근본 원인`, `단일 기준`, `사람이 직접 확인`, `용량이 큰 이미지`, `배포 시간`
 danil-calque	yellow	calque	단일\s?(?:뷰|화면|인터페이스|체계)	1	Kibana 단일 뷰에서 추적	`단일 뷰/체계` is word-for-word 'single view/system'; Korean says 'one screen' or 'one'.	`한 화면에서`, `클러스터 하나로만`
 dajung-calque	green	calque	다중\s?(?:인스턴스|replica|레플리카|컨트롤러|ingress)	1	Collector 다중 replica에서	`다중 X` for 'multiple X' is a technical-translation calque; plain Korean uses `여러`. A game-term `다중 인스턴스` is a false positive.	`여러 replica로 띄우면`, `여러 ingress-nginx 인스턴스`
-tilde-approx	yellow	style	(?<![\d.])(?<![\d.]\s)(?<!\|\s)~\s?\d	1	apiserver가 ~30초간 5xx 반환	In Korean copy the tilde marks a range (`9~14초`); as an 'approximately' prefix it is an English habit.	`약 30초간`, `약 10초로`
+tilde-approx	yellow	style	(?<![\d.])(?<![\d.]\s)(?<!\|\s)~\s?\d	1	apiserver가 ~30초간 5xx 반환	In Korean copy the tilde marks a range (`9~14초`); as an 'approximately' prefix it is an English habit.	`약 30초간`, `약 10초로`	9~14초 사이
 silent-calque	yellow	calque	조용(?:한|히)\s?(?:[가-힣]+\s)?(?:유실|실패|멈|중단|장애|사라)	1	조용한 트레이스 유실을 감시	`조용한 실패/유실` is a literal 'silent failure/loss'; Korean describes what the reader could not see.	`아무 표시 없이 사라지는 트레이스`, `에러 없이 멈춘 수집`, `감지되지 않는 장애`
 risk-define	yellow	ai-tell	(?:리스크|위험|문제)(?:로|으로)\s?정의(?:하|했|해|함|\s|\.)	1	롤백 불능 상태를 핵심 운영 리스크로 정의.	'Defined X as the core risk/problem' is consultant framing standing in for the judgment itself.	`진짜 위험은 ~라고 판단`, `~가 문제였습니다`
 irueojida	yellow	translationese	이루어(?:지|진|질|짐|져|졌)	1	전달이 수동으로 이루어져	`~이 이루어지다` (to be carried out) is a translationese passive that hides who did what.	`수동으로 전달하다 보니`, `직접 동기화하다 보니`
@@ -83,7 +87,7 @@ gongsu	yellow	calque	공수(?:를|가|는|\s)	1	수동 갱신 공수를 50% 절�
 zerohwa	yellow	calque	제로화	1	설정 드리프트 이슈 제로화	`제로화` is a coined 'zero-ization'; a count reads cleaner.	`환경 불일치 0건`
 calque-sunhyogwa	yellow	calque	순효과	1	이전 세션의 순효과를 요약한다	`net effect` rendered as the economics term `순효과`; in technical prose, name what actually changed.	`결과적으로 달라진 것`, `최종 결과`
 seonggong	green	ai-tell	성공적으로	1	마이그레이션을 성공적으로 완료했습니다	'Successfully' adds nothing to a completed action and is a common generated-text tell.	Delete it and state the result: `무중단으로 이전했습니다`, `5개 고객사에 납품`
-daepok	green	ai-tell	대폭(?!발)	1	원인 규명 시간 대폭 단축	An unquantified intensifier where a number, or nothing, is stronger.	A figure (`약 139초 → 약 30초`) or delete
+daepok	green	ai-tell	대폭(?!발)	1	원인 규명 시간 대폭 단축	An unquantified intensifier where a number, or nothing, is stronger.	A figure (`약 139초 → 약 30초`) or delete	대폭발 사고
 hyeondaehwa	green	ai-tell	현대화	1	선언적 로깅 인프라 현대화	`현대화` is a vague headline noun that says nothing about what changed.	State the change: `ELK → EFK 전환`, `3단계 고도화`
 seonsunhwan	green	ai-tell	선순환	1	리소스 선순환 구조 구축	'Virtuous cycle' is a buzzword that inflates a single causal step.	`절감분은 신규 프로젝트에 재투자됐습니다`
 chegyejeok	green	ai-tell	체계적(?:인|으로)	1	체계적인 버전 거버넌스	`체계적인` asserts rigor instead of showing it.	Delete it and describe the structure: `4단계 버전 관리`
@@ -98,3 +102,105 @@ jung-e-itda	yellow	translationese	(?:하|되)는\s중에\s있	1	검토하는 중
 dareum-ani	yellow	translationese	에\s다름\s아니	1	실패에 다름 아니다	`~에 다름 아니다` is a Japanese-derived 'is nothing other than'.	`사실상 실패다`, `실패나 마찬가지다`
 rago-haneun	yellow	translationese	(?:이)?라고\s하는\s것(?:은|이)	1	GitOps라고 하는 것은	`X라고 하는 것은` is a wordy topic frame for 'what is called X'.	`GitOps는`
 wichi	green	translationese	에\s위치(?:한|하는|해|하고|한다)	1	서울 리전에 위치한 클러스터	`~에 위치한` is 'located in' translationese.	`서울 리전의 클러스터`, `맨 아래에 둔다`
+de-isseo	red	translationese	(?:데\s있어(?:서)?|(?:함|(?<!마)음|것)에\s있어)(?=[\s,])	1	배포하는 데 있어서 중요한 점	The `~하는 데 있어(서)` / `~함에 있어` variants of `에 있어서` (Japanese ~において) that `e-isseoseo` does not reach.	`~할 때`, `~하려면`, or drop it	마음에 있어 다행이다
+euro-hayeogeum	red	translationese	(?:으로|로)\s하여금	1	운영자로 하여금 판단하게 한다	`~로 하여금 ~하게 하다` is a literal causative frame from English 'make/let X do'.	Make the person the subject: `운영자가 판단한다`
+ganeunghage	red	translationese	(?:을|를)\s가능하게\s(?:하|했|한|해|합|만)	1	무중단 배포를 가능하게 한다	'Makes X possible' rendered literally; Korean puts the ability on the actor.	`무중단으로 배포할 수 있다`	배포가 가능하다
+pronoun-geudeul	yellow	translationese	(?<![가-힣])(?:그녀|그들)(?=[은는이가을를의에도와과]|\s)	1	그들의 응답을 기다린다	English third-person pronouns carried over into expository prose; Korean omits them or names who is meant. Narrative prose about people (history, biography) uses `그들` naturally, and `당신` is left out because it opens persona prompts by design.	Drop the pronoun, or name them: `메인테이너의 응답`	당신은 이 저장소의 리뷰어입니다
+gajang-jung-hana	green	translationese	가장\s[^.,]{1,25}?\s중\s하나	1	가장 많이 쓰는 도구 중 하나	Calque of 'one of the most X'; Korean rarely hedges a superlative this way.	`자주 쓰는 도구`, `대표적인 도구`
+ro-buteo-ui	yellow	translationese	(?:으로|로|에서)\s?부터의\s	1	외부로부터의 요청	`~로부터의` stacks a source particle on the genitive, from English 'from X'.	`외부에서 온 요청`, `외부 요청`	외부로부터 온 요청
+euihan	yellow	translationese	에\s의한\s	1	설정 오류에 의한 장애	`~에 의한` is English 'by / caused by' as a noun modifier, the adnominal twin of `passive-by`.	`설정 오류로 생긴 장애`, `설정 오류 때문에`	설정 오류로 생긴 장애
+bulguhago	yellow	translationese	(?:에도|음에도|는데도)\s불구하고	1	경고에도 불구하고 배포했다	`~에도 불구하고` is a stiff 'despite'; the particle `~에도` or `~지만` already carries it.	`경고가 있었지만`, `경고에도`	경고에도 배포했다
+pillyoro	yellow	translationese	(?:을|를)\s필요로\s(?:하|한|합|했|해)	1	관리자 권한을 필요로 한다	'Requires X' rendered literally.	`관리자 권한이 필요하다`	관리자 권한이 필요하다
+yogu-doeda	green	translationese	(?:이|가)\s요구(?:된|됩|되|됐)	1	추가 검증이 요구된다	'X is required' as a passive of `요구하다`; Korean states the need directly.	`추가로 검증해야 한다`, `추가 검증이 필요하다`
+geot-gwonjang	yellow	translationese	(?:할|하는)\s것을\s(?:권장|추천|고려)	1	최신 버전을 사용할 것을 권장한다	'It is recommended / consider doing X' wraps the verb in `것을`.	`최신 버전을 쓰길 권장한다`, `최신 버전을 쓰세요`, `~할지 검토`	최신 버전을 쓰길 권장한다
+rago-bulrineun	green	translationese	(?:이)?라고\s불리는	1	사이드카라고 불리는 컨테이너	'So-called / called X' rendered literally.	`사이드카라는 컨테이너`, `사이드카 컨테이너`	사이드카라는 컨테이너
+ui-su	green	translationese	[가-힣](?<!경우)의\s(?:수|개수|양)(?:가|이|를|을|는|은|도)(?=\s)	file:3	요청의 수가 늘었다	'The number / amount of X' with a genitive; Korean compounds the noun. Natural once, a translation habit when repeated. `경우의 수` is an idiom and is not flagged.	`요청 수가`, `트래픽 양이`	모든 경우의 수를 하나하나 따진다
+gajida-concrete	green	translationese	(?:기능|옵션|권한|속성|구조|이점)(?:을|를)\s가지(?:고|며|는)	1	여러 옵션을 가지고 있다	'Has a feature / option' with a concrete noun, which `gajida-abstract` does not cover.	`옵션이 여러 개 있다`, `권한이 있다`, `~ 구조다`
+hadorok-hagetda	yellow	translationese	하도록\s하겠	1	설정을 변경하도록 하겠습니다	`~하도록 하겠습니다` wraps the verb in an extra causative.	`설정을 변경하겠습니다`	변경하도록 설정한다
+eseo-ui	green	translationese	에서의\s	file:3	운영 환경에서의 문제	`~에서의` stacks a locative on the genitive; one is fine, a document full of them reads translated.	`운영 환경의 문제`, `운영 환경에서 생긴 문제`
+uimi-handa	green	translationese	(?:을|를)\s의미(?:합니다|한다|하며)	file:4	이는 장애를 의미합니다	'This means X' used as a connective; Korean says what follows directly. A definition (`SLO는 ~를 의미한다`) is a false positive.	`즉 장애가 났다는 뜻입니다`, or restructure
+plural-deul	green	translationese	(?<![가-힣])(?:사항|요소|부분|기능|파일|설정|리소스|서비스|옵션|값|항목)들(?=[은는이가을를의에도과와]|\s)	file:4	설정 파일들을 확인한다	English plural carried over; Korean leaves an inanimate plural implicit.	`설정 파일을 확인한다`, `모든 설정 파일`	사용자들이 늘었다
+gyeonghyang	green	translationese	(?:하는|되는)\s경향이\s있	1	캐시를 과신하는 경향이 있다	'Tends to' rendered literally, and often a hedge.	`캐시를 과신하기 쉽다`, `자주 과신한다`
+chojeom	green	translationese	에\s초점을\s(?:맞추|맞춘|맞춰|두)	1	성능에 초점을 맞춘다	'Focus on' rendered literally.	`성능에 집중한다`, `성능을 우선한다`
+sangi-hagi	yellow	nominalization	(?<![가-힣])(?:상기|하기)\s(?:내용|사항|항목|표|방법|절차|명령어?|설정|링크)	1	하기 절차를 따른다	`상기 / 하기` (above / below) is Japanese office jargon.	`위 내용`, `아래 절차`
+sangi-hada	yellow	nominalization	(?<![가-힣])상이(?:한|하다|합니다|하며|하게|해)	1	환경마다 설정이 상이하다	`상이하다` is stiff Sino-Korean for 'different'.	`다르다`
+hal-si	yellow	nominalization	(?:(?<!분|역|관)할|한|될|된|했을)\s시(?:에(?:는)?)?(?=[\s,])	1	배포할 시 확인한다	`~할 시` is an administrative clipping of `~할 때`; a noun before `시` (`분할 시`, `배포 시`) is a terse label and not flagged.	`배포할 때`	멀티 커밋 분할 시 번호를 매긴다
+jego-domo	yellow	nominalization	(?:을|를)\s(?:제고|도모)(?:하|했|한|해|함|\s)|만전을\s기	1	생산성을 제고한다	`제고 / 도모 / 만전을 기하다` are bureaucratic Sino-Korean verbs.	`생산성을 높인다`, `협업을 늘린다`, `철저히 대비한다`
+yohada	yellow	nominalization	(?:을|를)\s요(?:합니다|한다|하는|함|하며)	1	주의를 요합니다	`~을 요하다` is a Japanese-era formal 'requires'.	`주의가 필요합니다`
+saryo-bayida	yellow	nominalization	사료(?:됩|된|되)|(?:하는|한|할)\s바(?:입니다|이다)(?![가-힣])	1	개선이 필요하다고 사료됩니다	`사료되다` and `~하는 바이다` are official-document formulas that stiffen technical prose.	`개선이 필요합니다`, `~합니다`	동물 사료를 산다
+yongi	green	nominalization	(?<![가-힣])용이(?:한|하다|합니다|하며|하게|해|함|하도록)	file:2	관리가 용이하다	`용이하다` is stiff Sino-Korean for 'easy'; repeated it reads like a proposal document.	`관리하기 쉽다`, `편하다`	이용이 쉽다
+yeokhal-jungyo	yellow	ai-tell	(?:중요한|핵심적인|결정적인)\s역할을\s(?:하|한|합|했|수행|담당)	1	보안에서 중요한 역할을 한다	'Plays an important role' is a generated-text staple that says nothing about what the thing does.	State what it does: `요청을 먼저 검증한다`	요청을 먼저 검증하는 역할을 한다
+rago-hal-su	yellow	ai-tell	(?:이)?(?:라고|다고)\s할\s수\s있	1	핵심 기능이라고 할 수 있다	'It can be said that X' hedges a claim the writer could simply make.	`핵심 기능이다`
+daedu	yellow	ai-tell	대두(?:되|됐|하|했)	1	필요성이 대두되었다	`필요성이 대두되다` is a news-report cliche for 'became necessary'.	`필요해졌다`
+pandan-doenda	yellow	ai-tell	것으로\s판단(?:됩|된|되)	1	원인인 것으로 판단됩니다	A passive hedge ('it is judged that') for a judgement the writer made.	`원인이라고 판단했습니다`, `원인으로 보입니다`	재시작될 것으로 예상된다
+ineun-start	green	ai-tell	(?:^\s*|[.!?]\s+)이는\s	file:4	이는 캐시 적중률을 높인다	Sentence-opening `이는` ('This …') is the generator's favourite link; repeated through a document it reads machine-written.	Join to the previous sentence, or `그래서`, `이 때문에`
+marketing-adj	green	ai-tell	강력한\s(?:기능|도구|솔루션|성능|지원)|손쉽게|원활(?:한|하게|히)\s	file:3	강력한 기능을 손쉽게 제공한다	Marketing adjectives ('powerful', 'seamlessly', 'smoothly') that assert quality instead of showing it.	Delete, or state the concrete property	강력한 리텐션을 보였다
+dayanghan	green	ai-tell	다양한\s	file:6	다양한 기능과 다양한 옵션	`다양한` is the generator's default quantifier; a document full of it never says which.	Name them, or `여러`
+ppunman-anira	green	ai-tell	뿐만\s아니라	file:3	속도뿐만 아니라 안정성도	'Not only X but also Y' used as a sentence template; repeated through a document it reads generated.	`속도와 안정성 모두`, `~도`
+albogi	green	ai-tell	(?:알아|살펴)보(?:겠습니다|도록\s하겠)	file:3	설치 방법을 알아보겠습니다	Blog-template signposting ('let us look at'); repeated per section it reads machine-written.	Start with the content itself
+doum-doeda	green	ai-tell	(?:에|하는\s데)\s(?:큰\s)?도움이\s(?:됩|된|되|될)	file:3	운영에 큰 도움이 됩니다	'Helps with X' is a vague benefit claim; repeated it replaces saying what improved.	State the effect: `장애 원인을 바로 찾는다`
+iraehan	green	ai-tell	(?<![가-힣])이러한\s	file:5	이러한 문제를 해결하기 위해	`이러한` is a formal demonstrative a generator repeats; everyday prose uses `이런` or `이`.	`이런`, `이`
+conj-comma	green	style	(?:^\s*|[.!?]\s+)(?:또한|따라서|그러나|하지만|그리고|그래서),	file:3	그러나, 이 방식은 느리다	The Korean punctuation rules (문장 부호, 2015) put no comma after a common sentence-opening connective such as `그러나` or `따라서`; the comma is an English habit.	`그러나 이 방식은 느리다`	그러나 이 방식은 느리다
+typo-hamda	red	spelling	[가-힣](?:함|됨|임)다(?=[\s.,!?)*]|$)	1	사례를 집중 분석함다.	A note-style ending (`함`, `됨`, `임`) fused with `다`, a slip between the note style and the plain style.	`분석함.`, `분석합니다.`, `분석한다.`	사례를 분석함.|배포 완료됨
+typo-dwae	red	spelling	됬|(?<![가-힣])되(?:요|서|써)(?=[\s.,!?)]|$)|안되(?:요|서)(?=[\s.,!?)]|$)	1	설정이 적용됬다	`되어` contracts to `돼`: `됐다`, `돼요`, `돼서`, `안 돼요`.	`됐다`, `돼요`, `돼서`, `안 돼요`	로그는 공개하지 않되 기록은 남긴다|적용돼서 다행이다
+typo-common	red	spelling	몇일|어떻해|(?<![가-힣])왠(?!지)|웬지|금새|오랫만|역활|(?:할|줄|갈|될|올)께(?=[\s.,!?)요]|$)|(?:할|될|볼|갈)려고|어의없|희안|(?:일일|깨끗|틈틈|번번)히|(?<![가-힣])구지(?=\s)|설레임	1	몇일 뒤에 다시 배포	A common misspelling; Markdown editors rarely run a spell-checker.	`며칠`, `어떻게 해`, `웬`, `왠지`, `금세`, `오랜만`, `역할`, `할게`, `하려고`, `어이없`, `희한`, `일일이`, `굳이`, `설렘`	왠지 느려서 꼼꼼히 확인했다
+spacing-su-itda	yellow	spacing	(?:할|될|볼|쓸|줄|갈|올|알|받을|찾을|읽을|만들)수\s?(?:있|없)	1	바로 배포할수 있다	`수` is a bound noun and takes a space: `할 수 있다`.	`할 수 있다`, `될 수 없다`	바로 배포할 수 있다
+spacing-geot-gatda	yellow	spacing	것같(?:다|은|아|습|네|이)	1	원인인것같다	`것` is a bound noun and takes a space before `같다`.	`원인인 것 같다`	원인인 것 같다
+spacing-an-doeda	yellow	spacing	(?<![가-힣])안(?:되|돼)(?:면|는|고|서|요|어|었|네|며|도|니)	1	배포가 안되면 롤백	The negative adverb `안` is written apart from `되다`; joined, `안되다` means 'pitiable'.	`안 되면`, `안 돼요`	배포가 안 되면 롤백한다
+typo-ieotda	red	spelling	아니예요|거에요|(?:있|없|했|었|았|겠|였|됐|갔|왔)읍니다	1	그건 제 설정이 아니예요	`아니에요` and `거예요` are the standard forms, and `-읍니다` after `있`, `없`, `했` was replaced by `-습니다` in 1988. `모읍니다` (from `모으다`) is correct and not flagged.	`아니에요`, `거예요`, `했습니다`	모든 항목을 한 곳에 모읍니다|두 시각의 차이였습니다|두 값 사이예요
+typo-get	red	spelling	(?<!타)(?<!가)겟(?:어|다|습|네|지|는|고|죠|으)	1	내일 배포하겟습니다	The future / conjecture ending is `겠`, not `겟`.	`배포하겠습니다`, `좋겠어`	타겟 그룹을 만든다
+typo-an-anh	red	spelling	[가-힣]지\s안(?:았|는다|습니다|는(?=\s))|않(?:하|해|했)(?:고|면|는|서|요|다|지)	1	로그를 남기지 안았다	`않` is the contraction of `아니하` and follows `~지`; `안` is the adverb before a verb. They are swapped here.	`남기지 않았다`, `안 하고`	로그를 남기지 않았다|안 하고 넘어갔다
+typo-rosseo	red	spelling	(?:으)?로써의|(?:사람|개발자|엔지니어|리더|학생|부모|전문가|책임자|관리자|담당자|팀장)(?:으)?로써(?![가-힣])	1	개발자로써 책임을 진다	`로서` marks a capacity or status (`개발자로서`); `로써` marks a means (`대화로써`).	`개발자로서`, `리더로서의`	대화로써 문제를 푼다|개발자로서 책임을 진다
+typo-deonji	red	spelling	(?:무엇|어디|누구|언제|뭐)(?:이)?던(?:지|가)?(?=\s)	1	무엇이던지 물어보세요	Free choice ('whatever, wherever') is `든(지)`; `던` marks the past.	`무엇이든지`, `어디든`	무엇이든지 물어보세요|어디서 봤던가
+typo-saisiot	red	spelling	갯수|댓가|촛점|뒷풀이|윗층|햇님|장미빛|(?:등교|하교|귀가|기차)길	1	파일 갯수를 센다	A misplaced or missing 사이시옷: Sino-Korean compounds such as `개수`, `대가`, `초점` take none, and `위층`, `뒤풀이`, `해님` drop it before an aspirated consonant; `장밋빛`, `등굣길` need one.	`개수`, `대가`, `초점`, `뒤풀이`, `위층`, `해님`, `장밋빛`, `등굣길`	횟수와 개수를 센다|등굣길과 장밋빛
+spacing-ttae	yellow	spacing	(?:할|될|볼|갈|올|쓸|줄|있을|없을|했을|됐을|하였을)때(?=[\s,.에는도마]|$)	1	배포할때 확인한다	`때` is a noun and is written apart from the modifier before it.	`배포할 때`	배포할 때 확인한다
+spacing-geot	yellow	spacing	(?:할|될|볼|한|된|하는|되는|있는|없는|했던)것(?=[이은을도과만]|\s)	1	확인할것이 많다	`것` is a bound noun and takes a space after its modifier.	`확인할 것이`	그것이 문제다|확인할 것이 많다
+spacing-su-bakke	yellow	spacing	수\s밖에\s?없	1	기다릴 수 밖에 없다	`밖에` is a particle and attaches: `수밖에 없다`.	`기다릴 수밖에 없다`	기다릴 수밖에 없다
+spacing-ji-elapsed	yellow	spacing	(?:[한된간온본쓴산]|시작한|도입한|배운)지\s?\d+\s?(?:년|개월|달|주|일|시간|분)	1	도입한지 3년이 지났다	`지` meaning 'since' is a bound noun and takes a space.	`도입한 지 3년`	도입한 지 3년이 지났다
+spacing-particle-verb	yellow	spacing	(?<=[가-힣])(?:에(?:대한|대해|따라|따른|의해|의한|관한|관해|비해|불과)|[을를](?:통해|통한|위한|위해)|뿐만아니라)(?=[\s,.]|$)	1	장애에대한 보고서	The verb after a particle (`대한`, `통해`, `위한`, …) is its own word and takes a space.	`장애에 대한`, `API를 통해`, `뿐만 아니라`	장애에 대한 보고서
+spacing-an-hada	yellow	spacing	(?<![가-힣])안(?:하|해|했)(?:면|고|서|요|는|지|도|니|다)	1	테스트를 안하면 실패한다	The negative adverb `안` is written apart from `하다`.	`안 하면`, `안 했다`	테스트를 안 하면 실패한다
+spacing-percent	green	spacing	\d\s%	1	30 % 감소	Korean attaches `%` to its number.	`30%`	30% 감소
+spacing-punct	yellow	spacing	(?#raw)[가-힣]\s+[.,?!](?=\s|$)	1	설정을 바꿨다 .	A space before a period, comma or question mark.	`설정을 바꿨다.`	기본값은 `true`, 끄려면 `false`.
+redundant-sino	yellow	redundancy	미리\s?예(?:약|방|측|습|고|매)|다시\s?재(?:시작|확인|검토|발송|설치|부팅|배포|시도|개|발)|가장\s?최(?:고|선|초|대|소|적|상|하)(?![가-힣]*급)|서로\s상(?:의|호|반|충)|함께\s?동(?:참|행|석)|과반수\s?이상|남은\s여생|새로\s?신(?:설|규|축|작)|어려운\s난관|계속\s지속|먼저\s선(?:행|결)	1	다시 재시작한다	A native word repeats the meaning of the Sino-Korean prefix after it (`다시` = `재-`, `미리` = `예-`, `가장` = `최-`).	`재시작한다` or `다시 시작한다`, `최고`, `예약`	가장 최근의 변경|재시작한다
+redundant-approx	yellow	redundancy	약\s?\d[\d,.]*\s?여\s?[가-힣]|약\s?\d[\d,.]*\s?[가-힣]{1,3}\s?(?:정도|가량|쯤|내외)	1	약 30분 정도 걸린다	`약` already means approximately; `정도`, `가량`, `여` say it again.	`약 30분`, `30분 정도`	약 30분 걸린다|30분 정도 걸린다
+redundant-mae-mada	red	redundancy	매(?:일|주|달|월|년|번|시간|회)\s?마다	1	매일마다 백업한다	`매-` and `마다` both mean 'every'.	`매일`, `날마다`	매일 백업한다|날마다 백업한다
+ege-inanimate	yellow	grammar	(?:회사|정부|기업|조직|서버|시스템|학교|국가|기관|부서|클러스터|노드|프로그램|브라우저|애플리케이션)에게(?![가-힣])	1	서버에게 요청을 보낸다	`에게` is for people and animals; an organisation or a thing takes `에`.	`서버에 요청을 보낸다`	팀에게 공유한다|사용자에게 알린다
+jung-ui-hana	yellow	translationese	중의\s하나|(?<![이그저])들\s중(?:의)?\s하나	1	여러 방법들 중의 하나	`X들 중의 하나` renders 'one of the Xs' word for word, plural and genitive included.	`여러 방법 중 하나`	이들 중 하나를 고른다
+many-deul	green	translationese	(?:많은|모든|여러|수많은|각각의)\s[가-힣]{1,6}(?<![인자가원민님사생람이])들(?=[은는이가을를의에도과와]|\s)	1	많은 옵션들이 있다	The quantifier already makes a thing plural; `들` repeats it, an English habit. Nouns for people (`사용자`, `이주민`) are not flagged.	`많은 옵션이 있다`	모든 사람들에게 감사드립니다
+sikida-overuse	yellow	translationese	(?:소개|설득|연결|접속|적용|반영|설치|배포|저장|입력|구현|업데이트|주입)시(?:키|켜|켰|킨|킬|킴)	1	설정을 적용시켰다	`-시키다` on a verb whose `-하다` form already takes the object; dictionary causatives such as `향상시키다` or `종료시키다` are not flagged.	`적용했다`, `늘렸다`, `연결했다`	성능을 향상시키는 설정
+double-passive-eojida	yellow	translationese	(?:잊혀|짜여|닫혀|열려|나뉘어|믿겨|찢겨|놓여|바뀌어|읽혀)(?:지|진|질|짐|져|졌)	1	잊혀진 설정	A passive stem (`잊히다`, `짜이다`, `닫히다`) that takes `-어지다` again, beyond the forms `ai-double-passive` covers.	`잊힌 설정`, `짜인`, `닫힌`, `나뉜`
+gatda-event	yellow	translationese	(?:회의|모임|대화|휴식|기자회견|행사|자리|미팅|토론)(?:를|을)\s(?:갖|가졌|가지|가진)	1	팀과 회의를 가졌다	'Held a meeting' rendered as `갖다`, a translation habit.	`회의를 했다`, `회의를 열었다`	잠시 시간을 가졌다
+sueopsi-enable	green	translationese	수\s있(?:게|도록)\s(?:해\s?준|해\s?줍|해\s?주|합니다|한다|했다|해\s?줄)	file:3	쉽게 배포할 수 있도록 해 준다	'Allows / enables X to' rendered literally; Korean states what X can now do.	`쉽게 배포할 수 있다`	쉽게 배포할 수 있다
+boda-adverb	yellow	translationese	(?#raw)(?:^|[.!?]\s+|[은는이가을를에]\s)보다\s(?:더\s)?(?:나은|많은|높은|빠른|낮은|효율적|안정적|쉬운|정확한|강력한|효과적|넓은|좋은|큰)	1	보다 나은 성능을 낸다	`보다` as a free-standing adverb calques English 'more'; Korean says `더`.	`더 나은 성능`	`1.0`보다 낮은 값은 무시한다
+gwanhan-cluster	yellow	translationese	에\s관(?:한|해|하여)	2	보안에 관한 규칙과 배포에 관한 절차	`에 관한` is the twin of `에 대한`; two in one paragraph read stilted.	`~의`, `~ 규칙`, or restructure
+wihan-cluster	yellow	translationese	(?:을|를|기)\s위한	3	배포를 위한 설정을 위한 도구를 위한 문서	Three `~을 위한` modifiers in one paragraph stack English 'for'.	Use a verb: `배포 설정용 도구`, `~하려고`
+uigeo	yellow	nominalization	에\s의거(?:하여|해|한|하면)	1	정책에 의거하여 삭제한다	`의거하다` is legal-document register.	`정책에 따라 삭제한다`	정책에 따라 삭제한다
+goitneun-jung	yellow	redundancy	(?:하|되)고\s있는\s중	1	검토하고 있는 중이다	`~고 있다` and `중` both mark progress.	`검토하고 있다`, `검토 중이다`	검토하고 있다|검토 중이다
+double-hedge	yellow	ai-tell	수\s있을\s것\s같|것\s같아\s보	1	해결할 수 있을 것 같습니다	Two hedges stacked on one claim (`수 있다` + `것 같다`).	`해결할 수 있습니다`, or state the doubt once	해결할 수 있을 것이다
+dan-sun-neomeo	green	ai-tell	단순(?:한|히)\s[^.]{0,20}?(?:을|를)\s?넘어	1	단순한 도구를 넘어 플랫폼으로	'Beyond a mere X' is a generated-text inflation frame.	State what it is: `플랫폼이다`
+jumok-jeom	green	ai-tell	(?:중요한|주목할|눈여겨볼|기억할|주의할|흥미로운|핵심적인)\s(?:것은|점은)	file:2	주목할 점은 캐시다	A signpost ('what is notable is') that delays the point; repeated it reads generated.	Say the point first: `캐시가 핵심이다`
+buzzword	green	ai-tell	여정(?:을|이|의|에|은)|인사이트|패러다임|게임\s?체인저|판도를\s바꾸	file:2	새로운 여정을 시작한다	Presentation buzzwords that stand in for a concrete claim.	Name the change: `새 팀으로 옮겼다`, `비용을 절반으로 줄였다`	파티 시너지 효과|성능을 극대화한다
+siisa	yellow	ai-tell	시사하는\s바가?\s(?:크|많|적지)	1	시사하는 바가 크다	`시사하는 바가 크다` is an editorial cliche that never names the lesson; a `시사점` heading in a research note is fine.	Name the lesson	시사점을 정리한다
+hagoja	green	style	(?:하|되|알아보|소개하|정리하)고자\s(?:합니다|한다)	file:3	정리하고자 합니다	`~하고자 합니다` repeated through a document is stiff, speech-like signposting.	`정리합니다`, `정리한다`
+bubun-filler	green	style	(?:하는|되는|한|된|있는)\s부분(?:이|을|은|에서|도)	file:4	개선이 필요한 부분이 있다	`~하는 부분` as a verbal filler, a spoken habit carried into writing.	`개선할 점이 있다`, or drop it
+geot-gatseumnida	green	style	것\s같습니다	file:4	원인인 것 같습니다	`~것 같습니다` repeated through a document hedges every claim.	Assert what you know; hedge only where you are unsure
+jonjae-general	green	translationese	(?:이|가)\s존재(?:한다|합니다|하며|하는데|했다|했습니다)	file:3	여러 방식이 존재한다	'There exists X' rendered with `존재하다`; Korean says `있다`.	`여러 방식이 있다`	존재하지 않는 파일
+wa-gateun	green	translationese	(?<!다음)(?<!아래)(?<![위이])(?:와|과)\s같은\s	file:5	Redis와 같은 저장소	'Such as' rendered as `~와 같은`; a document full of it reads translated. `다음과 같은` / `아래와 같은` introduce a list and are not flagged; `X와 같은 Y` meaning 'the same Y as X' is a false positive.	`Redis 같은 저장소`, `Redis 등`	다음과 같은 경우에 적용한다
+jeogin-stack	green	nominalization	[가-힣]적(?:인|으로)\s[가-힣]{1,4}적(?:인|으로)\s	1	효율적인 체계적인 관리	Two `~적인` modifiers in a row stack Sino-Korean adjectives.	Keep one, or use a verb: `효율적으로 짜인 관리`
+loanword-spelling	yellow	spelling	메세지|컨텐츠|컨텐트|아키텍쳐|스케쥴|캐쉬|대쉬보드|데이타|네트웍|포멧|버젼|메뉴얼|파라메터|억세스|엑세스|셋팅|플래쉬|해쉬|쓰레드|메소드|어플리케이션|메니페스트|비지니스|(?:리더|멤버|파트너|인턴|오너|스폰서)쉽|프레임웍|메니저|인터렉(?:션|티브)|콘테이너|콘트롤|래퍼런스|플렛폼	1	에러 메세지를 확인한다	A loanword spelled against the loanword orthography (외래어 표기법). Only spellings whose standard form dominates real Korean technical writing are listed; `타겟`, `디렉토리`, `컨셉` and `뱃지` are left out because common usage has not settled on the standard form.	`메시지`, `콘텐츠`, `아키텍처`, `스케줄`, `캐시`, `대시보드`, `데이터`, `네트워크`, `포맷`, `버전`, `매뉴얼`, `파라미터`, `액세스`, `세팅`, `플래시`, `해시`, `스레드`, `메서드`, `애플리케이션`, `매니페스트`, `비즈니스`, `멤버십`, `프레임워크`, `매니저`, `인터랙션`, `컨테이너`, `컨트롤`, `레퍼런스`, `플랫폼`	에러 메시지를 확인한다|콘텐츠를 캐시한다|컨테이너를 컨트롤한다
+typo-yul-ryul	red	spelling	(?:사용|적중|성공|가용|활용|가동|합격|압축|응답|이탈|출석|달성|명중|검출|취업|시청|클릭|전송|경쟁|가입|보급|수익|성장|이용|적용|발생|사망|정답|참석|구독|해결|탈락|누락|반품|불량|오탐|정탐|미탐)율|(?<![가-힣])확율|(?:실패|감소|증가|처리|점유|오류|에러|할인|변환|전환|이자|백분|참여|재현|투표|통과|탐지|감지|차단|복구|생산|출산|사고|오차)률|(?<![가-힣])(?:비|환|규|세|효)률	1	이탈율이 높다	`율` follows a vowel or `ㄴ` (`참여율`, `전환율`); `률` follows any other final consonant (`이탈률`, `사용률`).	`사용률`, `성공률`, `이탈률`, `응답률`, `확률`, `실패율`, `처리율`, `전환율`, `비율`	참여율과 재현율|이탈률과 전환율|비율과 확률
+typo-kkeo	red	spelling	(?:할|될|볼|갈|줄|올|쓸|있을|없을|했을)\s?꺼(?![내놓지져진졌])	1	이제 더할꺼있어?	The bound noun is `거` (from `것`); `꺼` is a spoken spelling, and it takes a space after the modifier.	`할 거야`, `더 할 거 있어?`	할 거예요|불을 꺼 두었다
+typo-dwae-reverse	red	spelling	됀|돼(?:었|는|고|면|기|도록|며)|돼다(?![가-힣])	1	설정이 적용돼는 순서	`돼` is the contraction of `되어`; where no `어` belongs (`되는`, `되고`, `되면`, `된`) the stem stays `되`.	`되는`, `되고`, `되면`, `된`, `되었다`	적용돼서 다행이다|적용되는 순서|돼지고기
+typo-reonji	red	spelling	(?:할|될|볼|갈|올|있을|없을|했을|줄)런지	1	배포가 될런지 모르겠다	The ending is `-ㄹ는지`; `-ㄹ런지` is a spoken spelling.	`될는지`, `될지`	배포가 될지 모르겠다
+typo-i-hi	red	spelling	(?:꼼꼼|솔직|조용|분명|확실|정확|철저|완벽|충분|천천|엄격|신중|간단|편안|무사)이(?=\s)	1	값을 정확이 맞춘다	These `-하다` stems form their adverb with `-히` (`정확히`, `충분히`); `-이` belongs to stems such as `깨끗이` and `일일이`.	`정확히`, `충분히`, `분명히`, `천천히`	값을 정확히 맞춘다|깨끗이 지운다
+typo-verb-stem	red	spelling	걸맞는|알맞는|설레이|헤매이|되뇌이|삼가하|치뤘|치루|잠궜|잠궈|담궜|담궈|바꼈|사겼|들어나|뒤쳐지|가르키|햇갈|헷깔|내노라|무릎쓰|귀뜸|엇그제|짜집기|요컨데|닥달|곰곰히|폭팔|뵈요|더\s낳은	1	상황에 걸맞는 설정	A misspelt verb or word: an adjective that takes `-은` (`걸맞은`), a stem with a spurious `이` or `하` (`설레다`, `삼가다`), a wrong contraction (`치렀다`, `잠갔다`, `바뀌었다`), or a word such as `가리키다`, `헷갈리다`, `귀띔`.	`걸맞은`, `알맞은`, `설레다`, `헤매다`, `삼가다`, `치렀다`, `잠갔다`, `바뀌었다`, `드러나다`, `뒤처지다`, `가리키다`, `헷갈리다`, `내로라`, `무릅쓰고`, `귀띔`, `엊그제`, `짜깁기`, `요컨대`, `닦달`, `곰곰이`, `폭발`, `봬요`, `더 나은`	상황에 걸맞은 설정|포인터가 가리키는 값|더 나은 방법
+spacing-bound-noun	yellow	spacing	(?:할|한|하는|될|된|되는|볼|쓸|있을|없을|있는|없는)(?:만큼|대로|뿐(?=[이만\s.,]|$))|(?:할|될|올|갈)줄\s?(?:알|모르|몰)|(?:켠|둔|연|닫은|놓은|열린|멈춘|남긴|가진|쓴|켜진|꺼진)채(?=[로\s])	1	원하는대로 설정한다	`만큼`, `대로`, `뿐`, `줄` and `채` after a verb modifier are bound nouns and take a space; after a plain noun (`규칙대로`, `이것뿐`) they are particles and attach.	`원하는 대로`, `할 만큼`, `할 뿐`, `할 줄 안다`, `켠 채로`	규칙대로 설정한다|원하는 대로 설정한다|이것뿐이다
+spacing-si-gan-nae	yellow	spacing	(?:배포|설치|실행|사용|호출|요청|생성|삭제|변경|업데이트|업그레이드|장애|오류|에러|실패|종료|시작|로그인|접속)시(?=[에\s,]|$)|(?:서비스|노드|사용자|컨테이너|파드|클러스터|팀|부서|국가|기업|프로세스|모듈|시스템|서버|네임스페이스|리전|장치)간(?=[의에\s,]|$)|(?:파일|클러스터|네임스페이스|함수|블록|컨테이너|디렉터리|시스템|코드|문서|범위|기간|조직)내(?=[의에\s,]|$)|(?<![가-힣])그외(?=[에의\s]|$)	1	배포시 로그를 확인한다	`시` (when), `간` (between) and `내` (within) after a noun are bound nouns and take a space; dictionary compounds such as `비상시` and `평상시` are not flagged.	`배포 시`, `노드 간`, `범위 내`, `그 외`	배포 시 로그를 확인한다|노드 간 통신|비상시에는|사용시간|종료시킨다
+spacing-particle-detached	yellow	spacing	(?:으로|로|에서)\s부터(?=[\s,.]|$)|(?<=[가-힣])\s(?:을|를)(?=\s)	1	서버로 부터 응답을 받는다	A particle is part of the word before it; `부터` after `로` / `에서`, and a stray `을` / `를`, attach with no space.	`서버로부터`, `문서를`	서버로부터 응답을 받는다|목적격 조사 을/를
+spacing-noun-hada	yellow	spacing	(?:사용|설정|설치|실행|확인|배포|변경|삭제|생성|추가|수정|적용|관리|구성|처리|호출|요청|지원|제공|검색|입력|저장|이동|복사|연결|시작|종료|선택|정의|구현|포함)\s(?:할|하는|하면|하고|해야|해서|했|합니다|하여|하기|된|되는|되어|됩니다|되면|됐|해(?=\s?주))(?=[\s.,다습어고요주]|$)	1	다음 명령으로 설정 할 수 있다	`하다` / `되다` after a Sino-Korean noun is a suffix and attaches (`설정할`, `사용되는`).	`설정할 수 있다`, `사용되는`, `확인해 주세요`	다음 명령으로 설정할 수 있다|설정 한 번으로 끝난다|요청 하나를 보낸다
+ganeunghan-han	yellow	grammar	가능한\s(?:빨리|빠르게|많이|적게|자주|일찍|신속하게|짧게|길게|오래|간단히|간단하게|적은|많은)	1	가능한 빨리 배포한다	'As soon / many as possible' is `가능한 한 ~`; `가능한` alone is an adjective ('a possible X') and cannot carry the adverb.	`가능한 한 빨리`, `되도록 빨리`	가능한 한 빨리 배포한다|가능한 방법을 찾는다
+ji-aneumyeon-an-doenda	yellow	translationese	지\s?않으면\s안\s?(?:된|됩|돼|되)	1	반드시 확인하지 않으면 안 된다	`~하지 않으면 안 된다` is the Japanese `~なければならない` frame; Korean states the obligation. A literal 'if you do not X, it will not work' is a false positive.	`반드시 확인해야 한다`	반드시 확인해야 한다
+e-uihamyeon	yellow	translationese	에\s의하면	1	공식 문서에 의하면	`~에 의하면` is the Japanese `~によれば`; Korean cites a source with `~에 따르면`.	`공식 문서에 따르면`	공식 문서에 따르면
+haenghada	yellow	nominalization	(?:을|를)\s행(?:하|했|한|해|함)	1	점검을 행한다	`~을 행하다` is a formal dummy verb for the action the noun already names.	`점검한다`	점검을 한다|행사를 연다
+giin	yellow	nominalization	에\s기인(?:하|한|해|했|함)	1	설정 오류에 기인한 장애	`~에 기인하다` is written-register Sino-Korean for a plain cause.	`설정 오류 때문에 생긴 장애`, `설정 오류로 생긴 장애`	설정 오류로 생긴 장애
+office-words	yellow	nominalization	(?<![가-힣])(?:익일|금일|명일|익월|금번|소정의)(?![가-힣])	1	금일 배포 예정	Office-document Sino-Korean where an everyday word exists.	`오늘`, `내일`, `다음 날`, `다음 달`, `이번`, `정해진`	오늘 배포 예정|금요일 배포

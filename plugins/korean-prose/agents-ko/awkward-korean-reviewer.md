@@ -159,7 +159,7 @@ Anti-fabrication 규칙. 재작성은 **어떻게** 한국어로 표현되는지
 
 ### 🟡 어색한 명사화 / 조사 오용 — 판단
 
-토큰 수준의 경우(`개선 작업을 수행`, `~에 대한` 군집, `~을 통한`, 무(無)-접두, `친숙`, 조사 앞 공백, 단위 탈락 등)는 사전 category `nominalization`과 `spacing` 이고, 한 대상의 여러 표기는 `terms.tsv` 다. 여기 남는 것:
+토큰 수준의 경우(`개선 작업을 수행`, `~에 대한` 군집, `~을 통한`, 무(無)-접두, `친숙`, 조사 앞 공백, 단위 탈락 등)는 사전 category `nominalization`과 `spacing`이다. 단순 맞춤법 오류(`됬`, `몇일`, 붙어 버린 `~함다`)는 `spelling`, 겹말(`다시 재시작`, `매일마다`)은 `redundancy`, `서버에게` 같은 조사 오용은 `grammar`, 한 대상의 여러 표기는 `terms.tsv` 다. 여기 남는 것:
 
 | 패턴 | 왜 어색한가 | 자연스러운 한국어 |
 |---|---|---|
@@ -349,7 +349,7 @@ AFTER 제안의 제약:
 - **🟡 findings** — 같은 형태, 가볍게. **🟢** — 방향 제시, 전체 재작성은 선택.
 - **대조 findings** — 각각 대조 근거와 함께: 읽은 형제 줄, 또는 얻은 두 개의 grep count.
 - **표기 일관성** 표 · **종결법 혼용** 섹션별 · **프라이버시 callout** · **구조 변경 권고**(다른 곳으로 라우팅하는 한 줄들).
-- **사전 추가 후보** — 읽어서 확정했지만 스캐너가 못 잡은 finding 이면서, 판단이 아니라 고정 단어·구문인 것. 바로 붙여 넣을 수 있는 행으로 준다: `patterns.tsv`(`id · severity · category · regex · min_count · example · why · suggestion`, 탭 구분, `example`은 `regex`에 매치해야 함) 또는 `terms.tsv`(`canonical · variants · kind · note`). 일반적인 행인지, 이 코퍼스에서만 의미 있는 행인지 밝힌다. 추가할 게 없으면 절을 생략한다.
+- **사전 추가 후보** — 읽어서 확정했지만 스캐너가 못 잡은 finding 이면서, 판단이 아니라 고정 단어·구문인 것. 바로 붙여 넣을 수 있는 행으로 준다: `patterns.tsv`(`id · severity · category · regex · min_count · example · why · suggestion · counterexample`, 탭 구분, `example`은 `regex`에 매치해야 하고 선택 칸인 `counterexample`(`|`로 구분한 자연스러운 문장)은 매치하면 안 됨) 또는 `terms.tsv`(`canonical · variants · kind · note`). 일반적인 행인지, 이 코퍼스에서만 의미 있는 행인지 밝힌다. 추가할 게 없으면 절을 생략한다.
 - **푸터** — 전/후를 보인 뒤 판정 모드에서 특정 항목을 적용하겠다고 제안.
 
 # 출력 — 판정 모드

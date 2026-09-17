@@ -82,9 +82,9 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/scan.py" --json <file> [<file> ...]
 토큰 패턴은 산문이 아니라 데이터입니다: `lexicon/patterns.tsv`(행마다 어색한 단어·구문 하나)와 `lexicon/terms.tsv`(한 대상의 여러 표기). 에이전트 보고서에 **사전 추가 후보** 행이 있고 사용자가 원하면:
 
 1. 한국어 산문 일반에 통하는 행은 이 플러그인의 `lexicon/`으로 올립니다. 한 코퍼스에서만 의미 있는 행은 그 옆의 `patterns.local.tsv` / `terms.local.tsv`에 둡니다 — 이 파일의 행은 `id` / `canonical`이 같은 기본 행을 덮어씁니다. 이 파일들은 플러그인에 커밋되지 않으며, 플러그인이 갱신되면 교체됩니다.
-2. `python3 scripts/scan.py --check-lexicon` — 모든 행의 `example`이 자기 `regex`에 매치해야 하고, `keep` 용어를 어떤 패턴도 플래그하면 안 됩니다.
+2. `python3 scripts/scan.py --check-lexicon` — 모든 행의 `example`이 자기 `regex`에 매치해야 하고, `counterexample`은 하나도 매치하면 안 되며, `keep` 용어를 어떤 패턴도 플래그하면 안 됩니다.
 3. 저장소 루트에서 `bash tests/run.sh`.
-4. 넓은 정규식을 넣기 전에 이미 교정이 끝난 글에 돌려 hit를 읽습니다: hit가 대부분 자연스러운 한국어인 행은 정규식을 좁히거나 `min_count`를 올려야 합니다 — `N`은 한 단락, `file:N`은 파일 전체를 셉니다.
+4. 넓은 정규식을 넣기 전에 이미 교정이 끝난 글에 돌려 hit를 읽습니다: hit가 대부분 자연스러운 한국어인 행은 정규식을 좁히거나 `min_count`를 올려야 합니다 — `N`은 한 단락, `file:N`은 파일 전체를 셉니다. 좁힌 정규식이 자연스러운 문장을 더는 잡지 않게 되면 그 문장을 행의 `counterexample` 칸(`|`로 구분)에 넣어, 나중에 정규식을 고치다가 같은 오탐이 되살아나지 않게 합니다.
 
 에이전트는 이 파일들을 직접 편집하지 않습니다.
 
