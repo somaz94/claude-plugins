@@ -36,6 +36,8 @@ calque-noise-opt	red	calque	노이즈 최적화	1	알림 노이즈 최적화	You
 calque-gujo-ssaim	red	calque	구조가 쌓	1	의존 구조가 쌓였습니다	Korean stacks 부채 / 피로 / 데이터, not `구조`.	`의존이 계속 깊어졌습니다`
 calque-template-hwa	red	calque	(?i:template)화	1	template화	English stem with the Korean `~화` suffix.	`템플릿화`
 calque-empty-abstract	red	calque	성숙도(?: 레이어)?|체계를 (?:구축|확립|마련)|기반 구축|가능 수준|레이어를 (?:얹|쌓)	1	보안 체계를 구축	Empty abstract noun standing where a concrete one belongs; check the umbrella actually covers its own children.	Name the real thing: `롤아웃이 멈추지 않습니다`, `클러스터 하나`, `인프라`
+calque-yeollin-sangtae	red	calque	(?:열린|닫힌) 상태로 실패	1	모든 훅은 열린 상태로 실패합니다	`fail open` / `fail closed` rendered word for word; Korean `열린 상태로 실패` does not say what happens when the check itself breaks.	`오류가 나도 막지 않고 통과시킨다`, `오류가 나면 차단한다`
+calque-hajung	red	calque	하중을 지탱하는	1	하중을 지탱하는 단 하나의 불변식	`load-bearing` rendered as the structural-engineering phrase; outside construction Korean `하중` never means 'the thing everything depends on'.	`핵심`, `무엇보다 지켜야 할`, `모든 것이 기대는`
 ai-geot-ganeung	red	ai-tell	(?:하는|되는|할|있는) 것이 (?:가능|중요|필요)	1	확장하는 것이 가능하다	Calque of "it is possible/important to X"; Korean has a direct verb.	`~할 수 있다`, `~해야 한다`
 ai-filler	red	ai-tell	결론적으로|궁극적으로|혁신적인|획기적인|핵심적인	1	결론적으로 안정성이 높아졌다	Filler discourse markers and inflation adjectives a human writing operations prose does not reach for.	Delete the marker; replace the adjective with the concrete claim
 ai-contrast-frame	red	ai-tell	[이가] 아니라	2	속도가 아니라 안정성이고 비용이 아니라 시간이다	The generator's favourite contrast frame; one is rhetoric, two in a paragraph is a tic.	State the positive directly; keep at most one per section
@@ -79,6 +81,7 @@ binbeon	yellow	translationese	빈번(?:하게|히)\s?(?:발생|일어)	1	장애�
 isyu-clause	yellow	calque	(?:지\s않던|지\s않는|못하던|못하는)\s이슈	1	brokering이 작동하지 않던 이슈	A clause-modified `이슈` for a malfunction calques 'an issue where X did not work'; Korean says `문제`.	`작동하지 않던 문제`, `네트워크 카드를 못 잡던 문제`
 gongsu	yellow	calque	공수(?:를|가|는|\s)	1	수동 갱신 공수를 50% 절감	`공수` (工数, man-hours) is Japanese project-management jargon; plain Korean says work or time.	`수동 갱신 작업을 절반으로 줄임`, `연간 약 50시간 절감`
 zerohwa	yellow	calque	제로화	1	설정 드리프트 이슈 제로화	`제로화` is a coined 'zero-ization'; a count reads cleaner.	`환경 불일치 0건`
+calque-sunhyogwa	yellow	calque	순효과	1	이전 세션의 순효과를 요약한다	`net effect` rendered as the economics term `순효과`; in technical prose, name what actually changed.	`결과적으로 달라진 것`, `최종 결과`
 seonggong	green	ai-tell	성공적으로	1	마이그레이션을 성공적으로 완료했습니다	'Successfully' adds nothing to a completed action and is a common generated-text tell.	Delete it and state the result: `무중단으로 이전했습니다`, `5개 고객사에 납품`
 daepok	green	ai-tell	대폭(?!발)	1	원인 규명 시간 대폭 단축	An unquantified intensifier where a number, or nothing, is stronger.	A figure (`약 139초 → 약 30초`) or delete
 hyeondaehwa	green	ai-tell	현대화	1	선언적 로깅 인프라 현대화	`현대화` is a vague headline noun that says nothing about what changed.	State the change: `ELK → EFK 전환`, `3단계 고도화`
