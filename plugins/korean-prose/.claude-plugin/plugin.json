@@ -1,6 +1,6 @@
 {
   "name": "korean-prose",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Reviews Korean prose for the awkwardness a spell-checker cannot see — literal back-translation, Japanese-era nominalization, generated-text tells, and the findings that are only visible when a line is read against its neighbours.",
   "author": {
     "name": "somaz94",
