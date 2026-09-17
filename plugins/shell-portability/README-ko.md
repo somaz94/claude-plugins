@@ -24,7 +24,7 @@ claude plugin install shell-portability@somaz94
 
 `shellcheck`은 훌륭한 도구이고 계속 쓰셔야 합니다. 다만 `shellcheck`은 스크립트를 **shebang이 선언한 셸** 기준으로 검사합니다. 정작 보지 않는 건 그 스크립트가 **실제로 실행될 셸**입니다.
 
-버그는 그 틈에서 삽니다. macOS에서 대화형 셸은 zsh인데 거의 모든 스크립트는 `#!/usr/bin/env bash`를 달고 있고, `zsh ./script.sh`는 **shebang을 통째로 무시합니다**. 그러면 스크립트는 전혀 다른 셸과 마주하게 됩니다. 배열은 1부터 시작하고, 따옴표 없는 변수는 단어 분리되지 않으며, 매칭되지 않는 glob은 문자열이 아니라 치명적 오류인 셸입니다. 이 차이들은 터지기 전까지 조용합니다.
+버그는 바로 그 틈에서 생깁니다. macOS에서 대화형 셸은 zsh인데 거의 모든 스크립트는 `#!/usr/bin/env bash`를 달고 있고, `zsh ./script.sh`는 **shebang을 통째로 무시합니다**. 그러면 스크립트는 전혀 다른 셸과 마주합니다. 그 셸에서는 배열이 1부터 시작하고, 따옴표 없는 변수가 단어 분리되지 않으며, 매칭되지 않는 glob이 문자열이 아니라 치명적 오류가 됩니다. 이 차이들은 터지기 전까지 조용합니다.
 
 <br/>
 
@@ -39,7 +39,7 @@ claude plugin install shell-portability@somaz94
 | `echo -e "a\nb"` | `\n`을 해석 | `-e`를 그대로 출력 |
 | `declare -g` | 동작 | 없는 문법 — `typeset -g` |
 
-같은 패스에서 일반적인 품질 문제도 함께 짚습니다 — `set -euo pipefail` 누락, 테스트 문맥의 따옴표 없는 확장, 정리 trap 없는 `mktemp`, `$VAR`가 비어 있을 수 있는데 그대로 쓴 `rm -rf "$VAR"`, 그리고 `declare -A`와 `${var,,}`를 위험하게 만드는 macOS bash 3.2 대 bash 5 차이입니다.
+한 번 검토하면서 일반적인 품질 문제도 함께 짚습니다 — `set -euo pipefail` 누락, 테스트 문맥의 따옴표 없는 확장, 정리 trap 없는 `mktemp`, `$VAR`가 비어 있을 수 있는데 그대로 쓴 `rm -rf "$VAR"`, 그리고 `declare -A`와 `${var,,}`를 위험하게 만드는 macOS bash 3.2 대 bash 5 차이입니다.
 
 <br/>
 
@@ -55,7 +55,7 @@ fi
 set -euo pipefail
 ```
 
-이게 있으면 아래쪽의 bash 전용 문법은 구조적으로 안전해지고, 검토에서도 더 이상 지적하지 않습니다. 가드를 넣을 수 없는 스크립트에는 이식 가능한 대체 문법을 제시합니다 — `${BASH_SOURCE[0]:-$0}`, `IFS=' ' read -r -a`, `echo -e` 대신 `printf`.
+이게 있으면 아래쪽의 bash 전용 문법은 구조적으로 안전해지고, 검토에서도 더 이상 지적하지 않습니다. 가드를 넣지 않기로 한 스크립트에는 이식 가능한 대체 문법을 제시합니다 — `${BASH_SOURCE[0]:-$0}`, `IFS=' ' read -r -a`, `echo -e` 대신 `printf`.
 
 <br/>
 
@@ -107,7 +107,7 @@ Recommended verification:
 
 ## 릴리스
 
-이 마켓플레이스의 플러그인은 각자 독립적으로 버전을 매기고 릴리스합니다. `shell-portability`의 모든 변경 이력은 이 디렉터리 커밋만 담아 [shell-portability 릴리스](https://github.com/somaz94/claude-plugins/releases?q=shell-portability&expanded=true)에 있습니다.
+이 마켓플레이스의 플러그인은 각자 독립적으로 버전을 매기고 릴리스합니다. `shell-portability`의 모든 변경 이력은 이 디렉터리의 커밋만 모은 [shell-portability 릴리스](https://github.com/somaz94/claude-plugins/releases?q=shell-portability&expanded=true)에서 볼 수 있습니다.
 
 <br/>
 

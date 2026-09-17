@@ -5,13 +5,13 @@ argument-hint: "[--limit N] [--out FILE] [--config PATH]"
 allowed-tools: Bash, Read
 ---
 
-> 본 문서는 [skills/drift/SKILL.md](../../skills/drift/SKILL.md) 의 **한국어 번역본** 입니다.
-> Claude Code 가 실제 로드하는 것은 영어 원본이며, 본 KO 본은 참조 / 사용자 리뷰 용도입니다.
-> 수정 시 EN + KO 둘 다 동시 수정해야 합니다.
+> 이 문서는 [skills/drift/SKILL.md](../../skills/drift/SKILL.md) 의 **한국어 번역본**입니다.
+> Claude Code 가 실제로 불러오는 것은 영어 원본이며, 이 KO 본은 참고와 사용자 리뷰용입니다.
+> 고칠 때는 EN 과 KO 를 함께 고쳐야 합니다.
 
 # census:drift — 무엇이 무엇과 어긋나 있나?
 
-카탈로그는 무엇이 존재하는지 알려준다. 이것은 서로 일치해야 할 두 가지가 어디서 어긋났는지 알려준다.
+카탈로그는 무엇이 존재하는지 알려준다. `drift` 는 서로 일치해야 할 두 가지가 어디서 어긋났는지 알려준다.
 
 이 skill 은 **읽기 전용** 이다. 보고만 하며 절대 수정 · 동기화 · 조정하지 않는다.
 
@@ -29,7 +29,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/census.py" drift --limit 15
 
 <br/>
 
-## 네 개의 축
+## 네 가지 검사 항목
 
 **Duplicates — 하나의 이름, 여러 개의 정의.** 심각도는 중복됐다는 사실이 아니라 사본들이 *일치하는지* 에서 나온다:
 
@@ -39,7 +39,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/census.py" drift --limit 15
 | 🟡 `mirror-drift` | 여러 repo 에 정의됐는데 서로 어긋남 — 그중 하나는 낡았다 |
 | 🟢 `mirror-consistent` | 중복이지만 바이트 단위로 동일 — 미러 페어의 의도된 상태이며, 고칠 대상이 **아니다** |
 
-**Pairs — 번역 미러.** `pair-missing` 은 실제 공백이다. `pair-structure` 는 더 미묘하므로 신뢰하기 전에 어떻게 계산되는지 읽어야 한다:
+**Pairs — 번역 미러.** `pair-missing` 은 실제로 빠진 미러다. `pair-structure` 는 더 미묘하므로 신뢰하기 전에 어떻게 계산되는지 읽어야 한다:
 
 미러는 보통 원본과 *상수만큼* 다르다 — 하우스 스타일이 번역 배너를 앞에 붙이거나, 파일이 실제 정의로 로드되지 않도록 frontmatter 를 코드 펜스로 감쌀 수 있다. 모양을 단순 비교하면 그 컨벤션이 파일마다 한 번씩 보고되어 진짜 drift 를 덮어버린다. 그래서 오프셋은 **미러 디렉터리 단위로 보정** 된다: 그 디렉터리의 페어 대다수가 공유하는 delta 가 기준선이 되고, **자기 형제들로부터** 벗어난 파일만 보고된다. `pair-convention` finding 은 보정으로 걷어낸 기준선을 명시한다.
 
@@ -47,7 +47,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/census.py" drift --limit 15
 
 `pair-stale` 은 모양이 답할 수 없는 질문에 답한다. 두 파일이 구조적으로 일치하면서도 미러가 몇 달 뒤처져 있을 수 있고, 내용으로는 결론이 안 난다 — 번역은 다르게 읽히도록 되어 있으므로 diff 하면 번역 자체가 drift 로 보고된다. 히스토리가 정직한 신호다: 미러가 마지막으로 커밋된 이후 원본이 커밋됐다면, 양쪽이 어떤 언어이든 미러가 뒤처진 것이다. git 이 필요하므로 추적되지 않는 루트나 커밋되지 않은 파일은 틀린 판정 대신 아무 판정도 받지 않는다.
 
-**Hooks.** hook 은 포인터이므로 다른 축이 표현할 수 없는 실패 하나를 갖는다: 가리키는 스크립트가 없을 수 있다. `hook-missing-script` 가 🔴 인 이유는 다른 무엇도 이것을 보고하지 않기 때문이다 — 등록은 `settings.json` 에 남아 있으므로 hook 은 설정된 것처럼 보이면서 매칭되는 모든 이벤트에서 아무것도 하지 않는다. 사용자가 갖고 있다고 믿는 가드가 무엇인지 지목한다.
+**Hooks.** hook 은 포인터이므로 다른 검사 항목으로는 드러낼 수 없는 실패가 하나 있다: 가리키는 스크립트가 없을 수 있다. `hook-missing-script` 가 🔴 인 이유는 다른 무엇도 이것을 보고하지 않기 때문이다 — 등록은 `settings.json` 에 남아 있으므로 hook 은 설정된 것처럼 보이면서 매칭되는 모든 이벤트에서 아무것도 하지 않는다. 사용자가 갖고 있다고 믿는 가드가 무엇인지 지목한다.
 
 **Frontmatter.** 실제로 무언가를 망가뜨리는 것은 `no-description` 이다: description 은 Claude 가 그 항목을 언제 꺼낼지 판단하는 유일한 신호이므로, 그것이 없으면 이름을 직접 대지 않는 한 도달할 수 없다. `name-mismatch` 와 `key-typo` 는 읽는 사람을 오도하거나 조용히 무시된다.
 

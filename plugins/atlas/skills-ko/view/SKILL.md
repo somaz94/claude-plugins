@@ -5,9 +5,9 @@ argument-hint: "[PROJECT…] [--open] [--out FILE] [--no-bodies]"
 allowed-tools: Bash, Read
 ---
 
-> 본 문서는 [skills/view/SKILL.md](../../skills/view/SKILL.md) 의 **한국어 번역본** 입니다.
-> Claude Code 가 실제 로드하는 것은 영어 원본이며, 본 KO 본은 참조 / 사용자 리뷰 용도입니다.
-> 수정 시 EN + KO 둘 다 동시 수정해야 합니다.
+> 이 문서는 [skills/view/SKILL.md](../../skills/view/SKILL.md) 의 **한국어 번역본**입니다.
+> Claude Code 가 실제로 불러오는 것은 영어 원본이며, 이 KO 본은 참고와 사용자 리뷰용입니다.
+> 고칠 때는 EN 과 KO 를 함께 고쳐야 합니다.
 
 # atlas:view — 이 프로젝트가 실제로 닿을 수 있는 것은?
 
@@ -18,7 +18,7 @@ allowed-tools: Bash, Read
 3. 설치된 모든 플러그인 — `~/.claude/plugins/installed_plugins.json` 을 통해 해석
 4. 앞의 둘에 있는 모든 settings 파일이 등록한 hook
 
-이 skill 은 스캔하는 모든 것에 대해 **읽기 전용** 이다. 손대는 파일은 자신이 만들어내는 viewer 뿐이며, 여기에는 temp 디렉터리에 남은 자기 자신의 낡은 파일을 치우는 것이 포함된다.
+이 skill 은 스캔하는 모든 것에 대해 **읽기 전용** 이다. 손대는 파일은 자신이 만들어내는 viewer 뿐이며, temp 디렉터리에 남은 자기 자신의 낡은 파일을 치우는 일도 여기에 속한다.
 
 <br/>
 
@@ -28,7 +28,7 @@ allowed-tools: Bash, Read
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/atlas.py" view --open
 ```
 
-이렇게 하면 temp 디렉터리에 쓰고 브라우저를 연다. 사용자가 `$ARGUMENTS` 로 준 것은 그대로 넘기고, 해당될 때 아래를 꺼내 쓴다:
+이렇게 하면 viewer 를 temp 디렉터리에 쓰고 브라우저로 연다. 사용자가 `$ARGUMENTS` 로 준 것은 그대로 넘기고, 해당될 때 아래를 꺼내 쓴다:
 
 | 플래그 | 쓰는 경우 |
 |---|---|
@@ -49,7 +49,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/atlas.py" view --open
 
 ## 다른 프로젝트와 비교하기
 
-위치 인자는 그 프로젝트도 *함께* 맵으로 만들라는 뜻이다. 하나라도 지목하면 세 번째 맵 — 프로젝트를 스캔하지 않은 글로벌 레이어 — 이 추가되므로, `atlas.py view acme-platform` 은 파일 세 개를 낸다: 이 프로젝트, 글로벌, 그리고 저 프로젝트.
+위치 인자는 그 프로젝트도 *함께* 맵으로 만들라는 뜻이다. 하나라도 지목하면 세 번째 맵(프로젝트를 스캔하지 않은 글로벌 레이어)이 추가되므로, `atlas.py view acme-platform` 은 파일 세 개를 낸다: 이 프로젝트, 글로벌, 그리고 저 프로젝트.
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/atlas.py" view <project> --open
@@ -57,7 +57,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/atlas.py" view <project> --open
 
 "왜 이 repo 가 저것보다 무겁지", "저 repo 에는 있는데 나한테 없는 게 뭐지" 처럼 비교하는 요청일 때 쓴다. 비교가 아니라 *다른* repo 를 맵으로 만들고 싶다면 대신 `--project DIR` 을 쓴다.
 
-세 개를 각각의 실행 세 번이 아니라 각각이 답하는 것으로 보고한다: 글로벌 맵은 공유 기준선이고, 각 프로젝트 맵은 그 기준선에 repo 가 더한 것이다. `By scope:` 줄의 scope 별 숫자가 비교를 구체적으로 만들어 준다 — 총계 대신 그 숫자를 인용한다.
+세 파일을 실행 세 번의 결과로 나열하지 말고, 각각이 무엇에 답하는지로 보고한다: 글로벌 맵은 공유 기준선이고, 각 프로젝트 맵은 그 기준선에 repo 가 더한 것이다. `By scope:` 줄의 scope 별 숫자가 비교를 구체적으로 만들어 준다 — 총계 대신 그 숫자를 인용한다.
 
 temp 디렉터리의 낡은 viewer 는 매 실행마다 정리된다. 스크립트가 `Removed stale viewer:` 줄을 출력하지 않았다면 언급하지 않고, 출력했더라도 지나가듯 한 번만 말한다.
 
@@ -65,7 +65,7 @@ temp 디렉터리의 낡은 viewer 는 매 실행마다 정리된다. 스크립�
 
 ## 질문이 비용에 대한 것일 때
 
-"내 context 왜 이렇게 꽉 찼지", "뭘 줄여야 하지", "그거 줄어든 거 맞나" 는 맵 질문이 아니고, 브라우저는 그 답으로 틀렸다. 두 서브커맨드가 파일을 쓰지 않고 stdout 으로 바로 답한다:
+"내 context 왜 이렇게 꽉 찼지", "뭘 줄여야 하지", "그거 줄어든 거 맞나" 는 맵으로 답할 질문이 아니고, 브라우저를 여는 것도 맞는 답이 아니다. 두 서브커맨드가 파일을 쓰지 않고 stdout 으로 바로 답한다:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/atlas.py" budget --by kind
@@ -76,7 +76,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/atlas.py" diff <saved-scan.json>
 
 표 전체가 아니라 그 형태를 보고한다. 흔한 결론은 `CLAUDE.md` 파일이 지배적이고 다들 줄이려 드는 description 쪽이 오히려 작은 절반이라는 것이다 — 어느 버킷이 지배적인지 말하고, 열어볼 만한 항목 두세 개를 지목한다. 무엇을 삭제하라고 권하지 않는다. 무거운 항목이 그 비용값을 하고 있을 수 있다.
 
-`diff` 는 사용자가 이미 갖고 있는 기준선을 필요로 한다. 아직 하지 않은 재작성을 측정하고 싶어 한다면, 비교를 지어내지 말고 먼저 기준선을 저장하라고 (`scan --no-bodies --out before.json`) 알려준다.
+`diff` 는 사용자에게 이미 기준선이 있어야 쓸 수 있다. 아직 하지 않은 재작성을 측정하고 싶어 한다면, 비교를 지어내지 말고 먼저 기준선을 저장하라고 (`scan --no-bodies --out before.json`) 알려준다.
 
 <br/>
 

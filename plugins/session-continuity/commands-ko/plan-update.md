@@ -4,13 +4,13 @@ argument-hint: "[plan-name | free-form what-changed summary]"
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
-> 본 문서는 [commands/plan-update.md](../commands/plan-update.md) 의 **한국어 번역본** 입니다.
-> Claude Code 가 실제 로드하는 것은 영어 원본이며, 본 KO 본은 참조 / 사용자 리뷰 용도입니다.
-> 수정 시 EN + KO 둘 다 동시 수정해야 합니다.
+> 이 문서는 [commands/plan-update.md](../commands/plan-update.md) 의 **한국어 번역본**입니다.
+> Claude Code 가 실제로 불러오는 것은 영어 원본이며, 이 KO 본은 참고와 사용자 리뷰용입니다.
+> 고칠 때는 EN 과 KO 를 함께 고쳐야 합니다.
 
 # /plan-update
 
-`plan-progress-updater` agent 의 thin wrapper. 작업이 진행되는 동안 `~/.claude/plans/*.md` plan 파일을 최신 상태로 유지한다 — Progress 표, "What changed" 섹션, lessons-learned 꼬리를 갱신해서 **다음 세션** 이 (context reset 이후) context 를 다시 도출하지 않고 깔끔히 이어갈 수 있게 한다.
+`plan-progress-updater` agent 의 thin wrapper. 작업이 진행되는 동안 `~/.claude/plans/*.md` plan 파일을 최신 상태로 유지한다 — Progress 표, "What changed" 섹션, 맨 끝의 lessons-learned 섹션을 갱신해서 **다음 세션** 이 (context reset 이후) context 를 처음부터 다시 파악하지 않고 깔끔히 이어갈 수 있게 한다.
 
 사용자 호출 인자: `$ARGUMENTS`
 
@@ -18,7 +18,7 @@ allowed-tools: Read, Grep, Glob, Bash
 
 ## 인자 해석
 
-- 비어 있음 → 최근 대화에서 열려 있는 plan 참조를 살핀다. 정확히 하나가 걸려 있으면 그것을 쓰고, 아니면 어떤 plan 인지 사용자에게 묻는다
+- 비어 있음 → 최근 대화에서 plan 을 가리키는 참조를 살핀다. 지금 다루는 plan 이 정확히 하나면 그것을 쓰고, 아니면 어떤 plan 인지 사용자에게 묻는다
 - `<plan-name>` → `~/.claude/plans/<plan-name>.md` 를 바로 사용 (`.md` 접미사는 생략하며 agent 가 해석한다)
 - 자유 형식 텍스트 → agent 가 갱신에 녹여야 할 "what changed" 요약으로 취급한다
 
@@ -68,7 +68,7 @@ plan 파일에 대한 diff 를 한 화면 요약으로 보여준다. plan 변경
 
 - `plan-progress-updater` 는 `~/.claude/plans/*.md` 파일을 **제자리에서** 수정한다. 새 plan 파일을 만들지 않고 (plan-mode 의 몫), repo 코드를 건드리지 않으며, `git commit` / `git push` 를 실행하지 않는다.
 - plan 파일 쓰기는 `plan-progress-updater` 자체 규율에 따라 사용자 승인이 필요하다 — 이 커맨드는 그것을 우회하지 않는다.
-- plan 수정은 외과적으로 유지한다: progress 행 + what-changed 줄 + lessons 줄. 사용자가 명시적으로 재구성을 요청하지 않는 한 plan 전체를 다시 쓰지 않는다.
+- plan 수정은 꼭 필요한 곳만 좁게 한다: progress 행 + what-changed 줄 + lessons 줄. 사용자가 명시적으로 재구성을 요청하지 않는 한 plan 전체를 다시 쓰지 않는다.
 - plan 의 기존 언어와 톤을 보존한다. plan 은 다음 세션이 읽는 것이지 새 독자를 위해 다시 쓰이는 것이 아니다.
 
 <br/>
