@@ -69,7 +69,7 @@ plan 갱신 중 memory에 속하는 것을 발견하면 (예: 사용자가 새�
 
 ## 6. plan 간 링크
 
-현재 plan이 다른 plan 파일을 참조하면 (예: "`~/.claude/plans/zazzy-giggling-peacock.md` 참고"), 그 링크를 보존합니다. 참조된 plan이 더 이상 없으면 🟡 Warning을 띄우고 링크를 제거할지 갱신할지 제안합니다.
+현재 plan이 다른 plan 파일을 참조하면 (예: "`~/.claude/plans/<other-plan>.md` 참고"), 그 링크를 보존합니다. 참조된 plan이 더 이상 없으면 🟡 Warning을 띄우고 링크를 제거할지 갱신할지 제안합니다.
 
 # 워크플로
 

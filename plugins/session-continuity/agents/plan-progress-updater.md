@@ -65,7 +65,7 @@ If during plan update you spot something that belongs in memory (e.g. a new feed
 
 ## 6. Cross-plan links
 
-When the current plan references another plan file (e.g. "see `~/.claude/plans/zazzy-giggling-peacock.md`"), preserve that link. If the cross-referenced plan no longer exists, flag 🟡 Warning and propose either removing the link or updating it.
+When the current plan references another plan file (e.g. "see `~/.claude/plans/<other-plan>.md`"), preserve that link. If the cross-referenced plan no longer exists, flag 🟡 Warning and propose either removing the link or updating it.
 
 # Workflow
 
