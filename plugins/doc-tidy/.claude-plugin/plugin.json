@@ -1,0 +1,20 @@
+{
+  "name": "doc-tidy",
+  "version": "0.1.0",
+  "description": "Decides whether each document should exist and where it belongs — archives finished history, deletes committed session byproducts, merges duplicates and rewrites every link a move breaks, only in batches you approve. Also rescues Claude Code plans before automatic cleanup deletes them.",
+  "author": {
+    "name": "somaz94",
+    "url": "https://github.com/somaz94"
+  },
+  "homepage": "https://github.com/somaz94/claude-plugins/tree/main/plugins/doc-tidy",
+  "repository": "https://github.com/somaz94/claude-plugins",
+  "license": "MIT",
+  "keywords": [
+    "documentation",
+    "cleanup",
+    "archive",
+    "links",
+    "plans",
+    "markdown"
+  ]
+}

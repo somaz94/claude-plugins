@@ -1,0 +1,59 @@
+# Rules read by scripts/doctidy.py. Validate with: doctidy.py --check-rules
+#
+# One row per rule, TAB-separated; lines starting with # are comments.
+#   id        unique within the file; a row in rules.local.tsv with the same id
+#             replaces this row, and strength `off` disables it
+#   kind      byproduct | historical      class signals (scope name|title|head|path)
+#             root-allow                   documents a repository root may keep (name)
+#             generated                    machine-written documents (name|dir)
+#             archive-dir                  retired material; strong = a move target (dir)
+#             backup-dir                   kept reference, never a move target (dir)
+#             plan-placeholder             example plan names, not references (slug)
+#             status-done | status-open    completion signals in plans and status files (line)
+#   strength  strong = enough on its own; weak = needs a second independent signal; off
+#   regex     Python re, compiled with IGNORECASE. It must run on Python 3.10:
+#             no atomic groups, no possessive quantifiers, no global inline flags
+#   example   must match its own regex; counter = ;;-separated values that must NOT
+#             match. Both go through the same normalisation the scan uses:
+#               name   file name -> camelCase split, casefold, [ _.] -> -, then the
+#                      language suffix, dates and a leading ordinal are stripped
+#                      (IMPLEMENTATION_SUMMARY-en.md -> implementation-summary)
+#               title, head, line   emphasis and backticks removed, spaces collapsed;
+#                      head = the first 60 non-empty lines, matched one line at a time
+#               dir    one path segment, casefolded;  path  casefolded;  slug  as written
+#   note      shown next to every hit
+id	kind	scope	strength	regex	example	counter	note
+prompt-name	byproduct	name	strong	(?:^|-)prompt$	alert-followup-prompt-en.md	session-handoff-prompter.md;;prompt-engineering-guide.md;;prompts.md	A prompt saved as a document
+handoff-name	byproduct	name	strong	(?:^|-)handoff$	billing-ci-handoff.md	handoff-procedure.md;;session-handoff-prompter.md	Session handoff note
+ai-summary-name	byproduct	name	strong	(?:^|-)(?:implementation|refactor(?:ing)?|changes?|fix(?:es)?|work|session|progress|completion)-(?:summary|report|notes)$	IMPLEMENTATION_SUMMARY.md	release-notes.md;;bug_report.md;;AssetCurationReport.md;;cilium-dbg_bpf_stats_report.md;;k8s-reviewer.md	Agent-written wrap-up
+scaffold-leftover	byproduct	name	strong	^vsc-extension-quickstart$	vsc-extension-quickstart.md	QUICKSTART.md	Generator template never removed
+leftover-copy	byproduct	name	weak	-(?:old|bak|orig|copy(?:-\d+)?)$|-\(\d+\)$	README.old.md	threshold.md;;copy-on-write.md;;bold.md;;README.md	Editor or OS leftover copy
+prompt-title-ko	byproduct	title	strong	프롬프트\s*(?:\(복사용\)|—|-|:|$)	재문의용 프롬프트 — 알람 중복 후속 조사	프롬프트 엔지니어링 가이드;;시스템 프롬프트 작성법	Title declares a prompt
+prompt-title-en	byproduct	title	strong	\b(?:follow-?up|handoff|next[- ]session|continuation|resume)\s+(?:\w+\s+)?prompt\b	Follow-up Inquiry Prompt — Alarm Investigation	Prompt engineering guide;;Handoff procedure for on-call	Title declares a prompt
+handoff-title	byproduct	title	strong	핸드오프\s*프롬프트|인계\s*프롬프트|\bhandoff\s+prompt\b|\bsession\s+handoff\b	다음 세션 인계 프롬프트	운영 인수인계 절차;;On-call handoff checklist	Handoff prompt title
+copy-prompt-ko	byproduct	head	strong	프롬프트를?\s*그대로\s*복사	아래 프롬프트를 **그대로 복사해서** 입력한다.	설정 파일을 그대로 복사한다	Copy-paste prompt instructions
+copy-prompt-en	byproduct	head	strong	\bcopy\s+(?:the|this)\s+prompt\b|\bpaste\s+(?:it|this(?:\s+prompt)?)\s+into\s+(?:a\s+)?(?:new\s+|fresh\s+)?(?:claude|chat|session|conversation)	copy the prompt below verbatim and paste it into Claude Code	Copy the values below into values.yaml;;paste it into the terminal	Copy-paste prompt instructions
+sole-context-anchor	byproduct	head	strong	(?:프롬프트|prompt)\s*(?:자체가|itself\s+is)\s*(?:유일한|the\s+only)	이 프롬프트 자체가 유일한 컨텍스트 앵커입니다.	이 문서 자체가 유일한 기준이다	Handoff with no plan file
+previous-session-heading	byproduct	head	weak	^#{1,4}\s*(?:이전\s*세션|previous\s+session|last\s+session)	## 이전 세션 요약	## 이전 버전 요약;;## Session affinity	Handoff section heading
+incident-name	historical	name	weak	(?:^|-)(?:incident|postmortem|post-mortem|outage|rca)(?:-|$)	alarm-incident-2026-04-23-en.md	incidental-costs.md;;incidents.md	Incident record (needs a date or a second signal)
+rollout-name	historical	name	weak	(?:^|-)(?:rollout|cutover|go-live|retro(?:spective)?)$	sso-rollout-2026-04.md	rollout-strategy.md;;argo-rollouts.md	Rollout log
+plan-name	historical	name	weak	(?:^|-)(?:migration|upgrade|rollout|cutover|transition|implementation|upload)-plan$|^plan$	S3-migration-plan.md	plan-update.md;;explanation.md;;capacity-planning.md;;planner.md	Plan document
+status-name	historical	name	weak	^(?:status|progress)$	status.md	03_status_effects.md;;status-badge.md	Status tracker
+phase-name	historical	name	weak	^phase-?\d+(?:-|$)	04-phase4.md	multiphase-commit.md;;phaser.md	Phase log
+report-title-ko	historical	title	strong	(?:완료|결과|종료|사후|장애)\s*보고	Phase 4 완료 보고 (2026-04-14)	보고서 작성 가이드;;완료 조건	Completion or incident report
+report-title-en	historical	title	strong	\b(?:post-?mortem|incident\s+report|completion\s+report|retrospective)\b	Incident report: API outage	Reporting guide;;Incident response runbook	Completion or incident report
+root-standard	root-allow	name	strong	^(?:readme|contributing|changelog|changes|history|license|licence|copying|security|code-of-conduct|support|governance|maintainers|codeowners|authors|contributors|notice|third-party-notices|release|releasing|roadmap|upgrading|adopters|citation|faq)$	CODE_OF_CONDUCT.md	notes.md;;todo.md;;agentic-coding-concepts-guide.md	Conventional root documents
+root-agent	root-allow	name	strong	^(?:claude|agents|gemini|claude-local|copilot-instructions)$	CLAUDE.local.md	agent-notes.md	Agent instruction files
+root-wiki	root-allow	name	strong	^(?:home|sidebar|footer)$	_Sidebar.md	homepage-draft.md	Wiki chrome
+root-index	root-allow	name	strong	^(?:index|inventory|summary)$	INVENTORY-ko.md	inventory-notes.md	Indexes
+generated-name	generated	name	strong	^(?:changelog|changes|contributors|authors|release|inventory|third-party-notices|notice)$	CONTRIBUTORS.md	release-process.md	Machine-written
+generated-dir	generated	dir	strong	^(?:changelogs?|release-notes|releases)$	changelog	change-management	Machine-written directory
+archive-retired	archive-dir	dir	strong	^_?(?:deprecated|archived?|archives|attic|obsolete|retired|graveyard)$	_deprecated	deprecation-notes;;archiver	Retired, movable archive root
+archive-in-place	archive-dir	dir	weak	^_?(?:legacy|old)(?:-[a-z0-9-]+)?$	old-upgrade	older-releases;;goldeneye	Archived in place, never a move target
+backup-underscore	backup-dir	dir	strong	^_backups?$	_backup	backup;;backups;;backup-restore	Kept reference, not retired
+placeholder-slugs	plan-placeholder	slug	strong	^(?:foo|bar|baz|qux|example|sample|test|x+|name|plan|plan-name|your-plan|my-plan|topic|slug|todo|tbd)$	foo	brisk-folding-lamport;;release-train-rollout	Example names, not references
+done-declared-ko	status-done	line	strong	(?:전환|작업|이관|마이그레이션|구축|배포|인수)\s*(?:이\s*|은\s*|는\s*)?(?:모두\s*)?(?:완료|종료)(?!\s*(?:조건|기준|후|시|되면|하면|예정))|모든\s*(?:phase|단계)\s*(?:완료|종료)|종료\s*선언	# ✅ 전환 완료 (2026-08-25). 모든 Phase 종료.	전환 완료 조건;;작업 완료 후 알림;;배포 완료되면 확인	Declared finished
+done-declared-en	status-done	line	strong	\bstatus:\s*(?:done|complete(?:d)?|finished|closed)\b|\ball\s+phases\s+(?:are\s+)?(?:done|complete(?:d)?)\b|\b(?:migration|cutover|rollout)\s+(?:is\s+)?complete(?:d)?\b	Status: done	Definition of done;;status: in progress	Declared finished
+open-uncommitted	status-open	line	strong	미커밋|\buncommitted\b|not\s+yet\s+committed	✅ **완료 2026-09-15** (미커밋)	커밋 완료	Done but not committed
+open-progress	status-open	line	strong	\b\d+\s*/\s*\d+\s*(?:단계|phases?|steps?)\s*(?:진행|in\s+progress)|진행\s*중|\bin\s+progress\b|미착수|\bnot\s+started\b	B1 — 구현 완료, 전환 1/3 단계 진행 (2026-09-16)	진행 완료;;progress table	Still moving
+open-remaining	status-open	line	weak	남은\s*(?:것|작업|일|항목)|\bremaining\s+(?:work|tasks?|items?)\b|\bTODO\b|^\s*[-*]\s+\[ \]	남은 것은 포트포워드 삭제(사용자 작업)뿐	남은 용량;;todos.md	Leftover work mentioned

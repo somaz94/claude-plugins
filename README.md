@@ -32,6 +32,7 @@ claude plugin install census@somaz94
 | [`release-guards`](plugins/release-guards) | Puts a confirmation in front of the release actions you cannot take back — tag create/delete, release publish, and edits to the automation that generates them |
 | [`sensitive-guard`](plugins/sensitive-guard) | Stops a secret at the moment of commit — a last-mile gate over the lines a commit adds, plus an on-demand scan before you publish |
 | [`korean-prose`](plugins/korean-prose) | Reviews Korean writing for the awkwardness a spell-checker cannot see — English skeletons left inside Korean sentences, generated-text tells, and the findings that only appear when a line is read against its neighbours |
+| [`doc-tidy`](plugins/doc-tidy) | Decides whether each document should exist and where it belongs — archives finished history, deletes committed session byproducts, and rewrites every link a move breaks, in batches you approve |
 
 Each plugin's documentation, in both languages:
 
@@ -43,6 +44,7 @@ Each plugin's documentation, in both languages:
 - [`release-guards`](plugins/release-guards) — [English](plugins/release-guards/README.md) · [한국어](plugins/release-guards/README-ko.md)
 - [`sensitive-guard`](plugins/sensitive-guard) — [English](plugins/sensitive-guard/README.md) · [한국어](plugins/sensitive-guard/README-ko.md)
 - [`korean-prose`](plugins/korean-prose) — [English](plugins/korean-prose/README.md) · [한국어](plugins/korean-prose/README-ko.md)
+- [`doc-tidy`](plugins/doc-tidy) — [English](plugins/doc-tidy/README.md) · [한국어](plugins/doc-tidy/README-ko.md)
 
 <br/>
 
@@ -58,6 +60,7 @@ Every plugin here addresses something that goes wrong **quietly** while an assis
 - A tag gets pushed because it looked like the next step after a green build. — [`release-guards`](plugins/release-guards)
 - A secret rides along in a diff nobody re-read. — [`sensitive-guard`](plugins/sensitive-guard)
 - A translated document keeps its English skeleton. Every word is spelled right and the grammar is intact, so nothing flags it — and it reads like something to decode rather than read. — [`korean-prose`](plugins/korean-prose)
+- Documents pile up where the work happened. A handoff gets committed, a finished migration keeps its plan beside the current docs, and a pointer to a plan file that expired last month still reads like a reference. — [`doc-tidy`](plugins/doc-tidy)
 
 Each is a gate or a report at the point the mistake is cheap to catch, not a summary delivered after it landed. Where a better tool already exists — `gitleaks` for secret detection, `shellcheck` for shell linting — these do not replace it; they run where it does not, which is inside the session, before the commit returns.
 

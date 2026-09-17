@@ -32,6 +32,7 @@ claude plugin install census@somaz94
 | [`release-guards`](plugins/release-guards) | 되돌릴 수 없는 릴리스 동작 앞에 확인 절차를 세웁니다 — 태그 생성·삭제와 릴리스 발행, 그리고 그 둘을 만들어 내는 자동화 파일 편집이 대상입니다 |
 | [`sensitive-guard`](plugins/sensitive-guard) | 비밀값이 커밋되는 순간 차단 — 커밋이 추가하는 줄만 훑는 마지막 관문, 그리고 공개 전에 요청해서 돌리는 전체 스캔을 제공합니다 |
 | [`korean-prose`](plugins/korean-prose) | 맞춤법 검사기가 볼 수 없는 어색함을 검토 — 한국어 문장 안에 남은 영어 골격, 생성된 텍스트의 흔적, 그리고 한 줄을 이웃 줄과 대조해야만 드러나는 문제를 잡습니다 |
+| [`doc-tidy`](plugins/doc-tidy) | 문서마다 남겨야 하는지, 어디에 둬야 하는지 판정 — 끝난 기록은 보관하고, 커밋된 세션 부산물은 지우고, 이동이 깨뜨리는 링크는 모두 다시 씁니다. 승인한 묶음만 적용합니다 |
 
 플러그인별 문서 — 영어와 한국어 두 벌:
 
@@ -43,6 +44,7 @@ claude plugin install census@somaz94
 - [`release-guards`](plugins/release-guards) — [English](plugins/release-guards/README.md) · [한국어](plugins/release-guards/README-ko.md)
 - [`sensitive-guard`](plugins/sensitive-guard) — [English](plugins/sensitive-guard/README.md) · [한국어](plugins/sensitive-guard/README-ko.md)
 - [`korean-prose`](plugins/korean-prose) — [English](plugins/korean-prose/README.md) · [한국어](plugins/korean-prose/README-ko.md)
+- [`doc-tidy`](plugins/doc-tidy) — [English](plugins/doc-tidy/README.md) · [한국어](plugins/doc-tidy/README-ko.md)
 
 <br/>
 
@@ -58,6 +60,7 @@ claude plugin install census@somaz94
 - 빌드가 초록불이면 태그를 다는 게 다음 순서처럼 보여서, 태그가 그냥 푸시됩니다. — [`release-guards`](plugins/release-guards)
 - 아무도 다시 읽지 않은 diff에 비밀값이 묻어갑니다. — [`sensitive-guard`](plugins/sensitive-guard)
 - 번역된 문서가 영어 골격을 그대로 안고 갑니다. 철자도 맞고 문법도 온전해서 아무것도 이걸 잡아내지 못하는데, 읽는 문서가 아니라 해독하는 문서가 됩니다. — [`korean-prose`](plugins/korean-prose)
+- 문서는 작업이 일어난 자리에 쌓입니다. 핸드오프가 커밋되고, 끝난 마이그레이션의 plan이 현재 문서 옆에 남고, 지난달 만료된 plan 파일을 가리키는 문장이 여전히 참조처럼 읽힙니다. — [`doc-tidy`](plugins/doc-tidy)
 
 하나같이 실수를 값싸게 잡을 수 있는 지점에 놓인 게이트나 보고서이지, 일이 벌어진 뒤에 오는 요약이 아닙니다. 더 나은 도구가 이미 있는 영역에서는 — 비밀값 탐지에는 `gitleaks`, 셸 린트에는 `shellcheck` — 그 도구들을 대체하지 않습니다. 그 도구들이 닿지 않는 곳, 즉 세션 안에서 커밋 명령이 끝나기 전에 돌 뿐입니다.
 
