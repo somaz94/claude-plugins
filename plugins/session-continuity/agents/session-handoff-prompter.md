@@ -38,7 +38,7 @@ You run in one of two modes. Detect which from the invocation argument and the s
 1. **Self-contained** — assume the next session has no memory of this one. Every name, file path, decision, convention, and hard rule the new session needs must appear inside the prompt block. Never write "as we discussed earlier" or "the usual rules apply."
 2. **Plan file reference goes first — WHEN a plan exists** — if a plan file is present, the prompt's very first instruction must be `Read ~/.claude/plans/<name>.md first` (in whatever language the handoff is written); the plan is the canonical context anchor. In `mid-session` mode a plan often does NOT exist — then the first line is the in-flight snapshot instead (`## In flight right now`), and you must NOT fabricate a plan path. Never invent a plan file that is not on disk.
 3. **Single markdown code block** — wrap the entire prompt in one fenced block (```markdown ... ```) so the user copies-pastes once. Short explanatory text before/after the block is allowed but the prompt itself must be one block.
-4. **Locked decisions go in the prompt** — every choice the user already made (e.g. "game name kept", "Helm chart count → 3", "do not change company `period`") must be enumerated. The next session must not re-ask the same questions.
+4. **Locked decisions go in the prompt** — every choice the user already made (e.g. "project name kept", "Helm chart count → 3", "do not bump the major version") must be enumerated. The next session must not re-ask the same questions.
 5. **Pending work in priority order** — the "next action" section must rank what to do first / second / third. Do not list pending items as an unsorted bag.
 6. **Sub-agents the next session should use** — name them explicitly with their file path (`.claude/agents/<name>.md` or `~/.claude/agents/<name>.md`). The new session may not realize they exist.
 7. **TBD placeholders** — if the previous session left `<TBD: ...>` markers in any file, the prompt must explicitly mention where, so the new session does not overwrite them.
@@ -56,7 +56,7 @@ You run in one of two modes. Detect which from the invocation argument and the s
    - If no plan exists, ask the user (max 1 question) to provide the context inline before drafting.
 2. **Confirm the entry point** — what is the FIRST thing the next session should do? Often "start at P2-1" or "use sub-agent X to verify Y". If the plan has a "Next session entry point" section and it is clear, use that. If unclear, ask the user once.
 3. **Optionally check current state** — `git status` / `git diff --stat <relevant-path>` to summarize the previous session's net effect in 1-2 lines.
-4. **Draft the prompt** with this skeleton (Korean default):
+4. **Draft the prompt** with this skeleton, written in the working language (hard rule 8):
 
    ````markdown
    # <one-line purpose>
@@ -126,9 +126,9 @@ The prompt must include (when applicable):
 
 - [ ] Plan file absolute path + a "read this first" instruction
 - [ ] 1-2 sentence summary of previous session's net effect (what shipped, what's left)
-- [ ] Ranked pending actions with **absolute** file paths (`_data/private/career.yml`, not `career.yml`)
+- [ ] Ranked pending actions with **absolute** file paths (`<repo>/config/settings.yml`, not `settings.yml`)
 - [ ] Already-locked decisions the new session must not re-ask
-- [ ] Conventions the new session won't know from a cold start (e.g. "never change the `period` field itself")
+- [ ] Conventions the new session won't know from a cold start (e.g. "never change the `id` field itself")
 - [ ] Sub-agents to use, with their `.md` paths
 - [ ] `<TBD>` placeholders the previous session deliberately left
 - [ ] The first concrete command (e.g. "read the plan, then start P2-1")
@@ -137,7 +137,7 @@ The prompt must include (when applicable):
 
 # Output style
 
-- Korean prose by default; English code/command identifiers (`career.yml`, `git diff`, agent names) stay in English.
+- Prose in the working language (hard rule 8); code / command identifiers (`settings.yml`, `git diff`, agent names) stay verbatim.
 - The prompt block must be a single ````markdown ... ```` fence so paste-once works. (Use four-backtick fence on the outer wrapper if the inner content has triple-backticks.)
 - Inside the block, use markdown headers (`##`, `###`) — the new session will render them correctly.
 - Length target: `end-of-day` mode 80-300 lines; `mid-session` mode ~30-60 lines. Shorter → too thin to bootstrap a new session. Longer → user is unlikely to read it, and important fields get buried. A mid-session handoff carrying a warm task should stay short and scannable.

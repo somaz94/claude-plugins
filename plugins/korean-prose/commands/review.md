@@ -56,7 +56,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/scan.py" --json <file> [<file> ...]
 
 State the lane and the mode in one line, then invoke. The agent runs two passes:
 
-1. **Token pass** — 직역체 / 번역체 (`~에 있어서`, `~을 통해서` overuse, `의` chains, passive overuse, abstract-noun + `~을 가지다`), 일본어식 한자어 (`검토 진행`, `~화 시키다`), AI 티 patterns (`~하는 것이 가능`, `결론적으로`, mechanical parallelism, 이중 피동, `~하고,`), 조사 누락·오선택, 종결법 혼용, tense, 외래어 표기, 호응 오류, and the 영어 개념 1:1 치환 사전.
+1. **Token pass** — 직역체 / 번역체 (`~에 있어서`, `~을 통해서` overuse, `의` chains, passive overuse, abstract-noun + `~을 가지다`), 일본어식 한자어 (`검토 진행`, `~화 시키다`), AI 티 patterns (`~하는 것이 가능`, `결론적으로`, mechanical parallelism, 이중 피동), 조사 누락·오선택, 종결법 혼용, tense, 외래어 표기, 호응 오류, and the 영어 개념 1:1 치환 사전.
 2. **대조 pass** — the findings a token scan cannot see, and the reason a clean token sweep is not a clean review: **형제 구조 이탈** (one bullet shaped unlike its siblings), **이웃 중복** (two items repeating one rationale), **과장 드리프트** (`최소화` / `차단` / `완전` where the evidence says `경감` / `방지`), **표기 일관성** file-wide (`Pod` vs `파드`), **용어 도입 관례** (a bare English concept in prose that glosses every other one).
 
 Every 대조 finding must carry its evidence — the sibling lines compared, or the two grep counts. Without it the finding is unfalsifiable and the user cannot check it.

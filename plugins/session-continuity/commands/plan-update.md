@@ -30,7 +30,7 @@ User invocation argument: `$ARGUMENTS`
 When NOT to use:
 
 - The work isn't tied to a plan file — use a memory write or just continue.
-- The plan is finished — use `~/.claude/agents/session-handoff-prompter.md` instead (via `/handoff`) if a fresh session needs to pick it up.
+- The plan is finished — use `agents/session-handoff-prompter.md` instead (via `/handoff`) if a fresh session needs to pick it up.
 - Brand-new plan creation — that's plan-mode's job, not this command.
 
 <br/>
@@ -45,7 +45,7 @@ Invoke the agent with:
 
 The agent edits the plan in place — typically:
 
-- Flips Progress row status (⬜ pending → 🟢 in-progress → ✅ completed) and adds a date/note.
+- Flips Progress row status (⏳ Pending → 🟡 In progress → ✅ Done) and adds a date/note.
 - Appends to "What changed" section with today's date + the user's summary.
 - Appends to "Lessons / Conventions to preserve" when a non-obvious decision was made.
 - Updates the "next session prompt" section if the next step changes.
@@ -71,6 +71,6 @@ If the user wants to commit the plan change immediately, delegate to `/commit` (
 
 ## References
 
-- KO pair: `~/.claude/commands-ko/plan-update.md`
-- Primary agent: `~/.claude/agents/plan-progress-updater.md`
-- Companion: `~/.claude/agents/session-handoff-prompter.md` (for next-session handoff, NOT in-place update) — invoke via `/handoff`
+- KO pair: `commands-ko/plan-update.md`
+- Primary agent: `agents/plan-progress-updater.md`
+- Companion: `agents/session-handoff-prompter.md` (for next-session handoff, NOT in-place update) — invoke via `/handoff`

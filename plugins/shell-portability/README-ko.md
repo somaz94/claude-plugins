@@ -45,7 +45,7 @@ claude plugin install shell-portability@somaz94
 
 ## 반복해서 권하게 되는 수정
 
-지적 대부분은 스크립트 맨 위에 두 줄짜리 가드 하나만 넣으면 정리됩니다.
+지적 대부분은 스크립트 맨 위에 짧은 가드 하나만 넣으면 정리됩니다.
 
 ```bash
 #!/usr/bin/env bash

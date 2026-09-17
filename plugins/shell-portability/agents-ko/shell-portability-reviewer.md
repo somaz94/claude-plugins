@@ -89,7 +89,7 @@ tools: Read, Grep, Glob, Edit, Bash
 - zsh 는 기본적으로 따옴표 없는 변수를 분리하지 **않고**, bash 는 분리합니다. 단어 분리에 *의존하는* 스크립트는 (드물고 나쁜 관행입니다) zsh 에서 깨집니다.
 - → 공백 구분 리스트를 zsh 에서 분리하려고 `for x in $LIST` (따옴표 없음) 를 쓰면 🔴. 수정: `IFS=' ' read -r -a arr <<<"$LIST"; for x in "${arr[@]}"`.
 - `${var//pattern/repl}` 와 `${var:offset:len}` 은 bash 와 zsh 모두 호환됩니다. 좋습니다.
-- `${var,,}` (소문자화) 는 bash 4+ 전용입니다 — 양쪽 셸 모두 bash 4+ 를 요구합니다. `${var^^}`, `${var^}`, `${var,}` 도 마찬가지입니다.
+- `${var,,}` (소문자화) 는 bash 4+ 전용입니다 — zsh 와 macOS 기본 bash 3.2 는 둘 다 `bad substitution` 으로 거부하므로, re-exec 가드와 룰 3 의 bash 버전 검사가 모두 필요합니다. `${var^^}`, `${var^}`, `${var,}` 도 마찬가지입니다.
 
 ## 6. `<()`, `<<<`, `<<EOF`
 
@@ -115,7 +115,7 @@ tools: Read, Grep, Glob, Edit, Bash
 
 ## 10. `echo -e` 대 `printf`
 
-- `echo -e` 는 bash 이고, zsh 는 리터럴 `-e` 를 출력합니다. 이식성을 위해 `printf '%s\n' "$x"` 를 씁니다. → `echo -e` 가 보이면 🟡.
+- `echo -e` 는 이식성이 없습니다. zsh 의 `echo` 는 `-e` 없이도 백슬래시 이스케이프를 해석하고 (bash 는 해석하지 않습니다), `sh` (dash, macOS `/bin/sh`) 는 `-e` 를 문자 그대로 출력합니다. 이식성을 위해 `printf '%s\n' "$x"` 를 씁니다. → `echo -e` 가 보이면 🟡.
 
 # 품질 검사 (엄밀히는 이식성이 아니지만 같은 회차에 함께 표시)
 

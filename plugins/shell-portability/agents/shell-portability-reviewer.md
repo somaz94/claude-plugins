@@ -85,7 +85,7 @@ Out of scope: PowerShell, fish, Python shebang scripts, Windows `.bat`/`.cmd`.
 - zsh does NOT split unquoted variables by default; bash does. Scripts that *rely on* word splitting (rare and bad practice) break under zsh.
 - → 🔴 if `for x in $LIST` (unquoted) is used to split a space-separated list under zsh. Fix: `IFS=' ' read -r -a arr <<<"$LIST"; for x in "${arr[@]}"`.
 - `${var//pattern/repl}` and `${var:offset:len}` are bash and zsh compatible. Good.
-- `${var,,}` (lowercase) is bash 4+ only — both shells need bash 4+. Same applies to `${var^^}`, `${var^}`, `${var,}`.
+- `${var,,}` (lowercase) is bash 4+ only — zsh and macOS's stock bash 3.2 both reject it with `bad substitution`, so it needs the re-exec guard *and* the bash-version assertion from rule 3. Same applies to `${var^^}`, `${var^}`, `${var,}`.
 
 ## 6. `<()`, `<<<`, `<<EOF`
 
@@ -111,7 +111,7 @@ Out of scope: PowerShell, fish, Python shebang scripts, Windows `.bat`/`.cmd`.
 
 ## 10. `echo -e` vs `printf`
 
-- `echo -e` is bash; zsh prints literal `-e`. Use `printf '%s\n' "$x"` for portability. → 🟡 if `echo -e` appears.
+- `echo -e` is not portable: zsh's `echo` expands backslash escapes even without `-e` (bash's does not), and `sh` (dash, macOS `/bin/sh`) prints the literal `-e`. Use `printf '%s\n' "$x"` for portability. → 🟡 if `echo -e` appears.
 
 # Quality checks (not portability per se, but flagged on the same pass)
 

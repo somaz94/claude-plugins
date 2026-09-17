@@ -113,7 +113,7 @@ Switch to a language and any item that was *expected* to have a mirror but does 
 
 `agents-ko/reviewer.md` with no `agents/reviewer.md` beside it is a file that looks like a resource and is never loaded, because Claude Code reads `agents/` and not `agents-ko/`. It is shown, tagged `not loaded`, and the reason is on the item.
 
-That is deliberately neither of the two easier answers. Hiding it means a tree whose agents were only ever written in Korean reports zero agents. Listing it normally means claiming a session can reach something it cannot, and billing its description to a context budget that never pays for it. So it is present, visible under **Issues only**, and charged nothing.
+That is deliberately neither of the two easier answers. Hiding it means a tree whose agents were only ever written in Korean reports zero agents. Listing it normally means claiming a session can reach something it cannot, and billing its description to a context budget that never pays for it. So it is present, visible under **needs attention**, and charged nothing.
 
 The usual cause is a source file that was renamed or deleted while its translation stayed behind.
 

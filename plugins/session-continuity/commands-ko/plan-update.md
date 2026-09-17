@@ -34,7 +34,7 @@ allowed-tools: Read, Grep, Glob, Bash
 쓰지 않는 경우:
 
 - 작업이 plan 파일과 엮여 있지 않을 때 — memory 기록을 하거나 그냥 계속한다.
-- plan 이 끝났을 때 — 새 세션이 이어받아야 한다면 대신 `~/.claude/agents/session-handoff-prompter.md` 를 (`/handoff` 로) 쓴다.
+- plan 이 끝났을 때 — 새 세션이 이어받아야 한다면 대신 `agents/session-handoff-prompter.md` 를 (`/handoff` 로) 쓴다.
 - plan 을 새로 만들 때 — 그것은 이 커맨드가 아니라 plan-mode 의 몫이다.
 
 <br/>
@@ -49,7 +49,7 @@ allowed-tools: Read, Grep, Glob, Bash
 
 agent 는 plan 을 제자리에서 수정한다 — 보통 다음과 같다:
 
-- Progress 행 상태를 뒤집고 (⬜ pending → 🟢 in-progress → ✅ completed) 날짜/메모를 붙인다.
+- Progress 행 상태를 뒤집고 (⏳ Pending → 🟡 In progress → ✅ Done) 날짜/메모를 붙인다.
 - "What changed" 섹션에 오늘 날짜 + 사용자 요약을 덧붙인다.
 - 자명하지 않은 결정이 내려졌으면 "Lessons / Conventions to preserve" 에 덧붙인다.
 - 다음 단계가 바뀌었으면 "next session prompt" 섹션을 갱신한다.
@@ -75,6 +75,6 @@ plan 파일에 대한 diff 를 한 화면 요약으로 보여준다. plan 변경
 
 ## 참조
 
-- KO 페어: `~/.claude/commands-ko/plan-update.md`
-- 주 agent: `~/.claude/agents/plan-progress-updater.md`
-- 동반: `~/.claude/agents/session-handoff-prompter.md` (다음 세션 handoff 용이며 제자리 갱신용이 아님) — `/handoff` 로 호출
+- EN 페어: `commands/plan-update.md`
+- 주 agent: `agents/plan-progress-updater.md`
+- 동반: `agents/session-handoff-prompter.md` (다음 세션 handoff 용이며 제자리 갱신용이 아님) — `/handoff` 로 호출

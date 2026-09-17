@@ -63,7 +63,7 @@ There is nothing to set up and no config file. `README-ko.md`, `guide.ja.md`, `d
 
 That cuts both ways, and the second direction is what keeps the report usable:
 
-- A language counts as a language only when some pair in that same directory **already proves it**. Without that rule `06-followup-fluent-bit.md` pairs on `bit` and `scaling-and-ha.md` pairs on `ha` — both are three lowercase letters after a hyphen, and both are nonsense. Real repositories are full of file names shaped like translations.
+- A language counts as a language only when some pair in that same directory **already proves it**. Without that rule `06-followup-fluent-bit.md` pairs on `bit` and `scaling-and-ha.md` pairs on `ha` — both are two or three lowercase letters after a hyphen, and both are nonsense. Real repositories are full of file names shaped like translations.
 - A directory that keeps no mirrors is **never told it is missing them**. A single-language repo gets "no pairs found" and nothing else.
 - A gap is reported against **how thoroughly that directory actually mirrors**. 14 of 15 translated makes the 15th an oversight; 2 of 9 makes the other 7 a decision. The report says which case it is and shows the ratio, because the ratio is the evidence.
 - `CHANGELOG.md`, `RELEASE.md`, `CONTRIBUTORS.md`, `LICENSE.md` and `CLAUDE.md` are never expected to have mirrors. A machine writes the first four and a model reads the last one; a tool that demands `RELEASE-ko.md` beside your `README-ko.md` teaches you to ignore it by the second run.

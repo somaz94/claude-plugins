@@ -45,7 +45,7 @@ It also flags the usual quality issues on the same pass — missing `set -euo pi
 
 ## The fix it keeps recommending
 
-Most findings collapse into one two-line guard at the top of the script:
+Most findings collapse into one short guard at the top of the script:
 
 ```bash
 #!/usr/bin/env bash
