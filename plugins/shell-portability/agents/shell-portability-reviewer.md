@@ -217,7 +217,7 @@ Out of scope: PowerShell, fish, Python shebang scripts, Windows `.bat`/`.cmd`.
 
 Sometimes a finding is intentional:
 
-- `echo -e "\n"` *might* be deliberate if the script targets only Linux CI. Note: under zsh on macOS it breaks. → still 🟡, but mention "intentional?" in the report.
+- `echo -e "\n"` *might* be deliberate if the script only ever runs under bash (e.g. Linux CI). Note: `sh` (dash, macOS `/bin/sh`) prints the literal `-e`. → still 🟡, but mention "intentional?" in the report.
 - `BASH_SOURCE[0]` is fine if the re-exec guard at line 1–3 is present. Do NOT flag it again.
 - `((i++))` may be inside `if (( i++ )); then` which has its own semantics — distinguish.
 
