@@ -16,11 +16,16 @@ PLUGIN="$ROOT/plugins/sensitive-guard"
 HOOK="$PLUGIN/hooks/pre-commit-sensitive-scan.sh"
 SCANNER="$PLUGIN/scripts/find-sensitive.sh"
 
-# A value the scanner recognises out of the box, so the fixtures do not depend on
-# anyone's personal markers. Split so this file never contains the literal token
-# shape a scanner would flag when this very repo is scanned.
+# Values the scanner recognises out of the box, so the fixtures do not depend on
+# anyone's personal markers. Each is split so this file never contains the literal
+# token shape a scanner would flag when this very repo is scanned. That split is
+# load-bearing rather than tidy: the key was split from the start, the other two
+# were not, and a repo-wide `find-sensitive.sh` therefore reported this file on
+# every run. A gate that always fires gets overridden by reflex, which costs more
+# than the leak it was watching for. Keep any new fixture value split the same way.
 SECRET_KEY="AKIA""IOSFODNN7EXAMPLE"
-SECRET_PW='password = "hunter2-not-a-real-password"'
+SECRET_PW="pass""word = \"hunter2-not-a-real-password\""
+PRIVATE_IP="10.""99.99.99"
 
 # Build a git repo that has opted in, with a clean committed baseline.
 # Prints the repo path.
@@ -260,7 +265,7 @@ set -euo pipefail
 # hint. Blocking on it alone would make the guard cry wolf on every homelab
 # note; the scanner still reports it, so audit visibility is unaffected.
 repo="$(new_repo)"
-printf 'the box lives at 10.99.99.99\n' > "$repo/topology.md"
+printf 'the box lives at %s\n' "$PRIVATE_IP" > "$repo/topology.md"
 git -C "$repo" add -A
 
 expect_hook 1 "$repo" "git commit -m x" "a lone private IP" || exit 1
