@@ -2,8 +2,9 @@
 """Candidate scanner for the Korean-naturalness reviewer.
 
 Reads the lexicon that ships next to this script (``../lexicon/*.tsv``),
-extracts Korean prose from Markdown, bilingual YAML (the ``ko:`` half only)
-or plain text, and reports two kinds of candidates:
+extracts Korean prose from Markdown, YAML (the ``ko:`` half of a bilingual
+file, every authored value of a monolingual Korean one) or plain text, and
+reports two kinds of candidates:
 
   Pass 1  token-pattern hits from ``patterns.tsv``
   Pass 2  one referent spelled several ways - seeded from ``terms.tsv``,
@@ -35,6 +36,7 @@ TERM_KINDS = ("name", "k8s-kind", "concept", "keep")
 EXIT_OK = 0
 EXIT_LEXICON_PROBLEMS = 1
 EXIT_USAGE = 2
+EXIT_NOTHING_SCANNED = 3
 
 HANGUL = "가-힣"
 HANGUL_CHAR = re.compile(f"[{HANGUL}]")
@@ -68,6 +70,12 @@ YAML_KO_VALUE = re.compile(
         [ \t]*(?=[,}\]]|\#|$)""",
     re.VERBOSE,
 )
+
+# A bilingual file marks its Korean with `ko:`. A monolingual Korean one has no
+# such mark, so its prose is whatever is left once the scaffolding is blanked:
+# the key, the sequence dash, and a trailing comment.
+YAML_KO_KEY = re.compile(r"^\s*(?:-\s+)?ko:(?:\s|$)", re.MULTILINE)
+YAML_VALUE_PREFIX = re.compile(r"^(?:\s*(?:-\s+)*)(?:[A-Za-z0-9_.-]+:(?=[ \t]|$))?[ \t]*")
 
 
 class LexiconError(Exception):
@@ -401,6 +409,72 @@ def extract_yaml(text: str) -> list[ProseLine]:
     return out
 
 
+def yaml_comment_span(line: str) -> tuple[int, int] | None:
+    """Span of a trailing ``# comment``, or None.
+
+    Quote state is tracked so a ``#`` inside a value is left alone - this
+    reviewer reads prose, and a source-file comment is out of scope either way.
+    """
+    quote = ""
+    for index, char in enumerate(line):
+        if quote:
+            if char == quote:
+                quote = ""
+        elif char in "\"'":
+            quote = char
+        elif char == "#" and (index == 0 or line[index - 1] in " \t"):
+            return (index, len(line))
+    return None
+
+
+def extract_yaml_all(text: str) -> list[ProseLine]:
+    """Return every authored value of a monolingual Korean YAML.
+
+    The ``yaml`` lane keys off ``ko:``; a file with no such key yields nothing
+    from it - a silent zero that prints exactly like a clean file. Here the
+    value is whatever survives blanking the key, the sequence dash and a
+    trailing comment, so every hit still cites the character the reader sees.
+    Block literals are emitted whole, as the ``ko:`` lane emits a ``ko: |`` body.
+    """
+    lines = text.splitlines()
+    out: list[ProseLine] = []
+    lineno = 0
+    paragraph = 0
+    while lineno < len(lines):
+        line = lines[lineno]
+        key_block = YAML_KEY_BLOCK.match(line)
+        if key_block:
+            key_column = len(key_block.group("indent"))
+            paragraph += 1
+            lineno += 1
+            while lineno < len(lines):
+                body = lines[lineno]
+                if body.strip() and len(body) - len(body.lstrip()) <= key_column:
+                    break
+                if not body.strip():
+                    paragraph += 1
+                else:
+                    out.append(ProseLine(lineno + 1, body, strip_markup(body), paragraph))
+                lineno += 1
+            continue
+        if not line.strip():
+            paragraph += 1
+            lineno += 1
+            continue
+        masked = line
+        comment = yaml_comment_span(masked)
+        if comment:
+            masked = _blank(masked, comment)
+        prefix = YAML_VALUE_PREFIX.match(masked)
+        if prefix and prefix.end():
+            masked = _blank(masked, prefix.span())
+        if masked.strip():
+            paragraph += 1
+            out.append(ProseLine(lineno + 1, masked, strip_markup(masked), paragraph))
+        lineno += 1
+    return out
+
+
 def extract_text(text: str) -> list[ProseLine]:
     out: list[ProseLine] = []
     block = 0
@@ -412,13 +486,26 @@ def extract_text(text: str) -> list[ProseLine]:
     return out
 
 
-EXTRACTORS = {"md": extract_markdown, "yaml": extract_yaml, "text": extract_text}
+EXTRACTORS = {
+    "md": extract_markdown,
+    "yaml": extract_yaml,
+    "yaml-all": extract_yaml_all,
+    "text": extract_text,
+}
 
 
-def detect_lane(path: Path) -> str:
+def detect_lane(path: Path, text: str | None = None) -> str:
+    """Pick the extractor from the extension, and for YAML from the file itself.
+
+    `text` is optional only so a caller holding nothing but a name still gets
+    the extension answer; pass it whenever the file has been read, or a
+    monolingual Korean YAML is handed to the `ko:` extractor and scans nothing.
+    """
     suffix = path.suffix.lower()
     if suffix in (".yml", ".yaml"):
-        return "yaml"
+        if text is None or YAML_KO_KEY.search(text) or not HANGUL_CHAR.search(text):
+            return "yaml"
+        return "yaml-all"
     if suffix in (".md", ".markdown"):
         return "md"
     return "text"
@@ -605,9 +692,17 @@ def korean_lines(lines: list[ProseLine]) -> list[ProseLine]:
 
 
 def scan_text(text: str, lane: str, patterns: list[Pattern], terms: list[Term]) -> dict:
+    """Scan one document and report HOW MUCH was scanned alongside what was found.
+
+    `scanned` and `korean_source` are the difference between "read it, it is
+    clean" and "read none of it" - two opposite answers that a findings list
+    alone renders identically, as an empty one.
+    """
     lines = korean_lines(EXTRACTORS[lane](text))
     return {
         "lane": lane,
+        "scanned": len(lines),
+        "korean_source": bool(HANGUL_CHAR.search(text)),
         "patterns": scan_patterns(lines, patterns),
         "terms": scan_terms(lines, terms),
         "case_variants": scan_case_variants(lines, terms),
@@ -617,7 +712,13 @@ def scan_text(text: str, lane: str, patterns: list[Pattern], terms: list[Term]) 
 def format_text(report: dict) -> str:
     out: list[str] = []
     for item in report["files"]:
-        out.append(f"== {item['path']} ({item['lane']})")
+        out.append(f"== {item['path']} ({item['lane']}, {item['scanned']} Korean lines)")
+        if item["korean_source"] and not item["scanned"]:
+            out.append(f"  !! nothing was scanned: this file holds Korean, but the `{item['lane']}`")
+            out.append("     extractor read none of it. An empty result here means the lane is")
+            out.append("     wrong, not that the prose is clean. Re-run with --lane yaml-all (a")
+            out.append("     Korean YAML with no `ko:` key) or --lane text.")
+            continue
         if not (item["patterns"] or item["terms"] or item["case_variants"]):
             out.append("  (no candidates)")
             continue
@@ -644,7 +745,9 @@ def format_text(report: dict) -> str:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("files", nargs="*", type=Path, help="files to scan")
-    parser.add_argument("--lane", choices=("auto", "md", "yaml", "text"), default="auto")
+    parser.add_argument(
+        "--lane", choices=("auto", "md", "yaml", "yaml-all", "text"), default="auto"
+    )
     parser.add_argument("--stdin", action="store_true", help="scan text from standard input")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
     parser.add_argument(
@@ -706,15 +809,23 @@ def main(argv: list[str] | None = None) -> int:
         if not path.is_file():
             print(f"scan.py: not a file: {path}", file=sys.stderr)
             return EXIT_USAGE
-        lane = detect_lane(path) if args.lane == "auto" else args.lane
         text = path.read_text(encoding="utf-8")
+        lane = detect_lane(path, text) if args.lane == "auto" else args.lane
         report["files"].append({"path": str(path), **scan_text(text, lane, patterns, terms)})
 
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
         print(format_text(report))
-    return EXIT_OK
+
+    unscanned = [f for f in report["files"] if f["korean_source"] and not f["scanned"]]
+    for item in unscanned:
+        print(
+            f"scan.py: nothing scanned in {item['path']}: the `{item['lane']}` lane read"
+            " no Korean from a file that holds some",
+            file=sys.stderr,
+        )
+    return EXIT_NOTHING_SCANNED if unscanned else EXIT_OK
 
 
 if __name__ == "__main__":

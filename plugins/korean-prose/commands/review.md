@@ -17,7 +17,7 @@ User invocation argument: `$ARGUMENTS`
 Neither lane is the default and neither is supplementary. Pick from what the target is.
 
 - **Lane A — Korean Markdown**: any `.md` whose body is predominantly Korean prose — a README, a docs page, a blog post draft, a design note.
-- **Lane B — bilingual YAML**: the `ko:` half of a YAML file whose strings are `{ ko, en }` pairs.
+- **Lane B — Korean YAML data**, decided from the file and never from a list of filenames: a `ko:` key means **bilingual** (the `ko:` half only); Hangul with no `ko:` key means **monolingual Korean** (every authored value, minus any block a script regenerates from upstream). The scanner splits on the same test, so the two cannot disagree about what a file is. A monolingual file runs to thousands of Korean lines — name the block being swept rather than sweeping the file.
 
 Out of scope in both lanes: the `en:` half, `*-en.md`, English `.md`, code blocks, inline code, URLs, paths, and source-file comments.
 
@@ -34,7 +34,7 @@ Out of scope in both lanes: the `en:` half, `*-en.md`, English `.md`, code block
 
 Ambiguous → ask in one line, default to **판정**. An unwanted audit is a wall of text; a 판정 the user wanted broad costs one follow-up.
 
-**empty resolves to BOTH lanes**: Korean `.md` **and** `ko:` lines in bilingual YAML that `git diff --name-only` (plus untracked) reports. Scoping empty to Markdown alone silently skips the surface many users edit most.
+**empty resolves to BOTH lanes**: Korean `.md` **and** Korean YAML (the `ko:` lines of a bilingual file, the values of a monolingual one) that `git diff --name-only` (plus untracked) reports. Scoping empty to Markdown alone silently skips the surface many users edit most.
 
 <br/>
 
@@ -47,7 +47,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/scan.py" --json <file> [<file> ...]
 ```
 
 - **판정 모드**: pipe the pasted text instead — `printf '%s\n' '<text>' | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/scan.py" --stdin --json`.
-- If it exits non-zero with a lexicon problem, stop and report it: a broken lexicon silently hides candidates.
+- **A non-zero exit means stop and report, and there are two reasons for one.** A broken lexicon (exit 1) silently hides candidates. **Exit 3 means nothing was scanned** — the file holds Korean and the lane read none of it, so an empty findings list is a lane fault, not a clean file. Never report a sweep as clean on a run that exited non-zero.
+- **Check the `N Korean lines` in each file's header before reading its findings.** The lane is picked from the extension, and for `.yml` / `.yaml` from the file itself: a `ko:` key means bilingual (the `ko:` half only), no `ko:` key means monolingual Korean (every authored value, lane `yaml-all`). `--lane md|yaml|yaml-all|text` overrides.
 - Put the JSON in the delegation prompt; the agent uses it instead of re-running.
 
 <br/>

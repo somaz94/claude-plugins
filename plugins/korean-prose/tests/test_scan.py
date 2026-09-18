@@ -327,6 +327,54 @@ class YamlExtractionTest(unittest.TestCase):
         self.assertIn("라벨", line.clean)
 
 
+class MonolingualYamlExtractionTest(unittest.TestCase):
+    """The `yaml-all` lane: a Korean YAML with no `ko:` key to key off."""
+
+    def values(self, text: str) -> dict[int, str]:
+        return {line.lineno: line.clean.strip() for line in scan.extract_yaml_all(text)}
+
+    def test_values_are_prose_and_the_scaffolding_is_not(self):
+        text = "\n".join([
+            "kinds:",
+            "  - key: broke",
+            '    label: "장애"',
+            "    desc: 실제로 깨졌던 것  # 주석은 산문이 아니다",
+            "    facts:",
+            '      - "첫 번째 사실"',
+            "      - 두 번째 사실",
+        ])
+        # `kinds:` and `facts:` carry no value; the key names, the dashes and the
+        # comment are gone. `broke` survives because filtering to Korean is
+        # `korean_lines`' job, one pass later, not the extractor's.
+        self.assertEqual(self.values(text), {
+            2: "broke",
+            3: '"장애"',
+            4: "실제로 깨졌던 것",
+            6: '"첫 번째 사실"',
+            7: "두 번째 사실",
+        })
+
+    def test_a_hash_inside_a_value_is_not_a_comment(self):
+        (line,) = scan.extract_yaml_all('  note: "채널 #general 로 알림"')
+        self.assertIn("#general", line.clean)
+
+    def test_a_value_keeps_its_column(self):
+        raw = '    - label: "값"'
+        (line,) = scan.extract_yaml_all(raw)
+        self.assertEqual(line.raw.index("값"), raw.index("값"))
+        self.assertEqual(line.raw[:raw.index("값")].strip(), '"')
+
+    def test_block_literals_are_emitted_whole(self):
+        text = "\n".join([
+            "body: |-",
+            "    첫 문단",
+            "",
+            "    둘째 문단",
+            "next: 1",
+        ])
+        self.assertEqual(self.values(text), {2: "첫 문단", 4: "둘째 문단", 5: "1"})
+
+
 class PatternPassTest(unittest.TestCase):
     def lexicon(self, *rows: str):
         with LexiconDir(patterns=list(rows)) as path:
@@ -575,6 +623,51 @@ class CliTest(unittest.TestCase):
     def test_stdin_lane_override(self):
         code, out, _ = run_main(["--stdin", "--json", "--lane", "yaml"], stdin='ko: "이것은 값"\n')
         self.assertEqual(json.loads(out)["files"][0]["lane"], "yaml")
+
+    def test_a_monolingual_korean_yaml_is_detected_and_scanned(self):
+        path = self.write("bank.yml", 'items:\n  - desc: "운영에 있어서 중요"\n')
+        code, out, _ = run_main(["--json", str(path)])
+        report = json.loads(out)["files"][0]
+        self.assertEqual((code, report["lane"], report["scanned"]), (scan.EXIT_OK, "yaml-all", 1))
+        self.assertIn("e-isseoseo", [p["id"] for p in report["patterns"]])
+
+    def test_a_bilingual_korean_yaml_keeps_the_ko_only_lane(self):
+        path = self.write("career.yml", 'x:\n  ko: "이것은 값이다"\n  en: "운영에 있어서"\n')
+        code, out, _ = run_main(["--json", str(path)])
+        report = json.loads(out)["files"][0]
+        self.assertEqual((report["lane"], report["scanned"]), ("yaml", 1))
+        self.assertNotIn("e-isseoseo", [p["id"] for p in report["patterns"]])
+
+    def test_a_korean_file_the_lane_cannot_read_is_not_reported_as_clean(self):
+        # The failure this whole report shape exists for: an empty findings list
+        # means "read it, it is clean" and "read none of it" alike.
+        path = self.write("bank.yml", 'items:\n  - desc: "운영에 있어서 중요"\n')
+        code, out, err = run_main(["--lane", "yaml", str(path)])
+        self.assertEqual(code, scan.EXIT_NOTHING_SCANNED)
+        self.assertIn("nothing was scanned", out)
+        self.assertNotIn("(no candidates)", out)
+        self.assertIn("nothing scanned in", err)
+
+    def test_a_file_with_no_korean_at_all_is_not_a_warning(self):
+        path = self.write("conf.yml", "title: Blog\nurl: https://example.com\n")
+        code, out, err = run_main([str(path)])
+        self.assertEqual(code, scan.EXIT_OK)
+        self.assertIn("(no candidates)", out)
+        self.assertEqual(err, "")
+
+    def test_the_report_states_how_much_was_scanned(self):
+        path = self.write("doc.md", "자연스러운 문장입니다.\nEnglish only line\n한 줄 더 있다\n")
+        _, out, _ = run_main(["--json", str(path)])
+        report = json.loads(out)["files"][0]
+        self.assertEqual((report["scanned"], report["korean_source"]), (2, True))
+        _, out, _ = run_main([str(path)])
+        self.assertIn("(md, 2 Korean lines)", out)
+
+    def test_detect_lane_reads_a_yaml_before_choosing(self):
+        self.assertEqual(scan.detect_lane(Path("a.yml"), 'x:\n  ko: "한국어"\n'), "yaml")
+        self.assertEqual(scan.detect_lane(Path("a.yml"), 'x:\n  desc: "한국어"\n'), "yaml-all")
+        self.assertEqual(scan.detect_lane(Path("a.yml"), "x:\n  desc: English\n"), "yaml")
+        self.assertEqual(scan.detect_lane(Path("a.yml")), "yaml")
 
     def test_detect_lane(self):
         self.assertEqual(
