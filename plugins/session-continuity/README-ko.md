@@ -30,7 +30,7 @@ claude plugin install session-continuity@somaz94
 
 ## 두 축
 
-| 스킬 | 언제 | 무엇을 만드는가 |
+| 커맨드 | 언제 | 무엇을 만드는가 |
 |---|---|---|
 | `/session-continuity:plan-update` | 의미 있는 작업 덩어리가 끝났을 때 | plan 파일을 제자리에서 갱신 — 진행 상태 전환, 결정 추가, 이력 보존 |
 | `/session-continuity:handoff` | 창이 차 갈 때, 또는 하루를 마칠 때 | 새 세션에 붙여 넣을 Markdown 블록 하나 |

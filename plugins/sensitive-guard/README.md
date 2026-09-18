@@ -45,7 +45,7 @@ One `name|regex` per line; blank lines and `#` comments ignored. An empty file i
 
 This is deliberate. One person's "public mirror" directory is another's ordinary checkout, so a guard that fires wherever it guesses it should is a guard that gets uninstalled. And your own markers have to live somewhere anyway, so opting in and configuring are the same act.
 
-A global fallback at `~/.claude/sensitive-patterns` applies to every scan you run by hand.
+Global patterns in `~/.claude/sensitive-patterns` are loaded alongside the repository's own file on every scan you run by hand.
 
 <br/>
 

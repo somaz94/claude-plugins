@@ -17,7 +17,7 @@ Run the bundled scanner over a repository and return a **safe-to-publish** / **h
 "${CLAUDE_PLUGIN_ROOT}/scripts/find-sensitive.sh" [DIR]            # one repo or directory
 "${CLAUDE_PLUGIN_ROOT}/scripts/find-sensitive.sh" -q [DIR]         # counts only
 "${CLAUDE_PLUGIN_ROOT}/scripts/find-sensitive.sh" --all [ROOT]     # every subdirectory of ROOT
-"${CLAUDE_PLUGIN_ROOT}/scripts/find-sensitive.sh" -p FILE [DIR]    # extra categories from FILE
+"${CLAUDE_PLUGIN_ROOT}/scripts/find-sensitive.sh" -p FILE [DIR]    # read ONLY FILE, not the default pattern files
 ```
 
 With no argument it scans the current working directory. `--all` skips repos whose basename contains `-private` and, when `gh` is available, repos whose GitHub origin is private — add `--no-remote-check` when offline.

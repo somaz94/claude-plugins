@@ -36,7 +36,7 @@ claude plugin install shell-portability@somaz94
 | `arr=(a b c); ${arr[0]}` | `a` | 빈 값 — zsh 배열은 1부터 |
 | 매칭 없는 `for x in v*/` | 문자열 `v*/` | 치명적 `no matches found` |
 | `for x in $LIST` | 공백으로 분리 | 분리 없이 통째로 하나 |
-| `echo -e "a\nb"` | `\n`을 해석 | `-e`를 그대로 출력 |
+| `echo "a\nb"` | `\n`을 그대로 출력 | `\n`을 해석 |
 | `declare -g` | 동작 | 없는 문법 — `typeset -g` |
 
 한 번 검토하면서 일반적인 품질 문제도 함께 짚습니다 — `set -euo pipefail` 누락, 테스트 문맥의 따옴표 없는 확장, 정리 trap 없는 `mktemp`, `$VAR`가 비어 있을 수 있는데 그대로 쓴 `rm -rf "$VAR"`, 그리고 `declare -A`와 `${var,,}`를 위험하게 만드는 macOS bash 3.2 대 bash 5 차이입니다.

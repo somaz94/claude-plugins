@@ -36,7 +36,7 @@ That gap is where the bugs live. On macOS the interactive shell is zsh while nea
 | `arr=(a b c); ${arr[0]}` | `a` | empty — zsh arrays are 1-indexed |
 | `for x in v*/` with no match | literal `v*/` | fatal `no matches found` |
 | `for x in $LIST` | splits on spaces | one whole string, no split |
-| `echo -e "a\nb"` | interprets `\n` | prints a literal `-e` |
+| `echo "a\nb"` | prints a literal `\n` | interprets `\n` |
 | `declare -g` | works | not a thing — `typeset -g` |
 
 It also flags the usual quality issues on the same pass — missing `set -euo pipefail`, unquoted expansions in test contexts, `mktemp` without a cleanup trap, `rm -rf "$VAR"` where `$VAR` may be empty, and the macOS bash 3.2 vs bash 5 split that makes `declare -A` and `${var,,}` unsafe.

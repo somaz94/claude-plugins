@@ -32,7 +32,7 @@ claude plugin install release-guards@somaz94
 
 | 훅 | 발동 시점 | 잡는 것 |
 |---|---|---|
-| `pre-release-action-guard` | `Bash` | `git tag` create·delete, `gh release` / `glab release` create·edit·delete·upload |
+| `pre-release-action-guard` | `Bash` | `git tag` create·delete, `gh release` create·edit·delete·upload, `glab release` create·update·delete·upload |
 | `pre-edit-release-automation-guard` | `Edit` · `Write` · `MultiEdit` | `cliff.toml`, `RELEASE.md`, `release.yml`, `.goreleaser.yaml`, `release-please-config.json` |
 
 두 번째가 보기보다 중요합니다. 릴리스 자동화 파일은 *생성물에 준하는* 성격이라, 저장소에 있는 `RELEASE.md`가 비어 있는 것이 정상입니다. 태그를 밀 때마다 파이프라인이 다시 쓰기 때문입니다. 사전 지식 없이 그 파일을 읽은 어시스턴트는 이걸 버그로 보고 고쳐 버리고, 그 결과 다음 릴리스가 무엇을 발행할지가 조용히 바뀝니다.

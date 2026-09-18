@@ -30,7 +30,7 @@ The fix is not a longer window. It is writing down the two things a fresh sessio
 
 ## The two halves
 
-| Skill | When | What it produces |
+| Command | When | What it produces |
 |---|---|---|
 | `/session-continuity:plan-update` | after a meaningful chunk of work lands | the plan file, updated in place — progress flipped, decisions appended, history preserved |
 | `/session-continuity:handoff` | when the window is filling, or the day ends | one Markdown block to paste into a fresh session |

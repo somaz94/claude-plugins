@@ -13,7 +13,8 @@
 #     find-sensitive.sh [DIR]            # defaults to CWD
 #     find-sensitive.sh -q [DIR]         # quiet: only show counts per category
 #     find-sensitive.sh -x "pat" [DIR]   # add one extra regex (repeatable)
-#     find-sensitive.sh -p FILE [DIR]    # read extra categories from FILE
+#     find-sensitive.sh -p FILE [DIR]    # read ONLY FILE, not the default
+#                                        # pattern files
 #     find-sensitive.sh --all [ROOT]     # scan every immediate subdir of ROOT
 #                                        # (default: CWD), skipping any whose
 #                                        # basename contains "-private", any

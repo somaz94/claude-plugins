@@ -32,7 +32,7 @@ A convention the model is trusted to remember is not a boundary. A hook is. Thes
 
 | Hook | Fires on | Catches |
 |---|---|---|
-| `pre-release-action-guard` | `Bash` | `git tag` create or delete, `gh release` / `glab release` create, edit, delete, upload |
+| `pre-release-action-guard` | `Bash` | `git tag` create or delete, `gh release` create, edit, delete, upload, `glab release` create, update, delete, upload |
 | `pre-edit-release-automation-guard` | `Edit` · `Write` · `MultiEdit` | `cliff.toml`, `RELEASE.md`, `release.yml`, `.goreleaser.yaml`, `release-please-config.json` |
 
 The second one matters more than it looks. Release automation is *generated-adjacent*: a `RELEASE.md` that is empty in the repo is normal, because the pipeline rewrites it on every tag push. An assistant reading that file cold sees a bug and fixes it — and silently changes what the next release publishes.
