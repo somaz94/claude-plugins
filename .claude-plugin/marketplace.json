@@ -119,7 +119,7 @@
     {
       "name": "sensitive-guard",
       "source": "./plugins/sensitive-guard",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "description": "Stops a secret at the moment of commit — a last-mile gate that scans the lines a commit adds and blocks it, plus an on-demand scan of a whole repository before you publish.",
       "category": "productivity",
       "license": "MIT",
@@ -137,7 +137,7 @@
     {
       "name": "korean-prose",
       "source": "./plugins/korean-prose",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "description": "Reviews Korean prose for the awkwardness a spell-checker cannot see — literal back-translation, Japanese-era nominalization, generated-text tells, and the findings that are only visible when a line is read against its neighbours.",
       "category": "productivity",
       "license": "MIT",
