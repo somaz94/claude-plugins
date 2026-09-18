@@ -323,6 +323,15 @@ FP_FILTERS=(
   #    a `password:` key holding a real hyphenated passphrase, which no other category catches.
   # OR value is an obvious placeholder (your-xxx, <...>, REPLACE_ME, xxx...)
   'generic_secret_assignment|[:=]\s*["'"'"']?[A-Z][A-Z0-9_]{2,}[,)\s"'"'"']*$|[:=]\s*[a-z_][a-z0-9_]*[,)\s]*$|(secret|secretName|secretRef|secretKeyRef)\s*[:=]\s*["'"'"']?[a-z0-9]([a-z0-9.-]*[a-z0-9])?["'"'"']?[,)\s]*$|[:=]\s*["'"'"']?(your[-_]|YOUR[-_]|<[A-Z_]+>|REPLACE|example|PLACEHOLDER|xxx)'
+  # A home path whose user segment is a documentation placeholder names nobody.
+  # `/home/you/.ssh/id_rsa` is how half the world writes an example command, so
+  # flagging it makes this guard fire on ordinary docs in a consumer's repo —
+  # the same cry-wolf argument the rule itself already makes for bare `~/.claude`.
+  # `user` and `me` are deliberately NOT here: both are real account names on
+  # real machines, and suppressing them would lose a genuine leak. Note the
+  # filter drops the whole LINE, as every row here does, so a line carrying a
+  # placeholder AND a real path is suppressed with it — keep them on separate lines.
+  'leaked_home_path|/(Users|home)/(you|youruser|your[-_]user|username|USERNAME|YOUR[-_]USER|example|EXAMPLE)/'
 )
 
 get_fp_filter() {

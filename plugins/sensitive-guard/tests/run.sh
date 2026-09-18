@@ -312,3 +312,40 @@ if printf '%s' "$out" | grep -qF "$SECRET_KEY"; then
 fi
 echo "PASS: 0 when clean, 1 with the category named and the value withheld"
 )
+
+step 'a home path is judged by whose name is in it'
+(
+set -euo pipefail
+# The rule shipped untested, which is how a detection rule dies quietly: a
+# later false-positive filter can widen until it suppresses everything and no
+# test notices. Both directions are pinned here — the filter may grow, but not
+# past a real account name.
+tree="$(mktemp -d)"
+
+# Split for the reason the fixtures at the top of this file are split.
+REAL_HOME="/home/""somebody/.ssh/id_rsa"
+printf 'run: scp %s user@box:\n' "$REAL_HOME" > "$tree/real.md"
+set +e
+out="$("$SCANNER" -q "$tree" 2>&1)"
+rc=$?
+set -e
+[ "$rc" = 1 ] || { echo "FAIL: a real username in a home path should exit 1, got $rc"; exit 1; }
+case "$out" in
+  *leaked_home_path*) : ;;
+  *) echo "FAIL: leaked_home_path did not fire on a real username"; printf '%s\n' "$out"; exit 1 ;;
+esac
+
+# A documentation placeholder names nobody, so the same shape must NOT fire.
+rm -f "$tree/real.md"
+{
+  printf 'run: scp /home/you/.ssh/id_rsa user@box:\n'
+  printf 'or:  cat /Users/username/.aws/credentials\n'
+  printf 'or:  ls /home/YOUR_USER/.kube/config\n'
+} > "$tree/docs.md"
+set +e
+"$SCANNER" -q "$tree" >/dev/null 2>&1
+rc=$?
+set -e
+[ "$rc" = 0 ] || { echo "FAIL: placeholder home paths should not fire, got $rc"; exit 1; }
+echo "PASS: fires on a real username, silent on a documentation placeholder"
+)
