@@ -42,9 +42,9 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/census.py" portability --evidence 3
 | `repo` | 각 repo 자신의 이름 — 그 repo 안에 있는 항목에 **한해서만** 매칭 |
 | `configured` | config의 `portability.markers`에 넣은 모든 것 |
 
-자체 호스팅 forge에서 owner는 그룹 이름일 뿐이고 흔히 일반 단어 (`server`, `infra`) 이므로, 대신 호스트를 쓴다.
+자체 호스팅 forge에서 owner는 그룹 이름일 뿐이고 흔히 일반 단어 (`server`, `infra`)이므로, 대신 호스트를 쓴다.
 
-`repo` 카테고리가 전역이 아니라 범위 한정인 것도 같은 이유다. repo 범위 agent는 보통 자기 repo를 상대 경로로 지칭한다 — `Reviews changes inside acme-platform/storage/` — 여기에는 머신 전역 식별자가 하나도 없어서, 가장 이식성 낮은 항목 중 하나이면서도 완벽히 portable 하게 채점된다. 전역으로 적용하면 `docs` 나 `tools` 같은 repo 이름이 아무 산문에나 걸리지만, 자기 repo로 한정하면 매칭은 말 그대로의 의미를 갖는다.
+`repo` 카테고리가 전역이 아니라 범위 한정인 것도 같은 이유다. repo 범위 agent는 보통 자기 repo를 상대 경로로 지칭한다 — `Reviews changes inside acme-platform/storage/` — 여기에는 머신 전역 식별자가 하나도 없어서, 가장 이식성 낮은 항목 중 하나이면서도 완벽히 portable 하게 채점된다. 전역으로 적용하면 `docs`나 `tools` 같은 repo 이름이 아무 산문에나 걸리지만, 자기 repo로 한정하면 매칭은 말 그대로의 의미를 갖는다.
 
 **알려진 사각지대: 이름 붙은 인프라.** 마커는 remote와 루트에서 도출되므로, 클러스터 · 환경 · 네임스페이스 · 프로젝트 코드명은 어디에서도 마커로 들어오지 않는다. 담당 범위가 repo가 아니라 `prod-eu-1`에 묶인 항목도 여전히 🟢 로 나온다. 🟢 항목의 description이 환경 이름을 담고 있으면 분명히 말하고, 그 문자열을 `portability.markers`에 추가하라고 알려준다 — 그 키가 존재하는 이유다. 🟢 목록을 읽지 않은 채 안전하다고 취급하지 않는다.
 
@@ -60,7 +60,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/census.py" portability --evidence 3
 |---|---|---|
 | 🟢 `PORTABLE` | 매칭 없음 | 그대로 승격 |
 | 🟡 `PARAMETERIZABLE` | 코드 스팬이나 코드 펜스 안에서만 매칭 | 결합이 리터럴이다 — config 값이나 환경 변수로 바꾼다 |
-| 🔴 `PERSONAL` | frontmatter 나 산문에 매칭이 하나라도 있음 | 항목의 목적 자체가 이 환경을 전제한다. 라우팅이나 범위는 설정값 교체로는 안 되고 **재작성** 해야 한다 |
+| 🔴 `PERSONAL` | frontmatter나 산문에 매칭이 하나라도 있음 | 항목의 목적 자체가 이 환경을 전제한다. 라우팅이나 범위는 설정값 교체로는 안 되고 **재작성** 해야 한다 |
 
 frontmatter 케이스가 가장 중요하다: 특정 repo를 지목하는 `description`이 곧 Claude가 라우팅하는 근거이므로, 그것을 바꾸면 항목이 언제 발동하는지가 바뀐다. 이는 설정이 아니라 재작성이다.
 
@@ -82,7 +82,7 @@ frontmatter 케이스가 가장 중요하다: 특정 repo를 지목하는 `descr
 
 ## secret 스캐너가 아니다
 
-이 skill은 "이게 다른 사람에게도 동작할까?" 에 답하지 "이게 뭔가 흘릴까?" 에 답하지 않는다. 둘은 겹치지만 어느 쪽도 다른 쪽을 포함하지 않는다:
+이 skill은 "이게 다른 사람에게도 동작할까?"에 답하지 "이게 뭔가 흘릴까?"에 답하지 않는다. 둘은 겹치지만 어느 쪽도 다른 쪽을 포함하지 않는다:
 
 - repo 배치 이름은 이식성이 없지만 무해하다.
 - 비밀번호는 유출이지만 완벽하게 이식 가능하다.

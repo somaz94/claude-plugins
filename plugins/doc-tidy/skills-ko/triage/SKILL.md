@@ -1,7 +1,7 @@
 ---
 name: triage
-description: '저장소의 문서마다 남겨야 하는지, 어디에 둬야 하는지 판정하고, 승인한 묶음만 실행한다. 끝난 기록을 보관하고, 커밋된 세션 부산물을 지우고, 중복을 병합하고, 언어가 잘못됐거나 깨진 링크를 고치고, 이동이 깨뜨리는 링크를 모두 다시 쓴다. 번들된 doctidy.py가 측정하고, doc-tidy-triager 에이전트가 문서마다 근거와 함께 판정하며, 적용한 묶음마다 새로 깨진 링크가 없는지 재스캔한다. "문서 정리해줘", "이 문서들 중 뭘 지워도 돼?", "이 문서 어디 둬야 해?", "끝난 마이그레이션 문서 보관해줘", "문서가 어지러운 레포 순위 매겨줘" 라고 할 때 사용. 커밋하지 않는다.'
-argument-hint: '[path | sweep <root>… | report | empty=현재 저장소]'
+description: 'repo의 문서마다 남겨야 하는지, 어디에 둬야 하는지 판정하고, 승인한 묶음만 실행한다. 끝난 기록을 보관하고, 커밋된 세션 부산물을 지우고, 중복을 병합하고, 언어가 잘못됐거나 깨진 링크를 고치고, 이동이 깨뜨리는 링크를 모두 다시 쓴다. 번들된 doctidy.py가 측정하고, doc-tidy-triager 에이전트가 문서마다 근거와 함께 판정하며, 적용한 묶음마다 새로 깨진 링크가 없는지 재스캔한다. "문서 정리해줘", "이 문서들 중 뭘 지워도 돼?", "이 문서 어디 둬야 해?", "끝난 마이그레이션 문서 보관해줘", "문서가 어지러운 저장소 순위 매겨줘" 라고 할 때 사용. 커밋하지 않는다.'
+argument-hint: '[path | sweep <root>… | report | empty=현재 repo]'
 allowed-tools: Read, Grep, Glob, Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/doctidy.py scan:*), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/doctidy.py sweep:*), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/doctidy.py relink:*), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/doctidy.py --check-rules:*)
 ---
 
@@ -41,25 +41,25 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/doctidy.py <subcommand> …
 
 | 인자 | 실행 대상 |
 |---|---|
-| 비어 있음 | 작업 디렉터리가 속한 저장소 |
-| `<path>` | 그 경로가 속한 저장소. finding은 그 경로로 좁히고, 링크 그래프는 저장소 전체로 유지한다 |
-| `sweep <root>…` | 루트 아래 모든 저장소를 정리가 얼마나 필요한지로 순위를 매긴다. 스크립트만 돌리고 에이전트·적용은 없다. 포크 클론(`upstream` remote)은 건너뛴다 |
+| 비어 있음 | 작업 디렉터리가 속한 repo |
+| `<path>` | 그 경로가 속한 repo. finding은 그 경로로 좁히고, 링크 그래프는 repo 전체로 유지한다 |
+| `sweep <root>…` | 루트 아래 모든 repo를 정리가 얼마나 필요한지로 순위를 매긴다. 스크립트만 돌리고 에이전트·적용은 없다. 포크 클론(`upstream` remote)은 건너뛴다 |
 | `report` (위와 조합) | finding과 판정까지만 하고, 적용은 제안하지 않는다 |
 
 <br/>
 
 ## Step 0 — 사전 점검 (읽기 전용)
 
-1. **포크 클론.** `upstream` remote가 있는 저장소는 다른 사람의 프로젝트다. 그렇게 말하고 멈춘다.
+1. **포크 클론.** `upstream` remote가 있는 repo는 다른 사람의 프로젝트다. 그렇게 말하고 멈춘다.
 2. **index 상태.** `git status --porcelain`을 돌린다. 이미 스테이징된 것이 있으면 지금 알린다.
    `apply`는 자기 rename을 스테이징된 작업과 섞지 않으므로, 먼저 커밋할지 언스테이지할지 정한다.
-3. **저장소 문서 게이트.** 이름에 docs 나 readme와 함께 check, sync, audit, lint 중 하나가 들어간
-   Makefile 타깃, `package.json` 스크립트, CI 잡을 찾는다. 돌릴지는 **run 당 한 번** 묻는다. 첫
+3. **repo 문서 게이트.** 이름에 docs나 readme와 함께 check, sync, audit, lint 중 하나가 들어간
+   Makefile 타깃, `package.json` 스크립트, CI 잡을 찾는다. 돌릴지는 **run당 한 번** 묻는다. 첫
    묶음 전에 baseline으로 돌리고, 단계가 끝날 때마다 다시 돌린다. baseline에서 이미 실패하던
    게이트는 보고만 하고 이번 작업 탓으로 돌리지 않는다.
 4. **run 디렉터리.** 세션 scratchpad가 있으면 그것을 쓰고, 없으면
    `${CLAUDE_PLUGIN_DATA}/runs/<repo-name>-<YYYYmmdd-HHMMSS>`를 쓴다.
-5. **이전 보관 위치 결정.** `${CLAUDE_PLUGIN_DATA}/archive-choices.json`을 읽는다. 저장소 루트를
+5. **이전 보관 위치 결정.** `${CLAUDE_PLUGIN_DATA}/archive-choices.json`을 읽는다. repo 루트를
    `{"dir": "<path>" | null, "decided": "YYYY-MM-DD"}`에 대응시킨 파일이다. 저장된 선택은
    `--archive-dir`로 넘기고 에이전트에게도 알린다.
 
@@ -72,9 +72,9 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/doctidy.py scan <repo> --out <run>
 ```
 
 - 텍스트 출력은 보여줄 요약이다.
-- `<run>/scan.json`은 이후 모든 검증의 baseline 이다.
-- `<run>/batch-NN.json` 에는 단위가 최대 25개씩 담기며 에이전트에게 넘긴다.
-- 저장소가 문서 하나의 크기 한도를 직접 정해 두었으면 `--split-kb N`을 넘긴다(기본값 30).
+- `<run>/scan.json`은 이후 모든 검증의 baseline이다.
+- `<run>/batch-NN.json`에는 단위가 최대 25개씩 담기며 에이전트에게 넘긴다.
+- repo가 문서 하나의 크기 한도를 직접 정해 두었으면 `--split-kb N`을 넘긴다(기본값 30).
 
 `sweep` 이면:
 
@@ -82,7 +82,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/doctidy.py scan <repo> --out <run>
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/doctidy.py sweep <root>… --top 20
 ```
 
-순위를 보여주고 `/doc-tidy:triage <1위 저장소>`를 제안한 뒤 멈춘다. 순위에서 늘 빼고 싶은 디렉터리
+순위를 보여주고 `/doc-tidy:triage <1위 repo>`를 제안한 뒤 멈춘다. 순위에서 늘 빼고 싶은 디렉터리
 이름은 `--exclude GLOB`로 넘긴다.
 
 그다음:
@@ -97,7 +97,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/doctidy.py sweep <root>… --top 20
 배치 파일마다 `doc-tidy-triager` 에이전트를 한 번씩 부르고, 동시에는 최대 3개까지 돌린다. 각
 프롬프트에 담는 것:
 - 레인(`repo`)
-- 저장소 루트와 run 디렉터리
+- repo 루트와 run 디렉터리
 - 배치 파일 경로
 - Step 0의 보관 위치 결정, 없으면 "아직 없음"
 
@@ -123,8 +123,8 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/doctidy.py sweep <root>… --top 20
    - 문서 안의 낡은 주장 → 내용 검토
    - 너무 큰 문서 → 분할
    - 빠진 번역 반쪽 → 그 언어를 쓰는 사람
-4. **ASK 부터 해결한다.** 가능한 한 적은 질문으로 모아서 묻는다.
-   - 저장소당 보관 위치 질문 하나. 답은 `${CLAUDE_PLUGIN_DATA}/archive-choices.json`에 저장해 다음
+4. **ASK부터 해결한다.** 가능한 한 적은 질문으로 모아서 묻는다.
+   - repo당 보관 위치 질문 하나. 답은 `${CLAUDE_PLUGIN_DATA}/archive-choices.json`에 저장해 다음
      run에서 다시 묻지 않게 한다.
    - 남은 ASK 단위마다 질문 하나.
 
@@ -149,7 +149,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/doctidy.py sweep <root>… --top 20
 | **T2 MOVE / ARCHIVE** | 단위 전체 | 20단위 | `relink … --from SRC --to DST` 또는 `--archive SRC [--archive-dir DIR]`에 `--save <run>/plan-NN.json`을 붙이고, `apply --plan <run>/plan-NN.json` |
 | **T3 MERGE** | 내용 옮긴 뒤 원본 정리 | 3건 | 전·후를 **전체** 보여준다. 나열된 절을 Edit로 옮기고, 옮긴 제목이 모두 들어갔는지 `grep`으로 확인한다. 그다음에만 `relink --merge SRC:DST --save …`와 `apply`. |
 | **T4 DELETE (추적)** | 단위 전체 | 10단위 | `relink --delete SRC --save …`. `breaks` 항목마다 Edit로 링크를 텍스트로 풀거나 줄을 지운 뒤 `apply` |
-| **T5 DELETE (미추적)** | 파일 하나 | 1파일 | 앞 20줄, 크기, mtime, "git에 없어 되돌릴 수 없음" 을 보여준다. 승인하면 `${CLAUDE_PLUGIN_DATA}/trash/<YYYYmmdd-HHMMSS>/`로 옮긴다. `rm`은 절대 쓰지 않는다. |
+| **T5 DELETE (미추적)** | 파일 하나 | 1파일 | 앞 20줄, 크기, mtime, "git에 없어 되돌릴 수 없음"을 보여준다. 승인하면 `${CLAUDE_PLUGIN_DATA}/trash/<YYYYmmdd-HHMMSS>/`로 옮긴다. `rm`은 절대 쓰지 않는다. |
 
 **`apply` 전에 `relink` 결과를 읽는 법:**
 - `refusals`는 진행을 막는 항목이다. 원인을 고치고 다시 계산한다. `refusals`가 하나라도 있는 plan은 `apply`
@@ -194,8 +194,8 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/doctidy.py scan <repo> --baseline <run>/sc
 - **번역 짝은 한 단위다.** 반쪽만 옮기거나 보관하거나 지우지 않는다.
 - **미추적 파일**은 `rm`으로 지우지 않는다. 승인 하나에 하나씩 trash 디렉터리로 보낸다.
 - **release 자동화는 범위 밖이다:** release 워크플로, 변경 이력 생성기 설정, 생성되는 릴리스 노트.
-- **저장소 문서에 인벤토리·개수·파일 목록을 쓰지 않는다.** 보고는 run 디렉터리와 대화에만 남긴다.
-- **저장소 자체 규칙이 이긴다.** `CLAUDE.md` 나 `AGENTS.md`가 정한 배치는 잡동사니가 아니다.
+- **repo 문서에 인벤토리·개수·파일 목록을 쓰지 않는다.** 보고는 run 디렉터리와 대화에만 남긴다.
+- **repo 자체 규칙이 이긴다.** `CLAUDE.md`나 `AGENTS.md`가 정한 배치는 잡동사니가 아니다.
 
 <br/>
 

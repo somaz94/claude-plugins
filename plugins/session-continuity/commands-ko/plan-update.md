@@ -29,12 +29,12 @@ allowed-tools: Read, Grep, Glob, Bash
 - 진행 중인 plan의 phase / 하위 작업이 끝났을 때.
 - blocker가 해소됐을 때.
 - plan 도중 범위가 바뀌었을 때 (새 제약, 결정 번복, 예상 못 한 엣지 케이스).
-- 사용자가 "plan 업데이트해줘" / "plan에 반영해줘" 라고 할 때.
+- 사용자가 "plan 업데이트해줘" / "plan에 반영해줘"라고 할 때.
 
 쓰지 않는 경우:
 
 - 작업이 plan 파일과 엮여 있지 않을 때 — memory 기록을 하거나 그냥 계속한다.
-- plan이 끝났을 때 — 새 세션이 이어받아야 한다면 대신 `agents/session-handoff-prompter.md`를 (`/handoff` 로) 쓴다.
+- plan이 끝났을 때 — 새 세션이 이어받아야 한다면 대신 `agents/session-handoff-prompter.md`를 (`/handoff`로) 쓴다.
 - plan을 새로 만들 때 — 그것은 이 커맨드가 아니라 plan-mode의 몫이다.
 
 <br/>
@@ -51,7 +51,7 @@ agent는 plan을 제자리에서 수정한다 — 보통 다음과 같다:
 
 - Progress 행 상태를 뒤집고 (⏳ Pending → 🟡 In progress → ✅ Done) 날짜/메모를 붙인다.
 - "What changed" 섹션에 오늘 날짜 + 사용자 요약을 덧붙인다.
-- 자명하지 않은 결정이 내려졌으면 "Lessons / Conventions to preserve" 에 덧붙인다.
+- 자명하지 않은 결정이 내려졌으면 "Lessons / Conventions to preserve"에 덧붙인다.
 - 다음 단계가 바뀌었으면 "next session prompt" 섹션을 갱신한다.
 
 <br/>

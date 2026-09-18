@@ -14,7 +14,7 @@ allowed-tools: Read, Grep, Glob, Bash
 
 사용자가 새 대화창에 붙여넣으면 context reset 이후에도 복잡한 multi-step 작업을 깔끔히 이어갈 수 있는 단일 Markdown 코드 블록을 만든다.
 
-**이 세션에서 인라인으로 작성한다 — sub-agent에 위임하지 않는다.** handoff의 주 입력은 **이번 대화** 인데 sub-agent는 그것을 볼 수 없다. 위임하면 내용이 빈약해지고, 블록이 **두 번** 렌더링된다 (agent의 리포트, 그리고 호출자의 재출력). 이 플러그인에 함께 실리는 `session-handoff-prompter` agent (`agents/session-handoff-prompter.md`)는 따라야 할 스펙으로 남으며, 이 command 밖의 proactive handoff 에는 여전히 직접 호출할 수 있다.
+**이 세션에서 인라인으로 작성한다 — sub-agent에 위임하지 않는다.** handoff의 주 입력은 **이번 대화** 인데 sub-agent는 그것을 볼 수 없다. 위임하면 내용이 빈약해지고, 블록이 **두 번** 렌더링된다 (agent의 리포트, 그리고 호출자의 재출력). 이 플러그인에 함께 실리는 `session-handoff-prompter` agent (`agents/session-handoff-prompter.md`)는 따라야 할 스펙으로 남으며, 이 command 밖의 proactive handoff에는 여전히 직접 호출할 수 있다.
 
 사용자 호출 인자: `$ARGUMENTS`
 
@@ -53,7 +53,7 @@ allowed-tools: Read, Grep, Glob, Bash
 
 ## Step 2 — 출력 (실행 없음)
 
-1줄 소개를 찍고, 이어서 **정확히 하나의** 코드 블록을 낸다. 뒤에 덧붙이는 설명을 달지 않고, 어떤 형태로든 블록을 두 번째로 렌더링하지 않는다 — 재진술도, 내용 요약도, "다시 한 번" 도 하지 않는다.
+1줄 소개를 찍고, 이어서 **정확히 하나의** 코드 블록을 낸다. 뒤에 덧붙이는 설명을 달지 않고, 어떤 형태로든 블록을 두 번째로 렌더링하지 않는다 — 재진술도, 내용 요약도, "다시 한 번"도 하지 않는다.
 
 새 세션에 자동으로 붙여넣지 않는다 — 사용자가 직접 새 대화창으로 복사한다.
 
@@ -62,8 +62,8 @@ allowed-tools: Read, Grep, Glob, Bash
 ## 하드 룰
 
 - 읽기 전용 — plan 파일을 수정하지 않고 (`plan-progress-updater`의 몫), 새 plan 파일을 만들지 않으며 (plan-mode의 몫), 대기 중인 작업을 실행하지 않고, `git commit` / `git push` 등 상태를 바꾸는 조작을 하지 않는다.
-- plan이 있으면 Progress 표 + What changed 섹션에서, 없으면 현재 `git` 상태 + 이번 대화에서 "즉시 다음 액션" 을 추론한다.
-- plan 파일을 지정했는데 없거나 읽을 수 없으면, handoff를 지어내지 말고 "plan file not found at <path>" 라고 분명히 밝히며 중단한다.
+- plan이 있으면 Progress 표 + What changed 섹션에서, 없으면 현재 `git` 상태 + 이번 대화에서 "즉시 다음 액션"을 추론한다.
+- plan 파일을 지정했는데 없거나 읽을 수 없으면, handoff를 지어내지 말고 "plan file not found at <path>"라고 분명히 밝히며 중단한다.
 - 출력은 **새 세션에 붙여넣기** 위한 것이다 — 자체완결적으로 유지한다 (대화 내 참조, 예컨대 "앞서 얘기한 대로" 같은 표현 금지).
 
 <br/>
@@ -71,5 +71,5 @@ allowed-tools: Read, Grep, Glob, Bash
 ## 참조
 
 - EN 페어: `commands/handoff.md`
-- authoring 스펙: `agents/session-handoff-prompter.md` — 본 command가 따르는 규칙. 이 command 밖의 proactive handoff 에는 sub-agent로 직접 호출할 수 있다.
+- authoring 스펙: `agents/session-handoff-prompter.md` — 본 command가 따르는 규칙. 이 command 밖의 proactive handoff에는 sub-agent로 직접 호출할 수 있다.
 - 동반: `agents/plan-progress-updater.md` (제자리 plan 갱신용이며 handoff 생성용이 아님) — `/plan-update`로 호출

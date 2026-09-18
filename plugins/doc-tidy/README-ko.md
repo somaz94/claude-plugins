@@ -102,7 +102,7 @@ Claude Code는 시작 시 정리 과정에서 `cleanupPeriodDays`(기본 30일)�
 /doc-tidy:plans
 ```
 
-곧 사라질 plan, 이미 사라진 plan을 가리키는 모든 durable 참조, 그리고 지정한 워크스페이스 루트에 흩어진 Markdown을 나열합니다. Claude 설정을 git으로 관리한다면 `--recover-from`이 사라진 plan 마다 그것을 지운 커밋을 찾아 주므로, 참조를 추측하지 않고 복원할 수 있습니다. 만료되기 전에 plan의 durable 부분을 밖으로 복사할 뿐, plan을 살려 두려고 편집하지는 않습니다.
+곧 사라질 plan, 이미 사라진 plan을 가리키는 모든 durable 참조, 그리고 지정한 워크스페이스 루트에 흩어진 Markdown을 나열합니다. Claude 설정을 git으로 관리한다면 `--recover-from`이 사라진 plan마다 그것을 지운 커밋을 찾아 주므로, 참조를 추측하지 않고 복원할 수 있습니다. 만료되기 전에 plan의 durable 부분을 밖으로 복사할 뿐, plan을 살려 두려고 편집하지는 않습니다.
 
 <br/>
 

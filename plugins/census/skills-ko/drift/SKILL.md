@@ -57,7 +57,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/census.py" drift --limit 15
 
 **1. 🔴 부터 시작하고, 무엇이 깨지는지 말한다.** shadowing과 description 누락은 구체적 결과가 있다 — 건수가 아니라 동작으로 지목한다.
 
-**2. 🟡 는 파일이 아니라 근본 원인으로 묶는다.** 한 디렉터리의 `pair-structure` finding 스무 개는 이야기 하나 ("이 디렉터리의 번역 스타일이 일관되지 않다") 이지 스무 개가 아니다. 어떤 스타일이 지배적이고 어떤 파일이 거기서 벗어나는지 말한다.
+**2. 🟡 는 파일이 아니라 근본 원인으로 묶는다.** 한 디렉터리의 `pair-structure` finding 스무 개는 이야기 하나 ("이 디렉터리의 번역 스타일이 일관되지 않다")이지 스무 개가 아니다. 어떤 스타일이 지배적이고 어떤 파일이 거기서 벗어나는지 말한다.
 
 **3. 🟢 `mirror-consistent`는 확인 신호로 다룬다.** 동일한 중복은 미러링이 잘 되고 있다는 뜻이다. 문제로 제시하거나 중복 제거를 제안하지 않는다 — 의도적으로 미러링한 repo 페어에서는 그것을 합치는 쪽이 버그다.
 
@@ -71,5 +71,5 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/census.py" drift --limit 15
 - finding을 해소하려고 파일을 수정 · 동기화 · 복사 · 삭제하지 않고, 이 skill의 일부로 그렇게 하겠다고 제안하지도 않는다.
 - 스캔 대상 트리에 절대 쓰지 않는다.
 - `mirror-consistent` 항목의 중복 제거를 권하지 않는다 — 미러 페어 간 중복은 의도된 것이다.
-- 여기서 공유 가능성을 판정하지 않는다 — 그것은 `/census:portability` 다.
-- 여기서 context 비용을 조사하거나 순위 매기지 않는다 — 그것은 `/census:catalog` 다.
+- 여기서 공유 가능성을 판정하지 않는다 — 그것은 `/census:portability`다.
+- 여기서 context 비용을 조사하거나 순위 매기지 않는다 — 그것은 `/census:catalog`다.
