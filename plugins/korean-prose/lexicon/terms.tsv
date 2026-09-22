@@ -54,3 +54,5 @@ Load Balancer	로드밸런서|로드 밸런서	concept	`AWS Load Balancer Contro
 영향 범위	blast radius|blast-radius	concept	keep English at most once, as a first-mention gloss
 작은따옴표	단일따옴표|홑따옴표	concept	
 cutover	컷오버	keep	kept as an English label; do not translate
+불리언	부울|불린	concept	Boolean; keep one transcription per document
+컨텍스트 관리자	컨텍스트 매니저	concept	context manager; keep one form per document
