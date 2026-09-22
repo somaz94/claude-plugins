@@ -2,10 +2,7 @@ name: Generate Contributors
 
 on:
   workflow_dispatch:
-  # Was chained behind "Generate changelog", which this repo retired: a
-  # marketplace releases per plugin, so a single repo-wide changelog described
-  # releases that do not exist. Pointing straight at "Create release" keeps the
-  # original cadence — contributors refresh after a release lands.
+  # Refresh contributors after each release lands.
   workflow_run:
     workflows: ["Create release"]
     types:

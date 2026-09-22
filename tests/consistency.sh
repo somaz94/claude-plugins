@@ -147,9 +147,6 @@ step 'Every plugin hook resolves to an executable script'
 python3 - <<'PY'
 import json, os, pathlib, sys
 
-# Built at runtime, never written literally: a doubled brace in this
-# file is read by GitHub Actions as an expression before the step ever
-# runs, and an unknown one makes the whole workflow invalid.
 PLUGIN_ROOT = "${" + "CLAUDE_PLUGIN_ROOT}"
 
 failures = []

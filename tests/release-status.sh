@@ -1,15 +1,8 @@
 #!/usr/bin/env bash
-# Which plugins ship a version that was never tagged.
-#
-# The version users receive is the `version` in marketplace.json, so a bump that
-# lands on main is already published — the tag only carries the history. That is
-# why forgetting it is silent, and it stays silent until the NEXT release, whose
-# notes then cover both ranges at once because git-cliff starts from the last
-# tag of that plugin.
-#
-# Deliberately never fails. The bump commit legitimately reaches main before the
-# tag exists, so a non-zero exit here would fail the normal workflow at the one
-# moment it is correct. This reports; the decision stays yours.
+# Which plugins ship a version that was never tagged. marketplace.json is what
+# users receive, so a missed tag is silent until the next release's notes swallow
+# both ranges (git-cliff starts from that plugin's last tag).
+# Never fails: the bump commit legitimately reaches main before its tag.
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]:-$0}")/lib.sh"
 

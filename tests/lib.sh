@@ -1,20 +1,9 @@
 # shellcheck shell=bash
-# Shared helpers for the repo's test scripts. Sourced, never executed — hence
-# the directive above instead of a shebang, which would be a lie about how this
-# file is used and would still leave shellcheck guessing.
-#
-# The bodies of these tests are the same text CI runs. What lives here is only
-# what a workflow gets for free and a shell does not: a known working directory
-# and a legible heading between steps.
+# Sourced by every test script (hence the directive, not a shebang). Holds only
+# what a workflow gets for free: a fixed working directory and step headings.
 
-# Resolved from this file rather than from the caller's cwd, so a suite behaves
-# the same whether it is run from the repo root, from a plugin directory, or by
-# an editor. `${BASH_SOURCE[0]:-$0}` covers being sourced by zsh, where
-# BASH_SOURCE does not exist.
-#
-# A failed `cd` must abort rather than run the whole suite against whatever
-# directory the caller happened to be in — every path below this line is
-# relative to the repo root.
+# Resolved from this file, not the caller's cwd; `:-$0` covers zsh (no BASH_SOURCE).
+# Every path below is repo-relative, so a failed cd must abort the suite.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 cd "$ROOT" || exit 1
 
