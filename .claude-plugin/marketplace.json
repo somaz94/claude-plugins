@@ -101,7 +101,7 @@
     {
       "name": "release-guards",
       "source": "./plugins/release-guards",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "description": "Puts a confirmation in front of the release actions you cannot take back — creating or deleting a tag, publishing a release, and editing the automation that generates them.",
       "category": "productivity",
       "license": "MIT",
