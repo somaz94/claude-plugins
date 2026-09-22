@@ -128,14 +128,12 @@ if [[ "$ALL_MODE" -eq 1 ]]; then
   }
 
   if [[ "$REMOTE_CHECK" -eq 1 ]] && command -v gh >/dev/null 2>&1; then
-    declare -a SLUGS=()
     declare -A REPO_SLUG=()       # path -> slug
     declare -A OWNERS_SEEN=()
     for d in "${CANDIDATES[@]}"; do
       slug=$(github_slug "$d")
       REPO_SLUG["$d"]="$slug"
       [[ -z "$slug" ]] && continue
-      SLUGS+=("$slug")
       OWNERS_SEEN["${slug%%/*}"]=1
     done
 

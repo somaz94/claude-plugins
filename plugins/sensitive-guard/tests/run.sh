@@ -87,6 +87,10 @@ case "$HOOK_OUT" in
   *) echo "FAIL: no BLOCKED line in the hook output"; printf '%s\n' "$HOOK_OUT"; exit 1 ;;
 esac
 case "$HOOK_OUT" in
+  *"diff --cached"*) : ;;
+  *) echo "FAIL: a plain commit's hint must point at git diff --cached"; printf '%s\n' "$HOOK_OUT"; exit 1 ;;
+esac
+case "$HOOK_OUT" in
   *generic_secret_assignment*) : ;;
   *) echo "FAIL: the category that fired is not named"; printf '%s\n' "$HOOK_OUT"; exit 1 ;;
 esac
@@ -146,6 +150,10 @@ printf '%s\n' "AWS_SECRET_ACCESS_KEY=$SECRET_KEY" >> "$repo/README.md"   # track
 
 expect_hook 0 "$repo" "git commit -m 'nothing staged'" "an unstaged edit under a plain commit" || exit 1
 expect_hook 2 "$repo" "git commit -am 'sweep it in'" "the same edit under commit -a" || exit 1
+case "$HOOK_OUT" in
+  *"diff HEAD"*) : ;;
+  *) echo "FAIL: under commit -a the hint must point at git diff HEAD"; printf '%s\n' "$HOOK_OUT"; exit 1 ;;
+esac
 
 echo "PASS: -a widens the scan to the worktree, a plain commit does not"
 )
@@ -173,8 +181,9 @@ repo="$(new_repo)"
 printf '%s\n' "$SECRET_PW" > "$repo/config.env"
 git -C "$repo" add -A
 
-# None of these payloads contains "commit", so they pin the bash fast path, not the python parse.
-for command in "git status" "ls -la" "git log --format=%H" "git diff --cached"; do
+# The last one contains "commit" without being one, so it passes the bash fast path
+# and must be rejected by the python parse.
+for command in "git status" "ls -la" "git diff --cached" "git log --grep=commit"; do
   expect_hook 0 "$repo" "$command" "the command '$command'" || exit 1
 done
 echo "PASS: status, ls, log and diff all pass through untouched"

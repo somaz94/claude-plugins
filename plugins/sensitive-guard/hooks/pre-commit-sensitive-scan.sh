@@ -303,7 +303,8 @@ case "$scan_rc" in
       echo "BLOCKED: sensitive values detected in the lines this commit ADDS to ${repo_root}."
       echo "Sanitize the flagged values (replace with example values), then re-commit."
       echo "Scan scope: ${scan_scope} (only added/changed lines are gated, not pre-existing repo state)."
-      echo "Inspect the added lines with: git -C ${repo_root} diff --cached"
+      if [[ "$commit_mode" == "head" ]]; then diff_arg="HEAD"; else diff_arg="--cached"; fi
+      echo "Inspect the added lines with: git -C ${repo_root} diff ${diff_arg}"
       echo "(This repo is public or its GitHub visibility could not be confirmed.)"
       echo "---"
       printf '%s\n' "$scan_out"
