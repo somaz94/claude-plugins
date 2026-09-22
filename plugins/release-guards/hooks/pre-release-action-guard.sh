@@ -73,7 +73,7 @@ CREATE_FLAGS_ARG   = {"-m", "--message", "-F", "--file", "-u", "--local-user"}
 DELETE_FLAGS       = {"-d", "--delete"}
 LIST_FLAGS_NOARG   = {"-l", "--list", "--contains", "--no-contains", "--points-at",
                       "--merged", "--no-merged", "--omit-empty", "--column", "--no-column",
-                      "-i", "--ignore-case", "--create-reflog"}
+                      "-i", "--ignore-case"}
 LIST_FLAGS_ARG     = {"--sort", "--format", "--color"}
 
 def tag_is_mutating(rest):
@@ -94,7 +94,7 @@ def tag_is_mutating(rest):
             list_mode = True; i += 1; continue
         if t in LIST_FLAGS_ARG:
             list_mode = True; i += 2; continue
-        if t == "-n" or t.startswith("-n"):
+        if t.startswith("-n"):
             list_mode = True; i += 1; continue
         if t.startswith("--sort=") or t.startswith("--format=") or t.startswith("--color="):
             list_mode = True; i += 1; continue
