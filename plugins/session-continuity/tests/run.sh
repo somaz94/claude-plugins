@@ -142,8 +142,7 @@ step 'no hook smuggles a quote out of its python block'
 set -euo pipefail
 # These hooks wrap a python program in a SINGLE-quoted `python3 -c '...'`, so a
 # single quote anywhere inside it closes the wrapper early and hands the rest of
-# the program to bash. The hooks say so in their own comments; this checks it,
-# because the failure is a shell injection in a file nobody re-reads.
+# the program to bash. The failure is a shell injection in a file nobody re-reads.
 python3 - <<'PY'
 import pathlib, re, sys
 
@@ -151,7 +150,7 @@ failures = []
 checked = 0
 for hook in sorted(pathlib.Path("plugins").glob("*/hooks/*.sh")):
     text = hook.read_text(encoding="utf-8")
-    for match in re.finditer(r"python3 -c '\n(.*?)\n'\n", text, re.S):
+    for match in re.finditer(r"python3 -c '\n(.*?)\n'(?=[\s;])", text, re.S):
         checked += 1
         body = match.group(1)
         if "'" in body:
