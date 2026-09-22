@@ -744,8 +744,6 @@ function card(item) {
   </details>`;
 }
 
-// One kind's heading plus its cards. Shared by both grouping modes so a kind
-// section looks the same whether or not it sits under a scope.
 // An item's own share of the always-on bill, which is what `sort: size` ranks.
 function itemTokens(item) {
   if (['agent', 'command', 'skill'].includes(item.kind)) return item.descriptionTokens || 0;
@@ -753,6 +751,8 @@ function itemTokens(item) {
   return 0;
 }
 
+// One kind's heading plus its cards. Shared by both grouping modes so a kind
+// section looks the same whether or not it sits under a scope.
 function byKind(items) {
   let html = '';
   for (const kind of KIND_ORDER) {

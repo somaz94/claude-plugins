@@ -46,7 +46,7 @@ from typing import Any, Iterable, NamedTuple
 # relied on through sys.path[0], so the module is found whether this script is
 # executed directly, symlinked onto PATH, or imported by a test.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _shared import Metrics, measure  # noqa: E402  (re-exported for readers of this file)
+from _shared import Metrics, measure  # noqa: E402
 
 # A mirror suffix: `README-ko.md`, `guide.ja.md`. Two or three lowercase letters,
 # optionally with a region (`pt-br`, `zh-hans`). No list of known languages —
