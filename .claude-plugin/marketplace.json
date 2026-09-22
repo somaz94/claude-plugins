@@ -119,7 +119,7 @@
     {
       "name": "sensitive-guard",
       "source": "./plugins/sensitive-guard",
-      "version": "0.1.3",
+      "version": "0.1.4",
       "description": "Stops a secret at the moment of commit — a last-mile gate that scans the lines a commit adds and blocks it, plus an on-demand scan of a whole repository before you publish.",
       "category": "productivity",
       "license": "MIT",
