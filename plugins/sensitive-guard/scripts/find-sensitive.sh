@@ -20,7 +20,7 @@
 #                                        # basename contains "-private", any
 #                                        # whose GitHub origin is a private repo
 #                                        # (auto-detected via `gh`), and common
-#                                        # junk dirs (venv, node_modules).
+#                                        # junk dirs (venv, node_modules, dot-dirs, *.wiki).
 #                                        # Prints a per-repo summary at the end.
 #     find-sensitive.sh --all --no-remote-check [ROOT]
 #                                        # skip the GitHub private-repo lookup
@@ -55,10 +55,9 @@
 # Exit code:
 #   0 if nothing found, 1 if any category matched.
 #
-# File scope:
-#   *.sh *.bash *.zsh *.py *.go *.yaml *.yml *.json *.tpl *.md *.env
-#   *.tf *.hcl Jenkinsfile* Dockerfile*
-#   Skips: .git/, node_modules/, vendor/, backup/, _backup/, *.lock, *.min.*
+# File scope: *.sh *.bash *.zsh *.py *.go *.yaml *.yml *.json *.tpl *.md *.env
+#   *.tf *.hcl *.ini *.cfg *.conf *Jenkinsfile* *jenkinsfile* Dockerfile*
+#   Skips: .git node_modules vendor backup _backup dist venv .venv __pycache__ *.lock *.min.*
 #
 set -euo pipefail
 
@@ -129,7 +128,6 @@ if [[ "$ALL_MODE" -eq 1 ]]; then
   }
 
   if [[ "$REMOTE_CHECK" -eq 1 ]] && command -v gh >/dev/null 2>&1; then
-    # Collect slugs and unique owners.
     declare -a SLUGS=()
     declare -A REPO_SLUG=()       # path -> slug
     declare -A OWNERS_SEEN=()
@@ -268,18 +266,12 @@ CATEGORIES=(
   'generic_secret_assignment|(password|passwd|api[_-]?key|secret|token)\s*[:=]\s*["'"'"']?[A-Za-z0-9][A-Za-z0-9_!@#$%^&*-]{7,}'
   'oidc_client_secret|(client[_-]?secret|clientSecret|CLIENT_SECRET)["'"'"']?\s*[:=]\s*["'"'"']?[A-Za-z0-9]{20,}'
   'ssh_private_key|-----BEGIN [A-Z ]*PRIVATE KEY-----'
-  # A home path carrying a real username leaks who ran the command. Bare
-  # `~/.claude` is deliberately NOT flagged: it is Claude Code's own documented
-  # path, identical on every machine, so a repo that legitimately documents it
-  # would cry wolf on every commit — and a gate that always fires gets
-  # overridden by reflex.
+  # Bare `~/.claude` is not flagged: it is identical on every machine, and a gate
+  # that always fires gets overridden by reflex.
   'leaked_home_path|/(Users|home)/[A-Za-z0-9_.-]+/\.(claude|ssh|aws|kube)'
 )
 
-# Extra categories come from a patterns file, so the universal set above stays
-# the same for everyone. Format is one `name|regex` per line; blank lines and
-# `#` comments are ignored. The repo-root file doubles as the opt-in signal the
-# commit hook looks for.
+# Per-user categories come from a patterns file (format: see header).
 load_pattern_file() {
   local file="$1" line name rest
   [[ -f "$file" ]] || return 0
@@ -344,9 +336,7 @@ get_fp_filter() {
   done
 }
 
-# Keep only PEM headers immediately followed by a real base64 key body line.
-# A real private key has a long base64 body on the next line; commented or
-# documentation/example headers (the common false positive) do not.
+# Keep only PEM headers followed by a base64 body line; doc/example headers have none.
 filter_ssh_with_body() {
   local input="$1" line f rest ln nextline kept=""
   while IFS= read -r line; do

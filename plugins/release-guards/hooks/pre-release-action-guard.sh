@@ -47,7 +47,6 @@
 #
 set -euo pipefail
 
-# --- read the hook payload (entire stdin) ---
 payload="$(cat)"
 
 # Fast path: neither "tag" nor "release" present -> cannot be a guarded action.

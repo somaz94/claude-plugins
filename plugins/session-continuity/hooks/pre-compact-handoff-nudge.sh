@@ -42,10 +42,8 @@
 #
 set -euo pipefail
 
-# --- read the hook payload (entire stdin) ---
 payload="$(cat)"
 
-# --- build the handoff nudge (python3) ---
 # Always exits 0 (warn-only; fail-open on uncertainty).
 printf '%s' "$payload" | python3 -c '
 import json, sys

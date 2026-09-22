@@ -93,15 +93,8 @@ _remote_owner() {
   printf '%s' "${BASH_REMATCH[1]}"
 }
 
-# Return 0 ONLY when the repo is an external OSS fork: it has BOTH an `origin`
-# and an `upstream` remote AND their owners differ. In that case the working
-# tree is a clone of someone else's project, so values find-sensitive.sh flags
-# are the upstream project's own example data (RFC1918 IPs in docs, demo
-# passwords in chart values), NOT the user's leaks — and a contribution PR must
-# leave those upstream files byte-for-byte intact. Offline (URL parse only); no
-# network. Fails CLOSED (returns 1) on any uncertainty — a missing `upstream`
-# remote, an unparseable URL, or identical owners — so a normal single-remote
-# opted-in repo (the thing this hook protects) is never exempted by mistake.
+# Return 0 only when origin and upstream both exist and their owners differ (see header).
+# Offline URL parse; fails closed so a normal single-remote repo is never exempted.
 is_external_oss_fork() {
   local dir="$1" origin_owner upstream_owner
   origin_owner="$(_remote_owner "$dir" origin)"     || return 1
@@ -110,7 +103,6 @@ is_external_oss_fork() {
   [[ "$origin_owner" != "$upstream_owner" ]]
 }
 
-# --- read the hook payload (entire stdin) ---
 payload="$(cat)"
 
 # Fast path: if the payload never mentions "commit", this is not a git commit.
@@ -120,7 +112,6 @@ case "$payload" in
   *) exit 0 ;;
 esac
 
-# --- precise parse: is this a git commit, and which repo dir does it target? ---
 # python3 is used for correct shell-token + JSON handling. Prints the target
 # directory to stdout, or an empty line when this is not a `git commit`.
 repo_dir="$(
@@ -219,9 +210,7 @@ case "$(basename "$repo_root")" in
   *.wiki) exit 0 ;;
 esac
 
-# External OSS fork (origin owner != upstream owner) -> allow. The flagged
-# values belong to the upstream project, not the user; a PR must not touch them.
-# Offline check, so it costs nothing and runs before the scanner.
+# External OSS fork -> allow (see is_external_oss_fork).
 if is_external_oss_fork "$repo_root"; then
   exit 0
 fi
@@ -288,7 +277,6 @@ else
   scan_scope="whole-repo (diff unavailable)"
 fi
 
-# Run the scanner in quiet mode (category counts only, no matched values).
 set +e
 scan_out="$("$BASH_BIN" "$SCANNER" -q "$scan_dir" 2>&1)"
 scan_rc=$?
@@ -299,18 +287,12 @@ case "$scan_rc" in
     exit 0  # clean -> allow
     ;;
   1)
-    # Matches found. Exempt GitHub-private repos before blocking: a sensitive
-    # value in a non-public repo is not a publish leak. This gh check runs ONLY
-    # here (the rare block path), so clean commits never pay the network cost.
+    # Private GitHub repo: not a publish leak.
     if is_github_private "$repo_root"; then
       exit 0  # private GitHub repo -> allow despite matches
     fi
-    # Downgrade: if the ONLY category that fired is private_ip, warn but allow.
-    # RFC1918 (10/8, 172.16/12, 192.168/16) is non-routable; a hardcoded private
-    # IP is at most an internal-topology hint, not a public-endpoint/credential
-    # leak. Real leaks (tokens, public domains, SSH keys, passwords) are separate
-    # categories and still hard-block below. The scanner still REPORTS private_ip
-    # in /scan and --all, so audit visibility is preserved.
+    # private_ip alone only warns: RFC1918 is a topology hint, not a credential.
+    # The scanner still reports it in /scan and --all.
     fired=$(printf '%s\n' "$scan_out" | sed -nE 's/^\[([a-z_]+)\] [0-9]+ match.*/\1/p' | sort -u)
     if [[ "$fired" == "private_ip" ]]; then
       echo "WARN: only RFC1918 private IPs matched in ${repo_root} (non-routable, low-signal); allowing commit." >&2

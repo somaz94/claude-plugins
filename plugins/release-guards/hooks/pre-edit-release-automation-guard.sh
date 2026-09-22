@@ -42,7 +42,6 @@
 #
 set -euo pipefail
 
-# --- read the hook payload (entire stdin) ---
 payload="$(cat)"
 
 # Fast path: if the payload mentions none of the trigger tokens, this cannot be

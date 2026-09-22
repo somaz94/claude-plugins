@@ -173,8 +173,7 @@ repo="$(new_repo)"
 printf '%s\n' "$SECRET_PW" > "$repo/config.env"
 git -C "$repo" add -A
 
-# `git log` matches the payload's fast-path substring test for "commit" without
-# being one, which is exactly the case a looser check would get wrong.
+# None of these payloads contains "commit", so they pin the bash fast path, not the python parse.
 for command in "git status" "ls -la" "git log --format=%H" "git diff --cached"; do
   expect_hook 0 "$repo" "$command" "the command '$command'" || exit 1
 done
