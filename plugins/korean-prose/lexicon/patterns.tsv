@@ -212,3 +212,9 @@ programmatic-translit	yellow	translationese	프로그래매틱	1	관리 API로 �
 walrus-translit	red	spelling	월즈\s?연산자	1	월즈 연산자를 사용한다	`Walrus` is transcribed `왈러스`; `월즈` has no basis.	`왈러스 연산자`, `바다코끼리 연산자`	왈러스 연산자를 사용한다|바다코끼리 연산자
 gak-byeol	yellow	redundancy	(?<![가-힣])각\s?[가-힣]{1,6}별	1	코드의 각 라인별 실행 시간	`각` and `-별` both mean "each"; together they are a doubled expression.	`라인별`, `각 라인의`	라인별 실행 시간|각 라인의 실행 시간|각별히 주의한다
 seomyeong-signature	yellow	calque	(?:함수|메서드)\s?서명	1	함수 서명 분석	`signature` of a function or method rendered as `서명`, which reads as a digital signature.	`시그니처`	함수 시그니처 분석|전자 서명 검증
+type-anjeongseong	yellow	calque	타입\s*안정성	1	컴파일 시점의 타입 안정성은 보장되지 않음	Type safety is 안전성 (safety); 안정성 means stability, a different concept.	`타입 안전성`	시스템 안정성을 높인다
+jumbidoen-munjang	red	calque	준비된\s*문장	1	준비된 문장을 사용하여 파싱 오버헤드를 줄인다	"Prepared statement" rendered word for word; 문장 means a sentence, so it cannot name the SQL object.	`prepared statement`, `프리페어드 스테이트먼트`
+jaesayong-gonggyeok	yellow	calque	재사용\s*공격	1	일회용 토큰으로 재사용 공격을 방지	The established Korean term for a replay attack is 재전송 공격; 재사용 공격 is a literal coinage.	`재전송 공격(replay attack)`
+yuchanghage-code	yellow	calque	유창하게\s*(?:작성|쓸|쓰|구현|읽)	1	코드를 더 간결하고 유창하게 작성할 수 있다	"Fluent" (as in fluent interface) mapped onto 유창하게, which describes a person speaking, not code.	`읽기 쉽게`, `자연스럽게 이어 쓸 수`	영어를 유창하게 구사한다
+bold-close-hangul	yellow	spacing	(?#raw)[)`]\*\*[가-힣]	1	**포인터(Pointer)**는 메모리 주소를 저장한다	A closing ** after punctuation with Hangul right behind it is not a valid right-flanking delimiter in CommonMark, so GitHub shows the asterisks literally.	Move the particle inside the bold: `**포인터(Pointer)는**`	**포인터(Pointer)는** 메모리 주소를 저장한다
+neomu-namyong	green	redundancy	너무\s*남용	1	너무 남용하면 혼란을 초래할 수 있다	남용 already means overuse, so 너무 says it twice.	Drop 너무: `남용하면`	남용하면 혼란을 초래할 수 있다
