@@ -357,3 +357,52 @@ set -e
 [ "$rc" = 0 ] || { echo "FAIL: placeholder home paths should not fire, got $rc"; exit 1; }
 echo "PASS: fires on a real username, silent on a documentation placeholder"
 )
+
+step 'the scanner reads a file whatever its name, but not the patterns file'
+(
+set -euo pipefail
+# The scope used to be an extension allowlist, so a credential copied into
+# `main.py.local` or a `*.tfvars` was never read. Both directions are pinned:
+# an odd suffix is read, and the patterns file, which names every marker, is not.
+tree="$(mktemp -d)"
+for f in main.py.local prod.tfvars; do
+  printf '%s\n' "$SECRET_PW" > "$tree/$f"
+  set +e
+  "$SCANNER" -q "$tree" >/dev/null 2>&1
+  rc=$?
+  set -e
+  [ "$rc" = 1 ] || { echo "FAIL: a secret in $f should exit 1, got $rc"; exit 1; }
+  rm -f "$tree/$f"
+done
+
+printf '\000binary %s\000\n' "$SECRET_PW" > "$tree/blob.bin"
+set +e
+"$SCANNER" -q "$tree" >/dev/null 2>&1
+rc=$?
+set -e
+[ "$rc" = 0 ] || { echo "FAIL: a binary file should be skipped, got $rc"; exit 1; }
+rm -f "$tree/blob.bin"
+
+printf 'internal_marker|acme-internal\n' > "$tree/.sensitive-patterns"
+printf 'nothing here\n' > "$tree/README.md"
+set +e
+(cd "$tree" && "$SCANNER" -q . >/dev/null 2>&1)
+rc=$?
+set -e
+[ "$rc" = 0 ] || { echo "FAIL: .sensitive-patterns flagged its own markers, got $rc"; exit 1; }
+printf 'host: acme-internal\n' > "$tree/leak.md"
+set +e
+(cd "$tree" && "$SCANNER" -q . >/dev/null 2>&1)
+rc=$?
+set -e
+[ "$rc" = 1 ] || { echo "FAIL: the marker should still fire outside the patterns file, got $rc"; exit 1; }
+rm -f "$tree/leak.md" "$tree/.sensitive-patterns"
+
+printf 'internal_marker|acme-internal\n' > "$tree/team-patterns"
+set +e
+"$SCANNER" -q -p "$tree/team-patterns" "$tree" >/dev/null 2>&1
+rc=$?
+set -e
+[ "$rc" = 0 ] || { echo "FAIL: the -p file flagged its own markers, got $rc"; exit 1; }
+echo "PASS: an odd suffix is read, a binary and the patterns file are not"
+)

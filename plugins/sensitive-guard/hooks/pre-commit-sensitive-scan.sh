@@ -226,7 +226,7 @@ BASH_BIN="bash"
 [[ -x /opt/homebrew/bin/bash ]] && BASH_BIN="/opt/homebrew/bin/bash"
 
 # Diff-scoped scan: materialize ONLY the lines this commit ADDS into a temp tree
-# (preserving each file's relative path + extension so the scanner's include
+# (preserving each file's relative path + name so the scanner's exclude
 # filters and per-category false-positive filters apply unchanged), then scan
 # that tree instead of the whole repo. This gates what the commit INTRODUCES,
 # not pre-existing state: upstream chart default passwords and demo IPs sitting

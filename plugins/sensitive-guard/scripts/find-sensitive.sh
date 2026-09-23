@@ -55,9 +55,9 @@
 # Exit code:
 #   0 if nothing found, 1 if any category matched.
 #
-# File scope: *.sh *.bash *.zsh *.py *.go *.yaml *.yml *.json *.tpl *.md *.env
-#   *.tf *.hcl *.ini *.cfg *.conf *Jenkinsfile* *jenkinsfile* Dockerfile*
+# File scope: every text file, whatever its name; grep -I skips binaries.
 #   Skips: .git node_modules vendor backup _backup dist venv .venv __pycache__ *.lock *.min.*
+#   and the patterns file itself (.sensitive-patterns, or the file given to -p).
 #
 set -euo pipefail
 
@@ -231,23 +231,19 @@ if [[ ! -d "$TARGET" ]]; then
   exit 2
 fi
 
-INCLUDES=(
-  --include='*.sh' --include='*.bash' --include='*.zsh'
-  --include='*.py' --include='*.go'
-  --include='*.yaml' --include='*.yml' --include='*.json'
-  --include='*.tpl' --include='*.md' --include='*.env'
-  --include='*.tf'  --include='*.hcl'
-  --include='*.ini' --include='*.cfg' --include='*.conf'
-  --include='Jenkinsfile*' --include='*Jenkinsfile*'
-  --include='*jenkinsfile*'
-  --include='Dockerfile*'
-)
+# No extension allowlist: no list can anticipate a suffix like `main.py.local`,
+# and a copied-out credential tends to sit in exactly that kind of file.
 EXCLUDES=(
   --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=vendor
   --exclude-dir=backup --exclude-dir=_backup --exclude-dir=dist
   --exclude-dir=venv --exclude-dir=.venv --exclude-dir=__pycache__
   --exclude='*.lock' --exclude='*.min.*'
+  # It lists your markers, so reading it would flag every line of it.
+  --exclude=.sensitive-patterns
 )
+if [[ -n "${PATTERN_FILE:-}" ]]; then
+  EXCLUDES+=(--exclude="${PATTERN_FILE##*/}")
+fi
 
 # category_name|regex
 CATEGORIES=(
@@ -358,7 +354,7 @@ for entry in "${CATEGORIES[@]}"; do
   name="${entry%%|*}"
   regex="${entry#*|}"
 
-  out=$(grep -rEnI "${INCLUDES[@]}" "${EXCLUDES[@]}" -- "$regex" "$TARGET" 2>/dev/null || true)
+  out=$(grep -rEnI "${EXCLUDES[@]}" -- "$regex" "$TARGET" 2>/dev/null || true)
 
   fp=$(get_fp_filter "$name")
   if [[ -n "$fp" && -n "$out" ]]; then
