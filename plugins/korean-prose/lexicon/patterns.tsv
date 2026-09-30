@@ -46,7 +46,7 @@ ai-geot-ganeung	red	ai-tell	(?:하는|되는|할|있는) 것이 (?:가능|중요
 ai-filler	red	ai-tell	결론적으로|궁극적으로|혁신적인|획기적인|핵심적인	1	결론적으로 안정성이 높아졌다	Filler discourse markers and inflation adjectives a human writing operations prose does not reach for.	Delete the marker; replace the adjective with the concrete claim
 ai-contrast-frame	red	ai-tell	[이가] 아니라	2	속도가 아니라 안정성이고 비용이 아니라 시간이다	The generator's favourite contrast frame; one is rhetoric, two in a paragraph is a tic.	State the positive directly; keep at most one per section
 ai-double-passive	red	ai-tell	(?:되어|보여|불려|쓰여)(?:지|진|질|짐|져|졌)	1	자동으로 처리되어진다	`되다` is already passive; `~어지다` doubles it.	`되다`, `보이다`, `불리다`, `쓰이다`
-ai-structural-metaphor	red	ai-tell	(?<![가-힣])(?:축|갈래)(?=\s|으로|로|이|가|을|를|의|은|는)|관점에서	1	두 갈래로 나눠	A structural metaphor standing in for a noun the writer did not name.	Name the thing	중심축으로 회전한다
+ai-structural-metaphor	red	ai-tell	(?<![가-힣])(?:축|갈래)(?=\s|으로|로|이|가|을|를|의|은|는|입니다)|관점에서	1	두 갈래로 나눠	A structural metaphor standing in for a noun the writer did not name.	Name the thing	중심축으로 회전한다
 ai-personify	red	ai-tell	(?:서버|노드|장비|프로세스|컨테이너|DB)(?:가|이) (?:죽|쓰러[지진질졌져])	1	서버가 죽으면	Casual anthropomorphism in otherwise formal prose; mixed register.	`서버가 중단되면`, `장비 장애`
 double-abstraction	yellow	nominalization	(?:개선|관리|구축|운영|점검|분석) (?:작업|업무)(?:을|를)? ?(?:수행|담당|진행)	1	구축 작업을 진행	Double abstraction: both halves nominalize the same action.	`구축` (noun) or `구축했다` (verb)
 e-daehan-cluster	yellow	nominalization	에 대한	2	장애에 대한 대응과 원인에 대한 분석	English "about/regarding"; one is fine, two in a paragraph is stilted.	`~의`, `~을`, or restructure
@@ -78,7 +78,7 @@ en-idiom	yellow	calque	(?i:\b(?:root cause|single source of truth|human-in-the-l
 danil-calque	yellow	calque	단일\s?(?:뷰|화면|인터페이스|체계)	1	Kibana 단일 뷰에서 추적	`단일 뷰/체계` is word-for-word 'single view/system'; Korean says 'one screen' or 'one'.	`한 화면에서`, `클러스터 하나로만`
 dajung-calque	green	calque	다중\s?(?:인스턴스|replica|레플리카|컨트롤러|ingress)	1	Collector 다중 replica에서	`다중 X` for 'multiple X' is a technical-translation calque; plain Korean uses `여러`. A game-term `다중 인스턴스` is a false positive.	`여러 replica로 띄우면`, `여러 ingress-nginx 인스턴스`
 tilde-approx	yellow	style	(?<![\d.])(?<![\d.]\s)(?<!\|\s)~\s?\d	1	apiserver가 ~30초간 5xx 반환	In Korean copy the tilde marks a range (`9~14초`); as an 'approximately' prefix it is an English habit.	`약 30초간`, `약 10초로`	9~14초 사이
-silent-calque	yellow	calque	조용(?:한|히)\s?(?:[가-힣]+\s)?(?:유실|실패|멈|중단|장애|사라)	1	조용한 트레이스 유실을 감시	`조용한 실패/유실` is a literal 'silent failure/loss'; Korean describes what the reader could not see.	`아무 표시 없이 사라지는 트레이스`, `에러 없이 멈춘 수집`, `감지되지 않는 장애`
+silent-calque	yellow	calque	조용(?:한|히)\s?(?:[가-힣]+\s)?(?:유실|실패|멈|중단|장애|사라|드러나|버려)	1	조용한 트레이스 유실을 감시	`조용한 실패/유실` is a literal 'silent failure/loss'; Korean describes what the reader could not see.	`아무 표시 없이 사라지는 트레이스`, `에러 없이 멈춘 수집`, `감지되지 않는 장애`
 risk-define	yellow	ai-tell	(?:리스크|위험|문제)(?:로|으로)\s?정의(?:하|했|해|함|\s|\.)	1	롤백 불능 상태를 핵심 운영 리스크로 정의.	'Defined X as the core risk/problem' is consultant framing standing in for the judgment itself.	`진짜 위험은 ~라고 판단`, `~가 문제였습니다`
 irueojida	yellow	translationese	이루어(?:지|진|질|짐|져|졌)	1	전달이 수동으로 이루어져	`~이 이루어지다` (to be carried out) is a translationese passive that hides who did what.	`수동으로 전달하다 보니`, `직접 동기화하다 보니`
 binbeon	yellow	translationese	빈번(?:하게|히)\s?(?:발생|일어)	1	장애가 빈번하게 발생했습니다	`빈번하게 발생했다` is a literal 'frequently occurred'; one adjective carries it.	`장애가 잦았습니다`, `누락도 빈번했습니다`
@@ -222,3 +222,7 @@ restart-neomgyeo	yellow	calque	(?:재시작|재배포|재기동|재부팅|업그
 calque-gwonwi	yellow	calque	권위\s?있는\s(?:\S+\s)?(?:spec|명세|파일|문서|체크|기준|소스|출처|source)	1	권위 있는 로컬 체크	English "authoritative" rendered as `권위 있는`; for a spec, file or check, Korean says what it is the reference for.	`기준 문서`, `기준 파일`, `정본`	권위 있는 학술지에 실렸다|그 분야의 권위 있는 학자
 calque-chakji	yellow	calque	(?:브랜치|커밋|변경|옵션|PR|MR|패치)[^.]{0,20}?착지	1	새 NAMESPACE 옵션이 한 브랜치에 착지했는데	English "landed on a branch"; Korean `착지` is a physical touchdown.	`들어가다`, `반영되다`, `머지되다`	비행기가 활주로에 착지했다|체조 선수가 착지에 성공했다
 jeuksi-sayong-noun	green	nominalization	즉시 사용 (?:잡|템플릿|이미지|스크립트|설정)	1	즉시 사용 잡이다	English "ready-to-use" compressed into a bare noun compound; Korean needs a modifier clause.	`바로 쓸 수 있는 잡`	즉시 사용 가능한 잡이다|즉시 사용할 수 있다
+calque-jarada-quantity	yellow	calque	(?:비용|호출\s?수|메모리|크기|부하|지연|용량)(?:이|가|은|는)?\s?자라	1	기록이 쌓여도 조회 비용이 자라지 않는다	English "grow" for a quantity rendered as 자라다, a verb for living things; cost, load and size 늘다 / 커지다 in Korean.	`늘다`, `커지다`	아이가 자라는 동안|나무가 자라지 않는다
+dap-hada-object	yellow	grammar	[을를]\s?답(?:하|할|한|해|합)	1	질문을 답할 화면	`답하다` marks the question with `에` (물음에 답하다); `을/를` marks the content of the answer, so 'X를 답하다' reads as answering with X.	`~에 답할 화면`	질문에 답할 화면이 없었습니다|전례를 답습한다|속을 답답하게 한다
+calque-jangsu	yellow	calque	장수\s?(?:자격\s?증명|토큰|인증서)	1	장수 자격증명이라 목록에는 남습니다	'Long-lived credential' rendered as `장수`; `장수` (長壽) is said of living things and companies.	`수명이 긴 자격증명`, `만료가 긴 토큰`	장수 기업|장수 프로그램
+calque-escape-talchul	yellow	calque	(?:특수\s?문자|HTML|문자열|따옴표)\s?탈출	1	HTML 특수문자 탈출	'Escape' rendered as `탈출`; developer Korean uses the loanword `이스케이프`.	`이스케이프`	방 탈출 게임|탈출 속도
