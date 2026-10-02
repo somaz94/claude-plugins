@@ -58,3 +58,6 @@ cutover	컷오버	keep	kept as an English label; do not translate
 컨텍스트 관리자	컨텍스트 매니저	concept	context manager; keep one form per document
 override	오버라이드	concept	Latin vs Hangul transliteration of one verb; follow the file majority
 기본값	default 값|디폴트 값|디폴트값	concept	mixed-script `default 값` beside `기본값`
+타임아웃	timeout	concept	env names such as SERVER_WRITE_TIMEOUT are code and blanked; flags prose that mixes the loanword with the English word
+stack	스택	concept	one form per document; a product name such as Elastic Stack is not drift
+toolchain	툴체인	concept	one form per document
