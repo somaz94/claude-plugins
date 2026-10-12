@@ -13,6 +13,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import shutil
 import sys
 import tempfile
 import unittest
@@ -517,6 +518,14 @@ class CliTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.dir = Path(self._tmp.name)
+        # The assertions describe the shipped lexicon; a machine's *.local.tsv overlay would rewrite them.
+        base = tempfile.TemporaryDirectory()
+        self.addCleanup(base.cleanup)
+        for name in ("patterns.tsv", "terms.tsv"):
+            shutil.copy(scan.LEXICON_DIR / name, base.name)
+        patcher = mock.patch.object(scan, "LEXICON_DIR", Path(base.name))
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def tearDown(self):
         self._tmp.cleanup()
