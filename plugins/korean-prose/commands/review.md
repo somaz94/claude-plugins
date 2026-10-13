@@ -6,7 +6,7 @@ allowed-tools: Read, Grep, Glob, Bash, Edit
 
 # /korean-prose:review
 
-Thin wrapper around the `awkward-korean-reviewer` agent. Reports awkwardness with concrete KO-only rewrites that preserve every fact, number, English technology label, code block, link, and path.
+Thin wrapper around the `awkward-korean-reviewer` agent. Reports awkwardness with the smallest concrete fix — a word swap before a sentence rewrite, and an English term where the Korean word itself is the problem — preserving every fact, number, English technology label, code block, link, and path.
 
 User invocation argument: `$ARGUMENTS`
 
@@ -92,6 +92,7 @@ The agent never edits these files itself.
 - The `en:` half, `*-en.md`, and English `.md` are out of scope in every mode — never rewritten, not even to match a KO change. If a KO fix breaks KO↔EN parity, say so and stop.
 - Pair / structural drift (heading-count, code-block, table drift between the two copies) is **not** this command's job → the `doc-mirror` plugin.
 - Preserve every fact, number, English technology label, code block, link, and path in every rewrite; match the document's existing tone and register.
+- **Fix the word, not the sentence.** Default to a word or short-phrase swap and leave the rest of the sentence as written. An awkward Korean word may become the English term the audience actually says (`회전 → 로테이션`, `경유 경로 → transitive routing`); a natural Korean word is never anglicized. A whole-sentence rewrite is reserved for structural defects no swap can fix. Text meant to be spoken (scripts) also gets a homophone check (`감사`, `이전`). The full rule is the agent's § 5.
 - Never invent a metric, a headcount, or any number. If a fact looks wrong, flag it — do not silently change it.
 - Never add, remove, reorder, merge, or split a heading, section, list item, or table row. This is a text-only pass.
 

@@ -105,6 +105,7 @@ If a fact looks wrong, **flag it as a fact-check callout** — do not silently c
 ## 2. Korean-only — do not touch English content
 
 - This agent rewrites **only Korean prose**.
+- Swapping an awkward Korean word for the English term is a **word edit inside a Korean line**, not an English rewrite, and is allowed under [§ 5](#5-suggestion-shape--ko-only-never-invent) — this rule only forbids rewriting English text that is already there.
 - If an in-scope Korean doc embeds an English sentence (a quoted log line, an English heading kept on purpose), leave it untouched.
 - If the file has an English pair (`README-en.md`, `<topic>-en.md`) and that English copy also reads awkward, leave a one-line note at the bottom naming the file and line. Do NOT propose an English rewrite.
 - The implicit invariant — KO and its EN pair say the same thing — is the user's responsibility when applying your KO suggestion. If your KO suggestion changes the *claim* (it should not, per rule 1), the parity breaks — that is a bug in your suggestion.
@@ -122,7 +123,7 @@ Severity baseline for both halves: 🔴 clear awkwardness · 🟡 common improva
 
 The **highest-signal pattern in bilingual docs.** An English concept is swapped for a same-dictionary-entry Korean word that does **not** carry the concept (`압력`, `정렬`, `수렴`, `완주`, `간접화`). Unlike an English word left as English, here the translation *happened* — and destroyed the meaning. The reader hits a word that looks Korean but points nowhere.
 
-The confirmed substitutions are lexicon rows with category `calque`, each carrying why the Korean word fails. When one comes back, restore the concrete action rather than swapping in a synonym: `압력을 완화 → 디스크 부하를 완화`. A new one found by reading is a lexicon row to propose ([§ Output — 감사 모드](#output--감사-모드)).
+The confirmed substitutions are lexicon rows with category `calque`, each carrying why the Korean word fails. When one comes back, restore the concrete action rather than swapping in a synonym: `압력을 완화 → 디스크 부하를 완화` — or, when the audience says the concept in English anyway, the English term itself (`TLS 자동 회전 → TLS 자동 로테이션`, `경유 경로 → transitive routing`; see [§ 5](#5-suggestion-shape--ko-only-never-invent)). A new one found by reading is a lexicon row to propose ([§ Output — 감사 모드](#output--감사-모드)).
 
 ### 🔴 직역체 / 번역체 — judgement
 
@@ -218,7 +219,17 @@ printf '%s\n' '<your AFTER line>' | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/scan.
 
 ## 5. Suggestion shape — KO only, never invent
 
-For every finding, propose a concrete KO rewrite, quoting the original line:
+### Fix the word, not the sentence — the default
+
+A whole-sentence rewrite replaces the author's own voice, so the smallest edit that removes the awkwardness wins:
+
+- **A word or short phrase first.** When the defect lives in one word — a calque, a stiff Sino-Korean compound, a dictionary word that does not carry the tech concept, a word odd in its context — propose only that swap and leave the rest of the sentence as written. Report it as a 전 → 후 word pair, not as a BEFORE/AFTER sentence.
+- **English is an allowed replacement, and often the right one.** When the Korean word itself is the problem and the audience (Korean engineers) would say the term in English anyway, swap in the English term: `TLS 자동 회전 → TLS 자동 로테이션`, `경유 경로 → transitive routing`, `소비 저장소 → downstream 저장소`, `정리로 회귀 → 정리로 롤백`, `공용 인터넷 → 퍼블릭 인터넷`. Never anglicize a word that already reads as natural Korean — the swap is for words that are the problem.
+- **Spoken text adds a homophone check.** For text meant to be said aloud (presentation scripts, interview answers), also flag a word a listener can mishear: `감사` (audit ↔ thanks), `이전` (migration ↔ before), `구 GitLab` (old ↔ nine), `사고도 빠를` (accident ↔ thought). Swap it for a word that cannot be misheard, English included.
+- **A sentence-level rewrite is for structural defects only** — 호응 오류, 어순, 목적어 탈락, 종결법 — and only when no word swap fixes it. Say why a swap was not enough.
+- When the swapped word recurs elsewhere in the file or in a paired document (a deck and its script), list those occurrences so the swap lands everywhere at once.
+
+A sentence-level fix quotes the original line and proposes a concrete KO rewrite:
 
 ```markdown
 # BEFORE
@@ -329,7 +340,7 @@ If the user has not approved and asks you to "just do it", that counts as approv
 3. **Scan** — run `scan.py --json` per [§ Hard rule 4](#4-pattern-detection-technique), or use the result the invoking command passed in. Tally the hits.
 4. **Confirm by reading** — for each hit, read the surrounding line. A hit whose context makes it natural (a real sort for `정렬`, a locative `에 있어서`) is not a finding; neither is a spelling group whose two forms name different things.
 5. **대조 pass** — [§ 대조 검사](#-대조-검사--the-findings-a-token-scan-cannot-see). This is a separate pass **after** the token pass, because it needs the siblings in mind rather than one line at a time. Do not skip it when the token pass came back clean — a clean token sweep is exactly when 대조 findings are the only ones left.
-6. **Categorize** 🔴 / 🟡 / 🟢 and draft KO-only rewrites for every 🔴 and 🟡.
+6. **Categorize** 🔴 / 🟡 / 🟢 and draft the smallest fix for every 🔴 and 🟡 — a word swap before a sentence rewrite ([§ 5](#5-suggestion-shape--ko-only-never-invent)).
 7. **Self-check every AFTER you just wrote** — pipe your rewrites through `scan.py --stdin`, then re-run the 대조 checks on them by reading, as if a user had handed them to you. A rewrite is new Korean prose and gets no exemption; the redundancy, the empty abstract noun and the un-glossed concept term enter here as readily as anywhere — **and so does the opposite failure, a gloss you just minted.** For every Korean term your AFTER introduces, ask whether the language uses that phrase outside this document. If you cannot point to it in ordinary Korean or elsewhere in the file, it is a coinage — precisely what 음역 조어 (`키리스`, `무침습`) is flagged for. Holding the user's prose to a standard your own rewrite breaks is the specific failure this step exists to catch. Rewrite anything that fails and check again. **Never report an AFTER that has not been through this step.**
 8. **Privacy scan** on your proposed rewrites.
 9. **Report** — [§ Output — 감사 모드](#output--감사-모드). Read-only; end by offering to apply via 판정 mode, item by item.
@@ -351,7 +362,7 @@ If the user has not approved and asks you to "just do it", that counts as approv
 
 - **Scope line** — lane, mode, which file(s) / sections, why.
 - **Tally** — 🔴 N · 🟡 N · 🟢 N · 표기 불일치 N · 종결법 혼용 N개 섹션 · 대조 N · 사전 후보 N.
-- **🔴 findings**, one block each: **Path** (`file_path:line_number`, optionally `→ ## heading` or `→ yaml.path[i]`) · **Pattern** · **Before** · **After** (fenced, structure preserved) · **Why** (one line).
+- **🔴 findings** — word-level fixes ([§ 5](#5-suggestion-shape--ko-only-never-invent)) as one table per file (위치 · 전 · 후 · 이유), worst first; each sentence-level fix gets its own block: **Path** (`file_path:line_number`, optionally `→ ## heading` or `→ yaml.path[i]`) · **Pattern** · **Before** · **After** (fenced, structure preserved) · **Why** (one line).
 - **🟡 findings** — same shape, lighter. **🟢** — directional notes, full rewrite optional.
 - **대조 findings** — each with the comparison evidence: the sibling lines read, or the two grep counts.
 - **표기 일관성** table · **종결법 혼용** per section · **privacy callouts** · **structural recommendations** (one-liners routed elsewhere).
