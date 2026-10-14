@@ -45,7 +45,7 @@ The newer half of the problem is not translation at all. Text that was **generat
 
 The middle rows are the ones worth the install. `압력`, `정렬`, `수렴`, `재활용`, `함정`, `완주` are all real Korean words that a dictionary will happily offer for the English term — and all six point somewhere else once they land in a technical sentence. The translation happened, and destroyed the meaning on the way. The plugin ships that substitution dictionary with the reason each one fails.
 
-The patterns are **data, not prompt text**: `lexicon/patterns.tsv` holds one awkward word or construction per row — its regex, a severity, an example it must match, why it reads wrong, what to write instead, and optionally the natural sentences it must leave alone — and `lexicon/terms.tsv` holds one referent and its spellings. A standard-library scanner, `scripts/scan.py`, runs both before the agent reads anything, so every review starts from the same candidates. It reads only Korean prose: code, links and markup are blanked, the `en:` half of a bilingual YAML file is skipped, a Korean YAML with no `ko:` key is read whole instead, and a line with no Hangul is left alone. A new pattern is one row, and `python3 scripts/scan.py --check-lexicon` refuses a row whose example does not match its own regex, or whose counterexample does. Run by hand on a long document, `--severity red` or `--category spelling` narrows the report.
+The patterns are **data, not prompt text**: `lexicon/patterns.tsv` holds one awkward word or construction per row — its regex, a severity, an example it must match, why it reads wrong, what to write instead, and optionally the natural sentences it must leave alone — and `lexicon/terms.tsv` holds one referent and its spellings. A standard-library scanner, `scripts/scan.py`, runs both before the agent reads anything, so every review starts from the same candidates. It reads only Korean prose: code, links and markup are blanked, the `en:` half of a bilingual YAML file is skipped, a Korean YAML with no `ko:` key is read whole instead, an HTML page or slide deck is read for its visible text at the original line numbers, and a line with no Hangul is left alone. Headings, and in HTML table headers and lead / strip lines, are tagged as titles so that title-only rows fire on them alone. A new pattern is one row, and `python3 scripts/scan.py --check-lexicon` refuses a row whose example does not match its own regex, or whose counterexample does. Run by hand on a long document, `--severity red` or `--category spelling` narrows the report.
 
 <br/>
 
@@ -58,6 +58,7 @@ Every pattern above is visible inside one line. The findings that survive a clea
 - **과장 드리프트** — `차단` where the evidence says `방지`, or a condition that never existed described as a defect that was fixed.
 - **표기 일관성** — `Pod` in one paragraph and `파드` in the next, or `Canary` beside `canary`, usually because a later edit followed the writer's habit rather than the file's. The scanner counts every spelling, including English words written in two letter cases; whether two spellings name the same thing — `Helm` the product, `helm` the CLI — is still a reading job.
 - **용어 도입 관례** — a bare `fail-fast` in prose that writes `부분 장애(gray failure)` everywhere else. Spelling-consistency passes it trivially; the document's own convention does not.
+- **제목 장르** — a title is a label, not a sentence. A slide headline that ends in `~했습니다`, drops its verb and ends on a particle (`스케줄 · 스크립트로`), or turns into a slogan (`A가 곧 B`) is rewritten to a noun phrase. When every title in a deck shares the defect there is no outlier to compare against, so each title is judged on its own shape and the shared defect is reported once.
 
 Each is reported with its evidence — the sibling lines compared, or the two counts. A finding you cannot check is not a finding.
 
@@ -75,7 +76,7 @@ Somebody holding one rewritten sentence does not want a forty-finding file audit
 
 ## Scope
 
-In scope: any `.md` whose body is predominantly Korean prose, and the `ko:` half of a YAML file whose strings are `{ ko, en }` pairs.
+In scope: any `.md` whose body is predominantly Korean prose, the visible text of a Korean HTML page or slide deck (reviewed, never edited), and the `ko:` half of a YAML file whose strings are `{ ko, en }` pairs.
 
 Out of scope: the `en:` half, `*-en.md`, English `.md`, code blocks, inline code, URLs, file paths, and comments in source files. Korean-only, in both directions — it will not rewrite your English to match a Korean change, and it will say so if a fix puts the pair out of parity.
 

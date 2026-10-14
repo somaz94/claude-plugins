@@ -3,8 +3,9 @@
 
 Reads the lexicon that ships next to this script (``../lexicon/*.tsv``),
 extracts Korean prose from Markdown, YAML (the ``ko:`` half of a bilingual
-file, every authored value of a monolingual Korean one) or plain text, and
-reports two kinds of candidates:
+file, every authored value of a monolingual Korean one), HTML (the visible
+text, with headings and lead / strip lines tagged as titles) or plain text,
+and reports two kinds of candidates:
 
   Pass 1  token-pattern hits from ``patterns.tsv``
   Pass 2  one referent spelled several ways - seeded from ``terms.tsv``,
@@ -18,10 +19,13 @@ reading the line in context. Standard library only.
 from __future__ import annotations
 
 import argparse
+import dataclasses
+import html
 import json
 import re
 import sys
 from dataclasses import dataclass
+from html.parser import HTMLParser
 from pathlib import Path
 
 LEXICON_DIR = Path(__file__).resolve().parent.parent / "lexicon"
@@ -77,13 +81,36 @@ YAML_KO_VALUE = re.compile(
 YAML_KO_KEY = re.compile(r"^\s*(?:-\s+)?ko:(?:\s|$)", re.MULTILINE)
 YAML_VALUE_PREFIX = re.compile(r"^(?:\s*(?:-\s+)*)(?:[A-Za-z0-9_.-]+:(?=[ \t]|$))?[ \t]*")
 
+MD_HEADING = re.compile(r"^\s{0,3}#{1,6}(?:\s|$)")
+
+# HTML: what counts as a title, what is never prose, and what ends a paragraph.
+HTML_TITLE_TAGS = frozenset({"h1", "h2", "h3", "h4", "h5", "h6", "th"})
+HTML_TITLE_CLASS = re.compile(r"(?:^|[-_])(?:lead|strip)(?:$|[-_])")
+HTML_HIDDEN_TAGS = frozenset({"script", "style", "template"})
+HTML_CODE_TAGS = frozenset({"code", "pre", "kbd", "samp"})
+HTML_VOID_TAGS = frozenset(
+    {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
+)
+HTML_BLOCK_TAGS = frozenset(
+    {"address", "article", "aside", "blockquote", "dd", "div", "dl", "dt", "figcaption", "figure", "footer",
+     "h1", "h2", "h3", "h4", "h5", "h6", "header", "li", "main", "nav", "ol", "p", "section", "table", "td",
+     "th", "tr", "ul"}
+)
+HTML_ENTITY = re.compile(r"&#?[0-9A-Za-z]+;?")
+
 
 class LexiconError(Exception):
     """Raised when the lexicon cannot be loaded at all."""
 
 
 RAW_TARGET_MARK = "(?#raw)"
+TITLE_SCOPE_MARK = "(?#title)"
+LEADING_MARKS = re.compile(r"(?:\(\?#(?:raw|title)\))*")
 FILE_SCOPE_PREFIX = "file:"
+
+
+def leading_marks(regex_text: str) -> str:
+    return LEADING_MARKS.match(regex_text).group(0)
 
 
 @dataclass(frozen=True)
@@ -92,7 +119,10 @@ class Pattern:
 
     A regex starting with ``(?#raw)`` runs against the line with its markup
     still in place (for spacing after ``</code>`` and the like); every other
-    regex runs against the line with markup blanked out.
+    regex runs against the line with markup blanked out. A regex starting
+    with ``(?#title)`` runs on title lines only: a Markdown heading, an HTML
+    heading, table header or lead / strip line, or any line under ``--title``.
+    The two marks combine in either order.
 
     ``min_count`` is counted per paragraph (a tic repeated in one place), or
     across the whole file when written ``file:N`` (a habit spread through a
@@ -116,7 +146,11 @@ class Pattern:
 
     @property
     def on_raw(self) -> bool:
-        return self.regex.pattern.startswith(RAW_TARGET_MARK)
+        return RAW_TARGET_MARK in leading_marks(self.regex.pattern)
+
+    @property
+    def on_title(self) -> bool:
+        return TITLE_SCOPE_MARK in leading_marks(self.regex.pattern)
 
 
 @dataclass(frozen=True)
@@ -135,13 +169,15 @@ class ProseLine:
     Both strings are the same length so a column in one is a column in the
     other; everything that is not prose is already spaces in both. ``block``
     identifies the paragraph the line belongs to, the unit ``min_count``
-    is counted in.
+    is counted in. ``title`` marks a heading-like line; an HTML source line
+    holding both title and body text yields one ProseLine for each.
     """
 
     lineno: int
     raw: str
     clean: str
     block: int
+    title: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -223,7 +259,7 @@ def parse_patterns(path: Path, problems: list[str]) -> dict[str, Pattern]:
             text.strip() for text in row["counterexample"].split(COUNTEREXAMPLE_SEPARATOR) if text.strip()
         )
         # Checked against what the scanner would see: markup blanked unless the row reads the raw line.
-        on_raw = row["regex"].startswith(RAW_TARGET_MARK)
+        on_raw = RAW_TARGET_MARK in leading_marks(row["regex"])
         matched = [text for text in counterexamples if regex.search(text if on_raw else strip_markup(text))]
         if matched:
             problems.append(f"{where}: {pid} counterexample {matched[0]!r} matches its regex")
@@ -367,7 +403,7 @@ def extract_markdown(text: str) -> list[ProseLine]:
         if not line.strip():
             block += 1
             continue
-        out.append(ProseLine(lineno, line, strip_markup(line), block))
+        out.append(ProseLine(lineno, line, strip_markup(line), block, bool(MD_HEADING.match(line))))
     return out
 
 
@@ -486,10 +522,136 @@ def extract_text(text: str) -> list[ProseLine]:
     return out
 
 
+_NO_ROLE, _BODY, _TITLE = 0, 1, 2
+
+
+class _HtmlProse(HTMLParser):
+    """Write each visible character back at its own source offset.
+
+    ``clean`` starts as the document blanked to spaces (newlines kept) and
+    receives the visible text; ``raw`` is the document with script / style
+    bodies and comments blanked. Attributes never reach ``clean``, being
+    part of a tag. ``role`` and ``block`` are recorded per visible character.
+    """
+
+    def __init__(self, text: str):
+        super().__init__(convert_charrefs=False)
+        self.text = text
+        self.starts = [0]
+        for line in text.split("\n")[:-1]:
+            self.starts.append(self.starts[-1] + len(line) + 1)
+        self.clean = [ch if ch == "\n" else " " for ch in text]
+        self.raw = list(text)
+        self.role = [_NO_ROLE] * len(text)
+        self.block_at = [0] * len(text)
+        self.block = 0
+        self.stack: list[tuple[str, bool, bool, bool]] = []
+
+    def _offset(self) -> int:
+        line, col = self.getpos()
+        return self.starts[line - 1] + col
+
+    def _flags(self) -> tuple[bool, bool, bool]:
+        """(title, hidden, code) for the innermost open element."""
+        return tuple(any(frame[i] for frame in self.stack) for i in (1, 2, 3))
+
+    def _hide(self, start: int, end: int) -> None:
+        for i in range(start, min(end, len(self.raw))):
+            if self.raw[i] != "\n":
+                self.raw[i] = " "
+
+    def _show(self, pos: int, ch: str, title: bool) -> None:
+        self.clean[pos] = ch
+        self.role[pos] = _TITLE if title else _BODY
+        self.block_at[pos] = self.block
+
+    def handle_starttag(self, tag, attrs):
+        if tag in HTML_BLOCK_TAGS:
+            self.block += 1
+        if tag in HTML_VOID_TAGS:
+            return
+        classes = (dict(attrs).get("class") or "").split()
+        title = tag in HTML_TITLE_TAGS or any(HTML_TITLE_CLASS.search(c) for c in classes)
+        self.stack.append((tag, title, tag in HTML_HIDDEN_TAGS, tag in HTML_CODE_TAGS))
+
+    def handle_startendtag(self, tag, attrs):
+        if tag in HTML_BLOCK_TAGS:
+            self.block += 1
+
+    def handle_endtag(self, tag):
+        if tag in HTML_BLOCK_TAGS:
+            self.block += 1
+        for index in range(len(self.stack) - 1, -1, -1):
+            if self.stack[index][0] == tag:
+                del self.stack[index:]
+                break
+
+    def handle_data(self, data):
+        start = self._offset()
+        title, hidden, code = self._flags()
+        if hidden:
+            self._hide(start, start + len(data))
+        elif not code:
+            for index, ch in enumerate(data):
+                if ch != "\n":
+                    self._show(start + index, ch, title)
+
+    def _reference(self) -> None:
+        start = self._offset()
+        match = HTML_ENTITY.match(self.text, start)
+        end = match.end() if match else start + 1
+        title, hidden, code = self._flags()
+        if hidden or code:
+            return
+        decoded = html.unescape(self.text[start:end])
+        visible = len(decoded) == 1 and decoded.isprintable() and not decoded.isspace()
+        self._show(start, decoded if visible else " ", title)
+
+    def handle_entityref(self, name):
+        self._reference()
+
+    def handle_charref(self, name):
+        self._reference()
+
+    def handle_comment(self, data):
+        start = self._offset()
+        end = self.text.find("-->", start)
+        self._hide(start, len(self.text) if end < 0 else end + 3)
+
+
+def extract_html(text: str) -> list[ProseLine]:
+    """Return the visible text of an HTML document at its source line and column.
+
+    Script, style, template and code bodies, comments and attributes are
+    skipped. A source line holding title text (``h1``-``h6``, ``th``, an
+    element whose class names ``lead`` or ``strip``) and body text yields one
+    ProseLine per role, each with the other role's text blanked, so a
+    title-scoped row never sees the body sharing its line.
+    """
+    parser = _HtmlProse(text)
+    parser.feed(text)
+    parser.close()
+    raw_text = "".join(parser.raw)
+    out: list[ProseLine] = []
+    offset = 0
+    for lineno, raw_line in enumerate(raw_text.split("\n"), 1):
+        span = range(offset, offset + len(raw_line))
+        offset += len(raw_line) + 1
+        for role, other in ((_TITLE, _BODY), (_BODY, _TITLE)):
+            mine = [i for i in span if parser.role[i] == role and parser.clean[i].strip()]
+            if not mine:
+                continue
+            clean = "".join(parser.clean[i] if parser.role[i] == role else " " for i in span)
+            raw = "".join(" " if parser.role[i] == other else raw_text[i] for i in span)
+            out.append(ProseLine(lineno, raw, strip_markup(clean), parser.block_at[mine[0]], role == _TITLE))
+    return out
+
+
 EXTRACTORS = {
     "md": extract_markdown,
     "yaml": extract_yaml,
     "yaml-all": extract_yaml_all,
+    "html": extract_html,
     "text": extract_text,
 }
 
@@ -508,6 +670,8 @@ def detect_lane(path: Path, text: str | None = None) -> str:
         return "yaml-all"
     if suffix in (".md", ".markdown"):
         return "md"
+    if suffix in (".html", ".htm"):
+        return "html"
     return "text"
 
 
@@ -521,6 +685,8 @@ def scan_patterns(lines: list[ProseLine], patterns: list[Pattern]) -> list[dict]
     for pattern in patterns:
         per_block: dict[int, list[dict]] = {}
         for line in lines:
+            if pattern.on_title and not line.title:
+                continue
             for m in pattern.regex.finditer(line.raw if pattern.on_raw else line.clean):
                 if m.group(0):
                     per_block.setdefault(-1 if pattern.per_file else line.block, []).append(
@@ -691,17 +857,21 @@ def korean_lines(lines: list[ProseLine]) -> list[ProseLine]:
     return [line for line in lines if HANGUL_CHAR.search(line.clean)]
 
 
-def scan_text(text: str, lane: str, patterns: list[Pattern], terms: list[Term]) -> dict:
+def scan_text(text: str, lane: str, patterns: list[Pattern], terms: list[Term], as_title: bool = False) -> dict:
     """Scan one document and report HOW MUCH was scanned alongside what was found.
 
     `scanned` and `korean_source` are the difference between "read it, it is
     clean" and "read none of it" - two opposite answers that a findings list
-    alone renders identically, as an empty one.
+    alone renders identically, as an empty one. `as_title` treats every line
+    as a title, for judging a pasted headline.
     """
     lines = korean_lines(EXTRACTORS[lane](text))
+    if as_title:
+        lines = [dataclasses.replace(line, title=True) for line in lines]
     return {
         "lane": lane,
-        "scanned": len(lines),
+        "scanned": len({line.lineno for line in lines}),
+        "title_lines": sorted({line.lineno for line in lines if line.title}),
         "korean_source": bool(HANGUL_CHAR.search(text)),
         "patterns": scan_patterns(lines, patterns),
         "terms": scan_terms(lines, terms),
@@ -712,7 +882,8 @@ def scan_text(text: str, lane: str, patterns: list[Pattern], terms: list[Term]) 
 def format_text(report: dict) -> str:
     out: list[str] = []
     for item in report["files"]:
-        out.append(f"== {item['path']} ({item['lane']}, {item['scanned']} Korean lines)")
+        titles = f", {len(item['title_lines'])} titles" if item["title_lines"] else ""
+        out.append(f"== {item['path']} ({item['lane']}, {item['scanned']} Korean lines{titles})")
         if item["korean_source"] and not item["scanned"]:
             out.append(f"  !! nothing was scanned: this file holds Korean, but the `{item['lane']}`")
             out.append("     extractor read none of it. An empty result here means the lane is")
@@ -746,8 +917,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("files", nargs="*", type=Path, help="files to scan")
     parser.add_argument(
-        "--lane", choices=("auto", "md", "yaml", "yaml-all", "text"), default="auto"
+        "--lane", choices=("auto", *EXTRACTORS), default="auto"
     )
+    parser.add_argument("--title", action="store_true", help="treat every line as a title (a pasted headline)")
     parser.add_argument("--stdin", action="store_true", help="scan text from standard input")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
     parser.add_argument(
@@ -804,14 +976,14 @@ def main(argv: list[str] | None = None) -> int:
     report: dict = {"files": []}
     if args.stdin:
         lane = "text" if args.lane == "auto" else args.lane
-        report["files"].append({"path": "<stdin>", **scan_text(sys.stdin.read(), lane, patterns, terms)})
+        report["files"].append({"path": "<stdin>", **scan_text(sys.stdin.read(), lane, patterns, terms, args.title)})
     for path in args.files:
         if not path.is_file():
             print(f"scan.py: not a file: {path}", file=sys.stderr)
             return EXIT_USAGE
         text = path.read_text(encoding="utf-8")
         lane = detect_lane(path, text) if args.lane == "auto" else args.lane
-        report["files"].append({"path": str(path), **scan_text(text, lane, patterns, terms)})
+        report["files"].append({"path": str(path), **scan_text(text, lane, patterns, terms, args.title)})
 
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))

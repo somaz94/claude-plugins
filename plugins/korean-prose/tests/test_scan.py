@@ -88,7 +88,7 @@ class ShippedLexiconTest(unittest.TestCase):
         patterns, terms, _ = scan.load_lexicon(scan.LEXICON_DIR)
         for pattern in patterns:
             text = "\n".join([pattern.example] * pattern.min_count)
-            report = scan.scan_text(text, "text", [pattern], [])
+            report = scan.scan_text(text, "text", [pattern], [], as_title=pattern.on_title)
             with self.subTest(pattern=pattern.id):
                 self.assertEqual([hit["id"] for hit in report["patterns"]], [pattern.id])
 
@@ -100,7 +100,8 @@ class ShippedLexiconTest(unittest.TestCase):
             for counterexample in pattern.counterexamples:
                 text = "\n".join([counterexample] * pattern.min_count)
                 with self.subTest(pattern=pattern.id, counterexample=counterexample):
-                    self.assertEqual(scan.scan_text(text, "md", [pattern], [])["patterns"], [])
+                    report = scan.scan_text(text, "md", [pattern], [], as_title=pattern.on_title)
+                    self.assertEqual(report["patterns"], [])
 
     def test_canary_spelled_three_ways_is_reported(self):
         # Regression: the reviewer missed `카나리` next to `Canary` until the user pointed at it.
@@ -111,6 +112,27 @@ class ShippedLexiconTest(unittest.TestCase):
         self.assertEqual({f["form"]: f["lines"] for f in canary["forms"]},
                          {"카나리": [1], "Canary": [2], "canary": [3]})
 
+
+    def test_rejected_deck_headlines_are_reported(self):
+        # Regression: a deck review on 2026-10-14 passed every one of these headlines.
+        patterns, _, _ = scan.load_lexicon(scan.LEXICON_DIR)
+        rejected = {
+            "정기 점검, 사람 손에서 스케줄 · 스크립트로": "title-dangling-particle",
+            "minor 이상은 확인 뒤에": "title-dangling-particle",
+            "로그는 빠짐없이, 한 번만": "title-dangling-particle",
+            "한 번의 완벽함보다 수백 번의 똑같고 안전한 반복": "title-boda-slogan",
+            "끄는 순서가 곧 데이터를 지키는 순서": "title-got-equation",
+            "구조 변경으로 닫은 장애": "calque-incident-close",
+            "RabbitMQ reset 후 재가입": "calque-rejoin",
+        }
+        for line, pid in rejected.items():
+            with self.subTest(line=line):
+                hits = scan.scan_text(line, "text", patterns, [], as_title=True)["patterns"]
+                self.assertIn(pid, [h["id"] for h in hits])
+        for line in ("운영 원칙", "정전 작업 대비 계획 정지 · 기동 절차", "운영 중 전환과 점검 시간의 기준"):
+            with self.subTest(line=line):
+                hits = scan.scan_text(line, "text", patterns, [], as_title=True)["patterns"]
+                self.assertEqual([h["id"] for h in hits if h["category"] == "headline"], [])
 
     def test_english_only_lines_are_out_of_scope(self):
         patterns, terms, _ = scan.load_lexicon(scan.LEXICON_DIR)
@@ -198,6 +220,15 @@ class LexiconValidationTest(unittest.TestCase):
         raw_row = pattern_row(regex="(?#raw)</code> 를", example="</code> 를", counterexample="<code>x</code> 를")
         self.assertIn("matches its regex", self.problems(patterns=[raw_row])[0])
 
+    def test_scope_marks_combine_in_either_order(self):
+        with LexiconDir(patterns=[pattern_row("t", regex="(?#title)로$", example="스크립트로"),
+                                  pattern_row("tr", regex="(?#title)(?#raw)</b>로", example="</b>로"),
+                                  pattern_row("rt", regex="(?#raw)(?#title)</b>로", example="</b>로")]) as path:
+            patterns, _, problems = scan.load_lexicon(path)
+        self.assertEqual(problems, [])
+        self.assertEqual({p.id: (p.on_title, p.on_raw) for p in patterns},
+                         {"t": (True, False), "tr": (True, True), "rt": (True, True)})
+
     def test_empty_id(self):
         self.assertIn("empty id", self.problems(patterns=[pattern_row(pid="")])[0])
 
@@ -280,6 +311,76 @@ class MarkdownExtractionTest(unittest.TestCase):
             self.assertNotIn(hidden, line.clean)
         for kept in ("링크", "굵게", "그리고"):
             self.assertIn(kept, line.clean)
+
+
+class HtmlExtractionTest(unittest.TestCase):
+    def lines(self, text: str) -> list[tuple[int, bool, str]]:
+        return [(line.lineno, line.title, " ".join(line.clean.split())) for line in scan.extract_html(text)]
+
+    def test_visible_text_keeps_its_source_line_and_column(self):
+        text = '<section>\n  <h2 class="x" title="속성">제목 &middot; 둘</h2>\n  <p>본문\n  둘째 줄</p>\n</section>'
+        lines = scan.extract_html(text)
+        source = text.split("\n")
+        self.assertEqual([(l.lineno, l.title) for l in lines], [(2, True), (3, False), (4, False)])
+        for line in lines:
+            self.assertEqual(len(line.clean), len(source[line.lineno - 1]))
+        self.assertEqual(lines[0].clean.index("제목"), source[1].index("제목"))
+        self.assertIn("·", lines[0].clean)
+        self.assertNotIn("속성", lines[0].clean)
+
+    def test_script_style_comments_and_code_are_not_prose(self):
+        text = "\n".join([
+            "<style>.a::after { content: '스타일' }</style>",
+            "<script>",
+            "const s = '스크립트';",
+            "</script>",
+            "<!-- 주석",
+            "주석 둘째 줄 -->",
+            "<p>본문 <code>코드</code> 끝</p>",
+        ])
+        self.assertEqual(self.lines(text), [(7, False, "본문 끝")])
+        (line,) = scan.extract_html(text)
+        self.assertIn("<code>코드</code>", line.raw)
+        self.assertEqual(scan.extract_html("<script>\n'스크립트'\n</script>"), [])
+
+    def test_title_elements(self):
+        text = "\n".join([
+            "<h1>하나</h1>",
+            "<h4>넷<span class=\"sub\">부제</span></h4>",
+            "<p class=\"lead\">리드</p>",
+            "<div class=\"strip wide\">스트립</div>",
+            "<p class=\"slide-lead\">하이픈 리드</p>",
+            "<table><tr><th>머리</th><td>칸</td></tr></table>",
+            "<p class=\"leader\">본문</p>",
+        ])
+        self.assertEqual(self.lines(text), [
+            (1, True, "하나"),
+            (2, True, "넷 부제"),
+            (3, True, "리드"),
+            (4, True, "스트립"),
+            (5, True, "하이픈 리드"),
+            (6, True, "머리"),
+            (6, False, "칸"),
+            (7, False, "본문"),
+        ])
+
+    def test_a_shared_line_splits_by_role(self):
+        (title, body) = scan.extract_html("<div><h4>제목</h4><p>본문으로</p></div>")
+        self.assertEqual((title.title, title.clean.strip(), body.title, body.clean.strip()),
+                         (True, "제목", False, "본문으로"))
+        self.assertNotIn("본문", title.raw)
+        self.assertNotIn("제목", body.raw)
+
+    def test_void_and_unclosed_tags_do_not_leak_title(self):
+        text = "<h2>제목<br>둘째<img src=x></h2>\n<p>본문</p>"
+        self.assertEqual(self.lines(text), [(1, True, "제목 둘째"), (2, False, "본문")])
+
+    def test_character_references_and_self_closing_tags(self):
+        # A reference decodes in its first column and pads the rest, so columns survive.
+        raw = "<p>가&#183;나&nbsp;다<code>&amp;라</code><div/>마</p>"
+        (line,) = scan.extract_html(raw)
+        self.assertEqual(" ".join(line.clean.split()), "가· 나 다 마")
+        self.assertEqual(line.clean.index("·"), raw.index("&#183;"))
 
 
 class YamlExtractionTest(unittest.TestCase):
@@ -423,6 +524,15 @@ class PatternPassTest(unittest.TestCase):
     def test_empty_matches_are_ignored(self):
         patterns = self.lexicon(pattern_row(regex="z*", example="z"))
         self.assertEqual(scan.scan_patterns(scan.extract_text("가나다"), patterns), [])
+
+    def test_title_scope_fires_on_title_lines_only(self):
+        patterns = self.lexicon(pattern_row(regex="(?#title)로\\s*$", example="스크립트로"))
+        html = scan.extract_html("<h2>스크립트로</h2>\n<p>스크립트로</p>\n<div><h3>둘째로</h3><p>본문으로</p></div>")
+        (hit,) = scan.scan_patterns(html, patterns)
+        self.assertEqual([o["line"] for o in hit["occurrences"]], [1, 3])
+        (hit,) = scan.scan_patterns(scan.extract_markdown("## 스크립트로\n본문으로\n"), patterns)
+        self.assertEqual([o["line"] for o in hit["occurrences"]], [1])
+        self.assertEqual(scan.scan_patterns(scan.extract_text("스크립트로"), patterns), [])
 
     def test_results_sorted_by_severity_then_id(self):
         patterns = self.lexicon(
@@ -680,9 +790,24 @@ class CliTest(unittest.TestCase):
 
     def test_detect_lane(self):
         self.assertEqual(
-            [scan.detect_lane(Path(n)) for n in ("a.yaml", "b.YML", "c.markdown", "d.md", "e.txt")],
-            ["yaml", "yaml", "md", "md", "text"],
+            [scan.detect_lane(Path(n)) for n in ("a.yaml", "b.YML", "c.markdown", "d.md", "e.txt", "f.html", "g.HTM")],
+            ["yaml", "yaml", "md", "md", "text", "html", "html"],
         )
+
+    def test_html_report_names_its_titles(self):
+        path = self.write("deck.html", "<h2>점검 시간에</h2>\n<p>점검 시간에 진행</p>\n")
+        code, out, _ = run_main(["--json", str(path)])
+        report = json.loads(out)["files"][0]
+        self.assertEqual((code, report["lane"], report["scanned"], report["title_lines"]), (scan.EXIT_OK, "html", 2, [1]))
+        hit = next(p for p in report["patterns"] if p["id"] == "title-dangling-particle")
+        self.assertEqual([o["line"] for o in hit["occurrences"]], [1])
+        _, out, _ = run_main([str(path)])
+        self.assertIn("(html, 2 Korean lines, 1 titles)", out)
+
+    def test_title_flag_treats_pasted_text_as_a_headline(self):
+        ids = lambda argv: [p["id"] for p in json.loads(run_main(argv, stdin="점검 시간에\n")[1])["files"][0]["patterns"]]
+        self.assertEqual(ids(["--stdin", "--json"]), [])
+        self.assertEqual(ids(["--stdin", "--json", "--title"]), ["title-dangling-particle"])
 
 
 if __name__ == "__main__":

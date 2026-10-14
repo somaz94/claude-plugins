@@ -1,5 +1,5 @@
 ---
-description: 'Korean-naturalness review via the awkward-korean-reviewer agent — two lanes (Korean Markdown · bilingual `{ ko, en }` YAML) and two modes (감사 file sweep, read-only · 판정 single-item verdict, Edit after 전/후 approval), starting from a bundled lexicon scan'
+description: 'Korean-naturalness review via the awkward-korean-reviewer agent — two lanes (Korean Markdown and HTML decks · bilingual `{ ko, en }` YAML) and two modes (감사 file sweep, read-only · 판정 single-item verdict, Edit after 전/후 approval), starting from a bundled lexicon scan'
 argument-hint: "[file | dir | pasted rewrite | empty=changed KO surfaces]"
 allowed-tools: Read, Grep, Glob, Bash, Edit
 ---
@@ -16,7 +16,7 @@ User invocation argument: `$ARGUMENTS`
 
 Neither lane is the default and neither is supplementary. Pick from what the target is.
 
-- **Lane A — Korean Markdown**: any `.md` whose body is predominantly Korean prose — a README, a docs page, a blog post draft, a design note.
+- **Lane A — Korean Markdown and HTML**: any `.md` whose body is predominantly Korean prose — a README, a docs page, a blog post draft, a design note — and Korean HTML such as a slide deck or a cover letter. For HTML the scanner reads the visible text only, at its source line, and tags which lines are titles. HTML is review-only: the agent proposes, never edits.
 - **Lane B — Korean YAML data**, decided from the file and never from a list of filenames: a `ko:` key means **bilingual** (the `ko:` half only); Hangul with no `ko:` key means **monolingual Korean** (every authored value, minus any block a script regenerates from upstream). The scanner splits on the same test, so the two cannot disagree about what a file is. A monolingual file runs to thousands of Korean lines — name the block being swept rather than sweeping the file.
 
 Out of scope in both lanes: the `en:` half, `*-en.md`, English `.md`, code blocks, inline code, URLs, paths, and source-file comments.
@@ -48,7 +48,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/scan.py" --json <file> [<file> ...]
 
 - **판정 모드**: pipe the pasted text instead — `printf '%s\n' '<text>' | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/scan.py" --stdin --json`.
 - **A non-zero exit means stop and report, and there are two reasons for one.** A broken lexicon (exit 1) silently hides candidates. **Exit 3 means nothing was scanned** — the file holds Korean and the lane read none of it, so an empty findings list is a lane fault, not a clean file. Never report a sweep as clean on a run that exited non-zero.
-- **Check the `N Korean lines` in each file's header before reading its findings.** The lane is picked from the extension, and for `.yml` / `.yaml` from the file itself: a `ko:` key means bilingual (the `ko:` half only), no `ko:` key means monolingual Korean (every authored value, lane `yaml-all`). `--lane md|yaml|yaml-all|text` overrides.
+- **Check the `N Korean lines` in each file's header before reading its findings.** The lane is picked from the extension, and for `.yml` / `.yaml` from the file itself: a `ko:` key means bilingual (the `ko:` half only), no `ko:` key means monolingual Korean (every authored value, lane `yaml-all`). `.html` / `.htm` gets the `html` lane. `--lane md|yaml|yaml-all|html|text` overrides.
+- **Title lines.** A Markdown heading is a title, and so are an HTML `h1`–`h6`, a `th`, and an element whose class names `lead` or `strip`. The `headline` rows fire on title lines only, the JSON lists them as `title_lines`, and the header adds `, M titles`. In 판정 mode on a pasted headline, add `--title`.
 - Put the JSON in the delegation prompt; the agent uses it instead of re-running.
 
 <br/>
@@ -61,6 +62,8 @@ State the lane and the mode in one line, then invoke. The agent runs two passes:
 2. **대조 pass** — the findings a token scan cannot see, and the reason a clean token sweep is not a clean review: **형제 구조 이탈** (one bullet shaped unlike its siblings), **이웃 중복** (two items repeating one rationale), **과장 드리프트** (`최소화` / `차단` / `완전` where the evidence says `경감` / `방지`), **표기 일관성** file-wide (`Pod` vs `파드`), **용어 도입 관례** (a bare English concept in prose that glosses every other one).
 
 Every 대조 finding must carry its evidence — the sibling lines compared, or the two grep counts. Without it the finding is unfalsifiable and the user cannot check it.
+
+**Never frame a deck review as "match the siblings' shape".** When every slide title shares one defect (all sentences, all half-sentences, all slogans), 형제 구조 이탈 has no outlier to report. Judge each title against the agent's headline rule (§ 3, 제목 장르) and report a shared defect once, deck-wide.
 
 <br/>
 
@@ -92,7 +95,7 @@ The agent never edits these files itself.
 - The `en:` half, `*-en.md`, and English `.md` are out of scope in every mode — never rewritten, not even to match a KO change. If a KO fix breaks KO↔EN parity, say so and stop.
 - Pair / structural drift (heading-count, code-block, table drift between the two copies) is **not** this command's job → the `doc-mirror` plugin.
 - Preserve every fact, number, English technology label, code block, link, and path in every rewrite; match the document's existing tone and register.
-- **Fix the word, not the sentence.** Default to a word or short-phrase swap and leave the rest of the sentence as written. An awkward Korean word may become the English term the audience actually says (`회전 → 로테이션`, `경유 경로 → transitive routing`); a natural Korean word is never anglicized. A whole-sentence rewrite is reserved for structural defects no swap can fix. Text meant to be spoken (scripts) also gets a homophone check (`감사`, `이전`). The full rule is the agent's § 5.
+- **Fix the word, not the sentence.** Default to a word or short-phrase swap and leave the rest of the sentence as written. An awkward Korean word may become the English term the audience actually says (`회전 → 로테이션`, `경유 경로 → transitive routing`); a natural Korean word is never anglicized. A whole-sentence rewrite is reserved for structural defects no swap can fix, and a title's shape is one: a title may be rewritten whole. Text meant to be spoken (scripts) also gets a homophone check (`감사`, `이전`). The full rule is the agent's § 5.
 - Never invent a metric, a headcount, or any number. If a fact looks wrong, flag it — do not silently change it.
 - Never add, remove, reorder, merge, or split a heading, section, list item, or table row. This is a text-only pass.
 

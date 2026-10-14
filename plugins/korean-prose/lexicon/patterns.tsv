@@ -2,7 +2,9 @@
 # One row per pattern. Tab-separated; lines starting with # are comments.
 #   severity   red | yellow | green
 #   regex      Python re, run per line of prose with markup blanked;
-#              prefix (?#raw) to run it on the line with markup kept
+#              prefix (?#raw) to run it on the line with markup kept, and
+#              (?#title) to run it on title lines only (headings, HTML lead /
+#              strip lines, table headers, or every line under --title)
 #   min_count  N: report only when one paragraph holds N hits (a blank-line block
 #              in Markdown/text, one ko: value in YAML); file:N counts the whole file
 #   example    a string the regex must match (checked by --check-lexicon)
@@ -244,3 +246,11 @@ config-seoljeong	green	redundancy	(?<![A-Za-z`])(?<![A-Za-z] )config 설정	1	SS
 calque-heowi-eumseong	yellow	calque	허위\s?(?:음성|양성)	1	트래픽 실재 여부 (허위 음성 배제)	false negative/positive is 거짓 음성/양성 (위음성); `허위` means fabricated, as in a false report.	`거짓 음성`, `위음성`	거짓 음성을 배제한다|허위 신고가 접수됐다
 calque-metric-reads	yellow	calque	(?:메트릭|지표|게이지|gauge|카운터)[이가]?\s?(?:[가-힣]+\s)?(?:무엇|얼마|몇)[을를]?\s?읽	1	그 메트릭이 얼마를 읽고	English "the gauge reads 50,000"; in Korean a meter shows or points to a value, it does not read it.	`어떤 값을 보이는지`, `얼마를 가리키는지`	메트릭 이름이 무엇으로 읽히는지|책을 얼마나 읽었는지
 calque-encode-guarantee	yellow	calque	인코딩(?:한|하는|된|하고\s?있는)\s?(?:보장|의도|규칙|가정|지식|정책)	1	그 정책이 인코딩한 보장이 무효	"the guarantee a policy encodes"; Korean 인코딩 is data encoding only.	`정책이 지키는 보장`, `규칙에 담긴 의도`	UTF-8로 인코딩한 문자열|Base64로 인코딩된 값
+calque-rejoin	yellow	calque	(?:노드|멤버|브로커|클러스터|RabbitMQ|etcd|Galera|Ceph|OSD|reset)[^.\n]{0,20}?재가입|재가입(?:시키|시켜|시킨|시켰)	1	RabbitMQ reset 후 재가입	`가입` is a person signing up for a service; a node or member coming back into a cluster is join / rejoin, which the audience says in English.	`클러스터에 다시 join`, `rejoin`	탈퇴한 회원이 재가입하면 이전 기록은 남지 않는다
+calque-saseol-path	yellow	calque	사설\s?(?:경로|연결|회선|링크)	1	온프레미스 사설 경로 확보	`사설` is settled for RFC 1918 addressing (`사설 IP`, `사설 주소`, `사설망`), not for a path or connection that avoids the public internet; cloud docs call that private connectivity.	`프라이빗 경로`, `프라이빗 연결`	사설 IP 대역을 VPC에 할당한다|IP·포트를 변환해 사설망을 인터넷에 연결|사설 주소를 공인 주소로 바꿔 내보낸다
+calque-promote-deploy	yellow	calque	(?:Blue-?Green|Blue/Green|블루\s?그린|Canary|카나리|롤아웃|[Rr]ollouts?|[Pp]review|프리뷰)[^.\n]{0,15}?승격|자동\s?승격	1	Blue-Green 승격 시 503	Argo Rollouts and Blue-Green tooling call this step promote; `승격` reads as a rank promotion.	`promote`, `promote 시점`	권한 승격 취약점을 막았다|검증한 아티팩트를 재빌드 없이 상위 환경으로 승격한다
+calque-incident-close	yellow	calque	장애(?:를|가)?\s?닫(?:았|은|고|아|는|기|힌|혀)|닫(?:은|힌)\s장애(?!인)	1	구조 변경으로 닫은 장애	Closing an incident is ticket vocabulary; in Korean an incident is resolved, or its recurrence prevented.	`해결한 장애`, `재발을 막은 장애`	문을 닫은 장애인 복지관|장애가 난 포트를 닫았다
+calque-stalled-version	yellow	calque	멈춰\s?있던\s(?:v?\d+\.[\dxX]|[A-Za-z][\w-]*\s?v?\d+\.[\dxX]|(?:구|이전|옛)?\s?버전)	1	멈춰 있던 8.x	A version left un-upgraded has not stopped; `멈추다` is a process halting, so the phrase reads as a crashed 8.x.	`오래 머물던 8.x`, `업그레이드가 정체된 8.x`	컨트롤러가 멈춰 있던 동안 지나간 시각|멈춰 있던 인스턴스를 다시 켰다|멈춰 있던 시간이 이미지를 기다리는 시간으로 바뀌었다
+title-dangling-particle	yellow	headline	(?#title)(?:(?<![경회통기제프플항진수미철선대])(?:으로|로)|(?<!한눈)에(?:서)?|까지|(?<![\d불자오충])만)\s*$	1	정기 점검, 사람 손에서 스케줄 · 스크립트로	A title ending on a particle has dropped its verb, and the reader has to finish the sentence. Titles end on a noun.	End on the noun that names the content: `정기 점검 자동화`, `운영 중 전환과 점검 시간의 기준`	권장 워크플로|접근 통제 한눈에|롤백 · 재기동이 가능한 설계|운영 원칙
+title-boda-slogan	yellow	headline	(?#title)\S*[가-힣A-Za-z0-9]보다(?![^.!?]*\S[을를]\s)\s+\S+\s+\S	1	한 번의 완벽함보다 수백 번의 똑같고 안전한 반복	`A보다 B` with no predicate is a slogan; a title names what the section shows.	A plain label: `운영 원칙`, `반복 가능한 배포 절차`	deleted 가 예상보다 큼|Helm보다 Kustomize를 고른 이유|Ingress보다 Gateway API를 고른 이유
+title-got-equation	yellow	headline	(?#title)[가-힣](?:이|가|은|는)\s곧\s	1	끄는 순서가 곧 데이터를 지키는 순서	`A가 곧 B` is an aphorism: it states a belief instead of naming the section.	Name the content: `정지 · 기동 순서와 데이터 정합성`	곧 나올 기능 목록|출시 일정과 곧 바뀔 설정
