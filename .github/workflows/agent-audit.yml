@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Audit
-        uses: somaz94/agentic-workflow-guard@92d02e4238a52e36556fe401f747f4a18a4e2249
+        uses: somaz94/agentic-workflow-guard@v1
         with:
           fail_on: none
           sarif_file: agent-audit.sarif
