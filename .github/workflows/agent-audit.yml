@@ -1,0 +1,36 @@
+name: Audit agent workflows
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+      - '.claude/**'
+      - '.mcp.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Agent workflow audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Audit
+        uses: somaz94/agentic-workflow-guard@92d02e4238a52e36556fe401f747f4a18a4e2249
+        with:
+          fail_on: none
+          sarif_file: agent-audit.sarif
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: agent-audit.sarif
