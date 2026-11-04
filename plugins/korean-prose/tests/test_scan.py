@@ -134,6 +134,28 @@ class ShippedLexiconTest(unittest.TestCase):
                 hits = scan.scan_text(line, "text", patterns, [], as_title=True)["patterns"]
                 self.assertEqual([h["id"] for h in hits if h["category"] == "headline"], [])
 
+    def test_rejected_noun_ending_headings_are_reported(self):
+        # Regression: on 2026-11-04 a post's headings all ended on a noun, passed every row, and were rejected.
+        patterns, _, _ = scan.load_lexicon(scan.LEXICON_DIR)
+        rejected = {
+            "고칠 때 보는 것": "title-empty-head-noun",
+            "추적에서 놓치기 쉬운 것": "title-empty-head-noun",
+            '"기록 없음"이 알려 주는 것': "title-empty-head-noun",
+            "계기와 근본 원인의 구분": "title-ui-nominal",
+            "원인이 하나라는 전제의 문제": "title-ui-nominal",
+            "5 Whys를 쓸 때의 원칙": "title-ui-nominal",
+            "5 Whys를 쓰는 법과 그 한계": "title-geu-pronoun",
+        }
+        for line, pid in rejected.items():
+            with self.subTest(line=line):
+                hits = scan.scan_text(line, "text", patterns, [], as_title=True)["patterns"]
+                self.assertIn(pid, [h["id"] for h in hits])
+        for line in ("고칠 때 확인할 점", "계기와 근본 원인 나누기", "5 Whys: 쓰는 법과 한계", "원인은 하나인가",
+                     "L2에서 브리지가 하는 일", "추가로 확인할 것", "샤딩의 필요성"):
+            with self.subTest(line=line):
+                hits = scan.scan_text(line, "text", patterns, [], as_title=True)["patterns"]
+                self.assertEqual([h["id"] for h in hits if h["category"] == "headline"], [])
+
     def test_english_only_lines_are_out_of_scope(self):
         patterns, terms, _ = scan.load_lexicon(scan.LEXICON_DIR)
         text = "The incident was a Canary rollout.\nWebhook and webhook\n카나리 배포\n"
