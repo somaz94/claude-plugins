@@ -68,7 +68,7 @@ Each is reported with its evidence — the sibling lines compared, or the two co
 
 **감사** is a sweep: point it at a file, a directory, or nothing, and get every finding categorized. Read-only, always — a bulk apply you have not read line by line is exactly what that restriction exists to prevent.
 
-**판정** is a verdict on one thing: you rewrote a sentence and want to know whether it is better. It reads the item *in place* with its siblings, keeps the improvements your version already made and says which ones it kept, and can apply the merged line — after showing 전/후 in full and being told yes.
+**판정** is a verdict on one thing: you rewrote a sentence and want to know whether it is better. It reads the item *in place* with its siblings, keeps the improvements your version already made and says which ones it kept, and returns the merged line as one ready-to-apply edit. The agent has no `Edit` tool; the `/korean-prose:review` command shows you 전/후 in full and applies the edit itself only after you say yes. A sub-agent cannot ask you, and an approval relayed through another agent is not yours.
 
 Somebody holding one rewritten sentence does not want a forty-finding file audit. When the invocation is ambiguous the plugin asks in one line and defaults to 판정, because that is the cheaper wrong answer.
 
@@ -88,7 +88,7 @@ In a bilingual file it reads the `en:` sibling **first**. These documents are us
 
 - Changes what the text claims. Numbers, technology labels, dates, and arrows survive every rewrite; a fact that looks wrong is flagged, never silently corrected.
 - Edits in 감사 mode, however obvious the fix looks.
-- Edits in 판정 mode without showing 전/후 in full and being told yes — and one approval covers one item, never the file.
+- Edits a file itself. In 판정 mode the edit goes back to the main session, which applies it only after showing 전/후 in full and being told yes — and one approval covers one item, never the file.
 - Touches the `en:` half or any English document.
 - Adds, removes, reorders, merges, or splits a heading, section, list item, or table row.
 - Flags a spaced em-dash. It is deliberate in technical prose, and a rule against it buries every real finding.

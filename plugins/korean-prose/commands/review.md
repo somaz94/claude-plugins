@@ -1,5 +1,5 @@
 ---
-description: 'Korean-naturalness review via the awkward-korean-reviewer agent — two lanes (Korean Markdown and HTML decks · bilingual `{ ko, en }` YAML) and two modes (감사 file sweep, read-only · 판정 single-item verdict, Edit after 전/후 approval), starting from a bundled lexicon scan'
+description: 'Korean-naturalness review via the awkward-korean-reviewer agent — two lanes (Korean Markdown and HTML decks · bilingual `{ ko, en }` YAML) and two modes (감사 file sweep, read-only · 판정 single-item verdict, applied by this command after 전/후 approval), starting from a bundled lexicon scan'
 argument-hint: "[file | dir | pasted rewrite | empty=changed KO surfaces]"
 allowed-tools: Read, Grep, Glob, Bash, Edit
 ---
@@ -69,8 +69,8 @@ Every 대조 finding must carry its evidence — the sibling lines compared, or 
 
 ## Step 2 — Apply, item by item
 
-- **감사 모드 output is read-only.** The agent must not edit in this mode, however obvious a fix looks. It ends by offering to apply specific items.
-- **판정 모드 may apply** — but only after showing 전/후 **in full** (no diff fragments, no `…` elision) and being told yes. One approval covers one item, never the rest of the file.
+- **감사 모드 output is read-only.** The agent returns no edit in this mode, however obvious a fix looks. It ends by offering to apply specific items.
+- **판정 모드: this command applies, the agent does not.** The agent has no `Edit` tool: a sub-agent cannot ask the user, and an approval relayed through another agent is not the user's. It returns one edit (path, `old_string`, `new_string`); show 전/후 **in full** (no diff fragments, no `…` elision), and apply it with `Edit` only after the user says yes. One approval covers one item, never the rest of the file. Never hand an approved edit back to the agent.
 - Cross-file sync is part of the edit: a `ko:` string living in two files is edited in both in the same turn, or in neither.
 - After any YAML edit, run a parse check and report it.
 - Surface the commit as the user's next step. The agent never commits, pushes, or runs a build target.

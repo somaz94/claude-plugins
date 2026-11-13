@@ -1,5 +1,5 @@
 ---
-description: '`awkward-korean-reviewer` 에이전트로 하는 한국어 자연스러움 리뷰 — 레인 2개 (한국어 Markdown 과 HTML 덱 · bilingual `{ ko, en }` YAML) 와 모드 2개 (감사: 파일 스윕, read-only · 판정: 단일 항목, 전/후 승인 후 Edit), 번들 사전 스캔에서 출발'
+description: '`awkward-korean-reviewer` 에이전트로 하는 한국어 자연스러움 리뷰 — 레인 2개 (한국어 Markdown 과 HTML 덱 · bilingual `{ ko, en }` YAML) 와 모드 2개 (감사: 파일 스윕, read-only · 판정: 단일 항목, 전/후 승인 후 이 command가 적용), 번들 사전 스캔에서 출발'
 argument-hint: "[file | dir | pasted rewrite | empty=변경된 KO 표면]"
 allowed-tools: Read, Grep, Glob, Bash, Edit
 ---
@@ -73,8 +73,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/scan.py" --json <file> [<file> ...]
 
 ## 2단계 — 항목 단위로 적용
 
-- **감사 모드 출력은 read-only 입니다.** 수정이 아무리 명백해 보여도 이 모드에서 편집하면 안 됩니다. 특정 항목을 적용하겠다고 제안하며 끝냅니다.
-- **판정 모드는 적용 가능** — 단 전/후를 **전문으로** 보이고 (diff 조각 금지, `…` 생략 금지) 승인을 받은 뒤에만. 승인 1건은 항목 1건에만 해당하며, 파일의 나머지로는 절대 넓어지지 않습니다.
+- **감사 모드 출력은 read-only 입니다.** 수정이 아무리 명백해 보여도 에이전트는 이 모드에서 편집을 돌려주지 않습니다. 특정 항목을 적용하겠다고 제안하며 끝냅니다.
+- **판정 모드: 적용은 이 command가 하고, 에이전트는 하지 않습니다.** 에이전트에는 `Edit` 도구가 없습니다. sub-agent는 사용자에게 물을 수 없고, 다른 에이전트를 거쳐 전달된 승인은 사용자의 승인이 아니기 때문입니다. 에이전트는 편집 하나(경로, `old_string`, `new_string`)를 돌려줍니다. 전/후를 **전문으로** 보이고 (diff 조각 금지, `…` 생략 금지) 사용자가 승인한 뒤에만 `Edit`로 적용합니다. 승인 1건은 항목 1건에만 해당하며, 파일의 나머지로는 절대 넓어지지 않습니다. 승인된 편집을 에이전트에게 되돌려 맡기지 않습니다.
 - cross-file sync는 편집의 일부입니다: 같은 `ko:` 문자열이 두 파일에 있으면 같은 턴에 둘 다 편집하거나 둘 다 편집하지 않습니다.
 - YAML 편집 후에는 parse 체크를 돌리고 결과를 보고합니다.
 - 커밋은 사용자가 할 다음 단계로 안내합니다. 에이전트는 커밋도, 푸시도, build 타깃 실행도 하지 않습니다.
