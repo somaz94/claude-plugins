@@ -29,7 +29,8 @@ ilhwan	red	translationese	의 일환으로|의 차원에서|[을를] 위시한	1
 untranslated-noun	red	translationese	(?i:(?<![A-Za-z(])(?:incidents?|silent failures?|estate)(?![A-Za-z]))|이슈 발생	1	incident 대응 절차	A plain English common noun left in Korean prose where a Korean word exists; distinct from product names and kept tech labels.	`incident → 장애`, `silent failure → 감지되지 않는 장애`, `estate → 환경 / 인프라`
 calque-apryeok	red	calque	압력	1	디스크 압력을 완화	Korean `압력` is physical pressure only, never I/O load or contention.	`부하`, `경합`
 calque-jeongnyeol	red	calque	(?<![가-힣])(?<!순으로 )(?<!순서로 )(?<!기준으로 )정렬(?!\s*행)	1	두 설정을 정렬	Korean `정렬` is lining up or sorting, never "make two configs agree"; a real sort is a false positive.	`서로 맞춰`, `일치시켜`	표 행을 재정렬한다|표 파이프와 정렬 행을 유지한다|이름 순으로 정렬하고|검색 결과를 기준으로 정렬한다
-calque-suryeom	red	calque	수렴	1	드리프트를 수렴	Korean `수렴` is dominated by "gather opinions"; and you converge state, not drift.	`바로잡다`, `통합하다`
+calque-suryeom	red	calque	(?<!의견)(?<!여론)(?<!요구)(?<!목소리)(?<!요청)(?<!입장)[을를] ?수렴|수렴시(?:키|켜|켰)	1	드리프트를 수렴	Korean `수렴` used transitively is dominated by "gather opinions"; you converge state, not drift. Intransitive "converge to" (`~로 수렴했다`) is natural and left alone.	`바로잡다`, `통합하다`	사용자 의견을 수렴했다|몇 가지 불변식으로 수렴했습니다
+calque-misplaced	yellow	calque	잘못 놓인 (?:권한|신뢰|책임|믿음|기대|초점)|(?:권한|신뢰|책임)[이가] 잘못 놓(?:였|인|여)	1	잘못 놓인 권한이 문제였다	English "misplaced trust / authority" calqued; Korean `잘못 놓이다` is a physical object put in the wrong spot.	`권한이 엉뚱한 곳에 있었다`, `잘못 맡긴 신뢰`	책상 위에 잘못 놓인 열쇠|권한이 엉뚱한 곳에 놓였음을 보여 줍니다
 calque-jaehwaryong	red	calque	재활용	1	기존 노드를 재활용	Korean `재활용` carries a waste/garbage connotation and undercuts a "no extra investment" point.	`확장`, `이미 있던 X를 …에 활용`
 calque-jasanhwa	red	calque	자산화	1	노하우를 자산화	Abstract nominalization that leaves no picture; the real act is writing it down so it does not recur.	`기록으로 남겨`, `팀이 함께 쓰는 자료로 축적`
 calque-ganjeophwa	red	calque	간접화	1	의존성을 간접화	Not a Korean word at all; a coinage for "indirection".	`분리`, `직접 참조하지 않도록 …`
