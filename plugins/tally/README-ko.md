@@ -54,7 +54,7 @@ claude plugin install tally@somaz94
 
 먼저 스크립트를 바뀌지 않는 경로에 복사하세요. 설치된 플러그인은 버전 이름이 붙은 디렉터리에 있어서, 플러그인 캐시를 가리키는 hook은 다음 업데이트 때 아무 경고 없이 깨집니다.
 
-tier는 `--tier <tier>`로 주거나, hook 스크립트 위쪽에 `# tally: tier=<tier>` 줄을 두거나, 비워 둡니다. 기록은 `~/.claude/tally/hook-decisions/decisions-YYYY-MM.jsonl`에 쌓이고, `TALLY_LOG_DIR`로 위치를 바꿀 수 있습니다.
+tier는 `--tier <tier>`로 주거나, hook 스크립트 위쪽에 `# tally: tier=<tier>` 줄을 두거나, 비워 둡니다. 기록은 `~/.claude/tally/hook-decisions/decisions-YYYY-MM.jsonl`에 쌓이고, `TALLY_LOG_DIR`로 위치를 바꿀 수 있습니다. `tally.py`도 같은 변수를 읽으므로 두 부분이 함께 따라갑니다.
 
 래퍼는 실패해도 드러나지 않도록 만들었습니다. hook의 stdout, stderr, 종료 코드는 바이트 하나 바뀌지 않고 넘어가고, 로그 오류는 삼키며, hook이 없으면 0으로 끝납니다. 판정을 바꿀 수 있는 래퍼라면 아무도 검토하지 않은 두 번째 hook이 됩니다.
 

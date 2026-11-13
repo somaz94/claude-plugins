@@ -54,7 +54,7 @@ Put `log-wrap.sh` in front of the hook command in your `settings.json`:
 
 Copy the script to a stable path first. An installed plugin lives under a directory named after its version, so a hook pointing into the plugin cache breaks silently on the next update.
 
-The tier is `--tier <tier>`, or a `# tally: tier=<tier>` line near the top of the hook script, or empty. Records land in `~/.claude/tally/hook-decisions/decisions-YYYY-MM.jsonl`; set `TALLY_LOG_DIR` to move them.
+The tier is `--tier <tier>`, or a `# tally: tier=<tier>` line near the top of the hook script, or empty. Records land in `~/.claude/tally/hook-decisions/decisions-YYYY-MM.jsonl`; set `TALLY_LOG_DIR` to move them; `tally.py` reads the same variable, so both halves follow it.
 
 The wrapper is built to be invisible when it fails. The hook's stdout, stderr and exit code pass through byte for byte; a logging error is swallowed; a missing hook exits 0. A wrapper that could change a verdict would be a second hook nobody reviewed.
 

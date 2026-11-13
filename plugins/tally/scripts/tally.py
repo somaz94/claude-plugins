@@ -22,6 +22,7 @@ import argparse
 import datetime as dt
 import functools
 import json
+import os
 import re
 import shlex
 import sys
@@ -644,8 +645,9 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--projects", type=Path, default=home / "projects",
                     help="transcript root (default: ~/.claude/projects)")
-    ap.add_argument("--log-dir", type=Path, default=home / "tally" / "hook-decisions",
-                    help="log-wrap.sh output directory (default: ~/.claude/tally/hook-decisions)")
+    ap.add_argument("--log-dir", type=Path,
+                    default=Path(os.environ.get("TALLY_LOG_DIR") or home / "tally" / "hook-decisions"),
+                    help="log-wrap.sh output directory (default: $TALLY_LOG_DIR, else ~/.claude/tally/hook-decisions)")
     ap.add_argument("--config", type=Path, action="append",
                     help="a .claude directory to measure; repeatable (default: ~/.claude)")
     ap.add_argument("--since", type=_date, help="first day to count, YYYY-MM-DD")
