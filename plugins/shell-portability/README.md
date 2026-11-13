@@ -99,7 +99,7 @@ Out of scope: PowerShell, fish, `.bat` / `.cmd`, and POSIX-sh rewrites — the i
 ## What it never does
 
 - Runs the script under review, unless the invocation is clearly read-only (`--help`, `--dry-run`).
-- Edits a script silently. Non-trivial fixes are reported for approval.
+- Edits a file. The agent has no `Edit` tool: a sub-agent cannot ask you, and an approval relayed through the main session is not yours. Fixes you name come back as exact `old_string` → `new_string` edits, which the main session shows you and applies only after you say yes.
 - Rewrites a `bash` shebang into `sh` or `zsh`.
 - Duplicates `shellcheck`. It names it as a companion and stays on the portability axis, which shellcheck does not cover.
 
