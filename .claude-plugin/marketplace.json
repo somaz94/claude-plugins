@@ -187,6 +187,24 @@
         "research",
         "observability"
       ]
+    },
+    {
+      "name": "commit-gates",
+      "source": "./plugins/commit-gates",
+      "version": "0.1.0",
+      "description": "Commits with the approvals where they belong — a read-only agent plans the message and the file list, and the session that talks to you asks before staging and again before committing, then runs each approved command itself.",
+      "category": "productivity",
+      "license": "MIT",
+      "homepage": "https://github.com/somaz94/claude-plugins/tree/main/plugins/commit-gates",
+      "repository": "https://github.com/somaz94/claude-plugins",
+      "keywords": [
+        "git",
+        "commit",
+        "conventional-commits",
+        "approval",
+        "guardrail",
+        "sub-agent"
+      ]
     }
   ]
 }

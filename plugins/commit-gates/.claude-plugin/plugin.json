@@ -1,0 +1,20 @@
+{
+  "name": "commit-gates",
+  "version": "0.1.0",
+  "description": "Commits with the approvals where they belong — a read-only agent plans the message and the file list, and the session that talks to you asks before staging and again before committing, then runs each approved command itself.",
+  "author": {
+    "name": "somaz94",
+    "url": "https://github.com/somaz94"
+  },
+  "homepage": "https://github.com/somaz94/claude-plugins/tree/main/plugins/commit-gates",
+  "repository": "https://github.com/somaz94/claude-plugins",
+  "license": "MIT",
+  "keywords": [
+    "git",
+    "commit",
+    "conventional-commits",
+    "approval",
+    "guardrail",
+    "sub-agent"
+  ]
+}

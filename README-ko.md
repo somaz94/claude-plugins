@@ -33,6 +33,7 @@ claude plugin install census@somaz94
 | [`sensitive-guard`](plugins/sensitive-guard) | 비밀값이 커밋되는 순간 차단 — 커밋이 추가하는 줄만 훑는 마지막 관문, 그리고 공개 전에 요청해서 돌리는 전체 스캔을 제공합니다 |
 | [`korean-prose`](plugins/korean-prose) | 맞춤법 검사기가 볼 수 없는 어색함을 검토 — 한국어 문장 안에 남은 영어 골격, 생성된 텍스트의 흔적, 그리고 한 줄을 이웃 줄과 대조해야만 드러나는 문제를 잡습니다 |
 | [`doc-tidy`](plugins/doc-tidy) | 문서마다 남겨야 하는지, 어디에 둬야 하는지 판정 — 끝난 기록은 보관하고, 커밋된 세션 부산물은 지우고, 이동이 깨뜨리는 링크는 모두 다시 씁니다. 승인한 묶음만 적용합니다 |
+| [`commit-gates`](plugins/commit-gates) | 승인을 제자리에 두고 커밋합니다 — 읽기 전용 에이전트가 메시지와 파일 목록을 계획하고, 사용자와 대화하는 세션이 stage 전과 커밋 전에 한 번씩 묻습니다 |
 | [`tally`](plugins/tally) | 하네스가 한 일을 세되 무슨 말을 했는지는 남기지 않습니다 — 명령 원문 대신 hash를 남기는 hook 판정 로거, 그리고 공유하기 전에 직접 읽어 볼 수 있는 세션 기록의 개수 요약을 제공합니다 |
 
 플러그인별 문서 — 영어와 한국어 두 벌:
@@ -46,6 +47,7 @@ claude plugin install census@somaz94
 - [`sensitive-guard`](plugins/sensitive-guard) — [English](plugins/sensitive-guard/README.md) · [한국어](plugins/sensitive-guard/README-ko.md)
 - [`korean-prose`](plugins/korean-prose) — [English](plugins/korean-prose/README.md) · [한국어](plugins/korean-prose/README-ko.md)
 - [`doc-tidy`](plugins/doc-tidy) — [English](plugins/doc-tidy/README.md) · [한국어](plugins/doc-tidy/README-ko.md)
+- [`commit-gates`](plugins/commit-gates) — [English](plugins/commit-gates/README.md) · [한국어](plugins/commit-gates/README-ko.md)
 - [`tally`](plugins/tally) — [English](plugins/tally/README.md) · [한국어](plugins/tally/README-ko.md)
 
 <br/>
@@ -63,6 +65,7 @@ claude plugin install census@somaz94
 - 아무도 다시 읽지 않은 diff에 비밀값이 묻어갑니다. — [`sensitive-guard`](plugins/sensitive-guard)
 - 번역된 문서가 영어 골격을 그대로 안고 갑니다. 철자도 맞고 문법도 온전해서 아무것도 이걸 잡아내지 못하는데, 읽는 문서가 아니라 해독하는 문서가 됩니다. — [`korean-prose`](plugins/korean-prose)
 - 문서는 작업이 일어난 자리에 쌓입니다. 핸드오프가 커밋되고, 끝난 마이그레이션의 plan이 현재 문서 옆에 남고, 지난달 만료된 plan 파일을 가리키는 문장이 여전히 참조처럼 읽힙니다. — [`doc-tidy`](plugins/doc-tidy)
+- sub-agent가 "사용자가 승인했다"는 말을 전해 듣고 커밋을 직접 실행합니다. 승인 자체는 진짜였지만, 실행한 에이전트는 그 승인을 직접 듣지 못했고 어디까지 허락한 것인지도 확인할 수 없었습니다. — [`commit-gates`](plugins/commit-gates)
 - 가드를 하나 더했는데, 그게 실제 실수에 걸리는지 아무 데나 걸리는지, 읽기 전용으로 선언한 에이전트가 정말 읽기만 했는지 끝내 알지 못합니다. 답은 세션 기록에 있지만, 절대 공유하지 않을 내용과 함께 있습니다. — [`tally`](plugins/tally)
 
 하나같이 실수를 값싸게 잡을 수 있는 지점에 놓인 게이트나 보고서이지, 일이 벌어진 뒤에 오는 요약이 아닙니다. 더 나은 도구가 이미 있는 영역에서는 — 비밀값 탐지에는 `gitleaks`, 셸 린트에는 `shellcheck` — 그 도구들을 대체하지 않습니다. 그 도구들이 닿지 않는 곳, 즉 세션 안에서 커밋 명령이 끝나기 전에 돌 뿐입니다.
@@ -77,7 +80,7 @@ claude plugin install census@somaz94
 
 연구의 설계 결과 중 두 가지는 이 저장소에서 바로 확인할 수 있습니다.
 
-- **리뷰어는 계획하고, 세션이 적용합니다.** [`shell-portability`](plugins/shell-portability)와 [`korean-prose`](plugins/korean-prose)의 리뷰 에이전트에는 파일 쓰기 도구가 없습니다. 고칠 내용을 정확한 편집으로 돌려주고, 사용자와 대화하는 유일한 주체인 메인 세션이 사용자의 승인을 받은 뒤 적용합니다. sub-agent는 사용자에게 물을 수 없으므로, 다른 에이전트가 전달한 승인은 사용자의 승인이 아닙니다.
+- **리뷰어는 계획하고, 세션이 적용합니다.** [`shell-portability`](plugins/shell-portability)와 [`korean-prose`](plugins/korean-prose)의 리뷰 에이전트에는 파일 쓰기 도구가 없습니다. 고칠 내용을 정확한 편집으로 돌려주고, 사용자와 대화하는 유일한 주체인 메인 세션이 사용자의 승인을 받은 뒤 적용합니다. 상태를 바꾸는 단계 전체에 이 패턴을 적용한 예는 [`commit-gates`](plugins/commit-gates)입니다. 계획 에이전트는 `git add`와 `git commit`을 게이트 두 개로 돌려줄 뿐 실행하지 않고, command가 각 게이트 앞에서 사용자에게 묻습니다. sub-agent는 사용자에게 물을 수 없으므로, 다른 에이전트가 전달한 승인은 사용자의 승인이 아닙니다.
 - **가드는 실패하면 통과시키고, 헛경보를 내지 않도록 맞춥니다.** [`release-guards`](plugins/release-guards)는 막는 대신 묻고, [`sensitive-guard`](plugins/sensitive-guard)는 커밋이 추가하는 줄에서만 막아서 이미 있던 발견 사항이 모든 커밋을 막지 않게 합니다.
 
 [`tally`](plugins/tally)는 측정을 맡습니다. 하네스 주인이 세션 기록을 한 줄도 넘기지 않고 hook 판정, 승인, sub-agent 동작의 개수를 낼 수 있게 합니다.

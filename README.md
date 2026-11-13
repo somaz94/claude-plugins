@@ -33,6 +33,7 @@ claude plugin install census@somaz94
 | [`sensitive-guard`](plugins/sensitive-guard) | Stops a secret at the moment of commit — a last-mile gate over the lines a commit adds, plus an on-demand scan before you publish |
 | [`korean-prose`](plugins/korean-prose) | Reviews Korean writing for the awkwardness a spell-checker cannot see — English skeletons left inside Korean sentences, generated-text tells, and the findings that only appear when a line is read against its neighbours |
 | [`doc-tidy`](plugins/doc-tidy) | Decides whether each document should exist and where it belongs — archives finished history, deletes committed session byproducts, and rewrites every link a move breaks, in batches you approve |
+| [`commit-gates`](plugins/commit-gates) | Commits with the approvals where they belong — a read-only agent plans the message and the file list, and the session that talks to you asks before staging and again before committing |
 | [`tally`](plugins/tally) | Counts what your harness did without keeping what it said — a hook decision logger that records a hash instead of the command, and a counts-only summary of your transcripts you can read before sharing |
 
 Each plugin's documentation, in both languages:
@@ -46,6 +47,7 @@ Each plugin's documentation, in both languages:
 - [`sensitive-guard`](plugins/sensitive-guard) — [English](plugins/sensitive-guard/README.md) · [한국어](plugins/sensitive-guard/README-ko.md)
 - [`korean-prose`](plugins/korean-prose) — [English](plugins/korean-prose/README.md) · [한국어](plugins/korean-prose/README-ko.md)
 - [`doc-tidy`](plugins/doc-tidy) — [English](plugins/doc-tidy/README.md) · [한국어](plugins/doc-tidy/README-ko.md)
+- [`commit-gates`](plugins/commit-gates) — [English](plugins/commit-gates/README.md) · [한국어](plugins/commit-gates/README-ko.md)
 - [`tally`](plugins/tally) — [English](plugins/tally/README.md) · [한국어](plugins/tally/README-ko.md)
 
 <br/>
@@ -63,6 +65,7 @@ Every plugin here addresses something that goes wrong **quietly** while an assis
 - A secret rides along in a diff nobody re-read. — [`sensitive-guard`](plugins/sensitive-guard)
 - A translated document keeps its English skeleton. Every word is spelled right and the grammar is intact, so nothing flags it — and it reads like something to decode rather than read. — [`korean-prose`](plugins/korean-prose)
 - Documents pile up where the work happened. A handoff gets committed, a finished migration keeps its plan beside the current docs, and a pointer to a plan file that expired last month still reads like a reference. — [`doc-tidy`](plugins/doc-tidy)
+- A sub-agent is told "the user said yes" and runs the commit itself. The approval was real, but the agent that acted never heard it and could not check what it covered. — [`commit-gates`](plugins/commit-gates)
 - You add a guard and never learn whether it fires on real mistakes or on everything, or whether an agent you declared read-only stayed that way. The answer is in your transcripts, next to everything you would never share. — [`tally`](plugins/tally)
 
 Each is a gate or a report at the point the mistake is cheap to catch, not a summary delivered after it landed. Where a better tool already exists — `gitleaks` for secret detection, `shellcheck` for shell linting — these do not replace it; they run where it does not, which is inside the session, before the commit returns.
@@ -77,7 +80,7 @@ This repository is the public, sanitized part of one person's Claude Code harnes
 
 Two of the study's design results can be read here directly:
 
-- **Reviewers plan; the session applies.** The review agents in [`shell-portability`](plugins/shell-portability) and [`korean-prose`](plugins/korean-prose) have no file-write tool. They return each fix as an exact edit, and the main session, the only one that talks to you, applies it after you say yes. A sub-agent cannot ask you, so an approval relayed to it by another agent is not yours.
+- **Reviewers plan; the session applies.** The review agents in [`shell-portability`](plugins/shell-portability) and [`korean-prose`](plugins/korean-prose) have no file-write tool. They return each fix as an exact edit, and the main session, the only one that talks to you, applies it after you say yes. [`commit-gates`](plugins/commit-gates) shows the full pattern for a mutating step: its planner returns `git add` and `git commit` as two gates and runs neither, and the command asks you before each one. A sub-agent cannot ask you, so an approval relayed to it by another agent is not yours.
 - **Guards fail open and are tuned not to cry wolf.** [`release-guards`](plugins/release-guards) asks instead of blocking; [`sensitive-guard`](plugins/sensitive-guard) blocks only on the lines a commit adds, so findings that were already there do not block every commit.
 
 [`tally`](plugins/tally) is the measurement side. It lets a harness owner produce counts of hook decisions, approvals and sub-agent behavior without handing over a single transcript.
