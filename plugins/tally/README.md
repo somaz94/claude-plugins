@@ -64,10 +64,10 @@ What a record holds: time, the hook's file name, tier, event, tool, decision, ex
 
 ## What gets counted
 
-Per ISO week and in total:
+Per ISO week (UTC) and in total:
 
 - **Sessions and main-session calls**: tool calls, file edits, shell calls that changed state, questions asked, interrupts, compactions, sub-agent launches.
-- **Permissions**: allowed or denied automatically (config, mode, classifier), allowed by a person once, allowed by a rule a person saved, denied by a hook, rejected by a person.
+- **Permissions**: allowed or denied automatically by configuration (the transcript's `config` source), allowed by a person once, allowed by a rule a person saved, denied by a hook, rejected by a person.
 - **Sub-agents**: runs, runs of your own agents, runs that changed state, and the same for agents whose `tools:` grants no file-write tool. That last pair answers the question a read-only declaration cannot: did the agent stay inside it?
 - **Hooks**: decisions by kind and by tier from the log, and hook outcomes recorded in the transcripts.
 - **Harness**: agents (write-capable, inheriting every tool), commands, skills, hooks per event.
@@ -78,7 +78,7 @@ Per ISO week and in total:
 
 - **State change is a heuristic.** A shell call counts when it runs a known writer: `rm`, `mv`, `cp`, `sed -i`, a `git` / `gh` / `glab` / `kubectl` / `helm` / `terraform` subcommand that writes, a write through `gh api`. A change confined to a temp directory is counted separately as scratch. When the classifier cannot place a change, it counts it as a workspace change, so that number errs high. Output redirection (`>`) is not counted at all. The classifier is versioned in the output (`classifier`); two files with different versions do not compare.
 - **The transcript format is internal.** It is Claude Code's storage, not a public API. A line the reader cannot parse is counted in `input.unrecognized_lines` rather than guessed at. If that number climbs, the counts are going stale.
-- **Agent names stay local.** The sub-agent counts depend on matching a run's agent type to a definition in a `--config` directory. Plugin agents and agents from directories you did not pass count as unclassified.
+- **Agent names stay local.** Whether a run is your own agent comes from the run's sidecar metadata; a run whose sidecar is missing or predates that field counts as built-in. The read-only split also needs the run's agent type to match a definition in a `--config` directory, so agents from plugins or from directories you did not pass are left out of it.
 - **Schema v0 may change** before anyone collects data under it. The output names its schema, so a reader can tell.
 
 <br/>
