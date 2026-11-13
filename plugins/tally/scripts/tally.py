@@ -34,7 +34,7 @@ from _shared import parse_frontmatter  # noqa: E402
 
 SCHEMA_ID = "tally/v0"
 CLASSIFIER_ID = "mutating-v0"
-TOOL_VERSION = "0.1.1"
+TOOL_VERSION = "0.1.2"
 
 FILE_EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 # A * inside a scoped rule such as Bash(git:*) limits that tool; only a bare * grants every tool.

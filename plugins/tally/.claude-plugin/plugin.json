@@ -1,6 +1,6 @@
 {
   "name": "tally",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Counts what your Claude Code harness did without keeping what it said — a hook decision logger that records a hash instead of the command, and a local aggregator that turns transcripts into a counts-only JSON file you can read before sharing.",
   "author": {
     "name": "somaz94",
