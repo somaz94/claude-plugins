@@ -37,6 +37,8 @@ CLASSIFIER_ID = "mutating-v0"
 TOOL_VERSION = "0.1.1"
 
 FILE_EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
+# A * inside a scoped rule such as Bash(git:*) limits that tool; only a bare * grants every tool.
+TOOL_ENTRY_RE = re.compile(r"\*|[A-Za-z_][\w.-]*(?:\([^)]*\))?")
 AGENT_TOOLS = {"Agent", "Task"}
 USER_REJECT_MARK = "The user doesn't want to proceed with this tool use"
 INTERRUPT_MARK = "[Request interrupted by user"
@@ -606,7 +608,7 @@ def harness_shape(configs: list[Path]) -> tuple[dict, frozenset[str]]:
             if tools is None:
                 agents["inherit_all_tools"] += 1
                 continue
-            names = set(re.findall(r"[A-Za-z*]+", tools))
+            names = {m.group(0).split("(", 1)[0] for m in TOOL_ENTRY_RE.finditer(tools)}
             if names & (FILE_EDIT_TOOLS | {"*"}):
                 agents["write_capable"] += 1
             else:
