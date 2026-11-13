@@ -70,7 +70,7 @@ Every plugin here addresses something that goes wrong **quietly** while an assis
 
 Each is a gate or a report at the point the mistake is cheap to catch, not a summary delivered after it landed. Where a better tool already exists — `gitleaks` for secret detection, `shellcheck` for shell linting — these do not replace it; they run where it does not, which is inside the session, before the commit returns.
 
-Nothing here edits your work without asking. `census` is read-only by contract, the guards ask rather than block, and every hook fails open: a guard that breaks the workflow when it malfunctions gets switched off, and then it guards nothing.
+Nothing here edits your work without asking. `census` is read-only by contract, the guards stop or question an action but never change your files, and every hook fails open: a guard that breaks the workflow when it malfunctions gets switched off, and then it guards nothing.
 
 <br/>
 

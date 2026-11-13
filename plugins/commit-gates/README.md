@@ -45,7 +45,7 @@ Staging and committing are separate gates. One approval never covers both, becau
 - **Your repository's conventions first.** `CLAUDE.md`, `AGENTS.md`, `CONTRIBUTING*` and the existing history decide the language, whether a body is allowed, and trailers such as `Signed-off-by` or `Co-Authored-By`. With nothing to go on, the default is a single-line subject.
 - **An explicit file list.** No `git add -A` unless you said "all". Files that look like secrets or build output are left out and flagged.
 - **Release automation left out.** `release.yml`, `cliff.toml`, `RELEASE.md` and their kind are flagged, never staged silently.
-- **The commit identity.** An empty or bot-like author stops the cycle. Nothing in this plugin runs `git config` or overrides `--author`; the one `--author` it can plan is an amend of an unpushed commit, which copies the existing author.
+- **The commit identity.** An empty or bot-like author stops the cycle. Nothing in this plugin runs `git config` or passes `--author`; the one `--author` it can plan is an amend of an unpushed commit, which copies the existing author.
 
 <br/>
 
@@ -64,7 +64,7 @@ If your repository says "do not commit directly", the command switches to `recom
 
 ## What it never does
 
-- Runs `git add` or `git commit` without asking you, gate by gate.
+- Runs `git add` or `git commit` before you approve that gate.
 - Lets the planning agent run a mutating command, even when its prompt claims you approved.
 - Pushes, tags, opens a pull request, or publishes a release. Those are named as next steps and left to you.
 - Changes git configuration or overrides the commit author.
