@@ -1,0 +1,843 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/somaz94/claude-plugins/blob/main/plugins/tally/schema/tally-v0.schema.json",
+  "title": "tally/v0",
+  "description": "Counts-only summary of one Claude Code harness, produced by plugins/tally/scripts/tally.py. Every key is fixed here and additionalProperties is false at every level, so no free-form text (paths, commands, project, agent or hook names) can appear. v0: may change before any data is collected under it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "tool_version",
+    "classifier",
+    "generated",
+    "window",
+    "input",
+    "harness",
+    "totals",
+    "weeks"
+  ],
+  "properties": {
+    "schema": {
+      "const": "tally/v0"
+    },
+    "tool_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "classifier": {
+      "const": "mutating-v0"
+    },
+    "generated": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "first",
+        "last",
+        "weeks"
+      ],
+      "properties": {
+        "first": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "last": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "weeks": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "files_read",
+        "lines_read",
+        "unrecognized_lines"
+      ],
+      "properties": {
+        "files_read": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "lines_read": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unrecognized_lines": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "harness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "config_dirs",
+        "agents",
+        "commands",
+        "skills",
+        "hooks"
+      ],
+      "properties": {
+        "config_dirs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "agents": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "total",
+            "write_capable",
+            "inherit_all_tools"
+          ],
+          "properties": {
+            "total": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "write_capable": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "inherit_all_tools": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "commands": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skills": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "hooks": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "total",
+            "by_event"
+          ],
+          "properties": {
+            "total": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "by_event": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "PreToolUse",
+                "PostToolUse",
+                "UserPromptSubmit",
+                "SessionStart",
+                "SessionEnd",
+                "Stop",
+                "SubagentStop",
+                "PreCompact",
+                "Notification",
+                "other"
+              ],
+              "properties": {
+                "PreToolUse": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "PostToolUse": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "UserPromptSubmit": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "SessionStart": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "SessionEnd": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "Stop": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "SubagentStop": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "PreCompact": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "Notification": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "other": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "totals": {
+      "$ref": "#/$defs/bucket"
+    },
+    "weeks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/week"
+      }
+    }
+  },
+  "$defs": {
+    "bucket": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sessions",
+        "main",
+        "permissions",
+        "subagents",
+        "hooks_transcript",
+        "hooks_log"
+      ],
+      "properties": {
+        "sessions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "main": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool_calls",
+            "file_edit_calls",
+            "mutating_bash_calls",
+            "scratch_bash_calls",
+            "questions_asked",
+            "interrupts",
+            "compactions",
+            "subagent_launches"
+          ],
+          "properties": {
+            "tool_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "file_edit_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "mutating_bash_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "scratch_bash_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "questions_asked": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "interrupts": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "compactions": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "subagent_launches": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "permissions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "auto_allowed",
+            "user_allowed_once",
+            "user_allowed_rule",
+            "auto_denied",
+            "hook_denied",
+            "user_rejected",
+            "other"
+          ],
+          "properties": {
+            "auto_allowed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "user_allowed_once": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "user_allowed_rule": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "auto_denied": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "hook_denied": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "user_rejected": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "other": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "subagents": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "runs",
+            "runs_custom",
+            "runs_with_mutation",
+            "tool_calls",
+            "file_edit_calls",
+            "mutating_bash_calls",
+            "scratch_bash_calls",
+            "runs_readonly_declared",
+            "runs_readonly_declared_with_mutation",
+            "readonly_declared_mutating_calls"
+          ],
+          "properties": {
+            "runs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "runs_custom": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "runs_with_mutation": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "tool_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "file_edit_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "mutating_bash_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "scratch_bash_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "runs_readonly_declared": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "runs_readonly_declared_with_mutation": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "readonly_declared_mutating_calls": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "hooks_transcript": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "additional_context",
+            "blocking_error",
+            "non_blocking_error",
+            "other",
+            "success",
+            "system_message"
+          ],
+          "properties": {
+            "additional_context": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "blocking_error": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "non_blocking_error": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "other": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "success": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "system_message": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "hooks_log": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "decisions",
+            "by_tier"
+          ],
+          "properties": {
+            "decisions": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "block",
+                "deny",
+                "ask",
+                "allow",
+                "nudge",
+                "info",
+                "nonblocking-error",
+                "output",
+                "other"
+              ],
+              "properties": {
+                "block": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "deny": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "ask": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "allow": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "nudge": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "info": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "nonblocking-error": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "output": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "other": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "by_tier": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "block",
+                "ask",
+                "warn",
+                "info",
+                "other",
+                "untiered"
+              ],
+              "properties": {
+                "block": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "ask": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "warn": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "info": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "other": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "untiered": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "week": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "week",
+        "sessions",
+        "main",
+        "permissions",
+        "subagents",
+        "hooks_transcript",
+        "hooks_log"
+      ],
+      "properties": {
+        "week": {
+          "type": "string",
+          "pattern": "^\\d{4}-W\\d{2}$"
+        },
+        "sessions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "main": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool_calls",
+            "file_edit_calls",
+            "mutating_bash_calls",
+            "scratch_bash_calls",
+            "questions_asked",
+            "interrupts",
+            "compactions",
+            "subagent_launches"
+          ],
+          "properties": {
+            "tool_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "file_edit_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "mutating_bash_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "scratch_bash_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "questions_asked": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "interrupts": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "compactions": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "subagent_launches": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "permissions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "auto_allowed",
+            "user_allowed_once",
+            "user_allowed_rule",
+            "auto_denied",
+            "hook_denied",
+            "user_rejected",
+            "other"
+          ],
+          "properties": {
+            "auto_allowed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "user_allowed_once": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "user_allowed_rule": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "auto_denied": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "hook_denied": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "user_rejected": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "other": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "subagents": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "runs",
+            "runs_custom",
+            "runs_with_mutation",
+            "tool_calls",
+            "file_edit_calls",
+            "mutating_bash_calls",
+            "scratch_bash_calls",
+            "runs_readonly_declared",
+            "runs_readonly_declared_with_mutation",
+            "readonly_declared_mutating_calls"
+          ],
+          "properties": {
+            "runs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "runs_custom": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "runs_with_mutation": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "tool_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "file_edit_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "mutating_bash_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "scratch_bash_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "runs_readonly_declared": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "runs_readonly_declared_with_mutation": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "readonly_declared_mutating_calls": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "hooks_transcript": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "additional_context",
+            "blocking_error",
+            "non_blocking_error",
+            "other",
+            "success",
+            "system_message"
+          ],
+          "properties": {
+            "additional_context": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "blocking_error": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "non_blocking_error": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "other": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "success": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "system_message": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "hooks_log": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "decisions",
+            "by_tier"
+          ],
+          "properties": {
+            "decisions": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "block",
+                "deny",
+                "ask",
+                "allow",
+                "nudge",
+                "info",
+                "nonblocking-error",
+                "output",
+                "other"
+              ],
+              "properties": {
+                "block": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "deny": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "ask": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "allow": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "nudge": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "info": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "nonblocking-error": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "output": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "other": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "by_tier": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "block",
+                "ask",
+                "warn",
+                "info",
+                "other",
+                "untiered"
+              ],
+              "properties": {
+                "block": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "ask": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "warn": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "info": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "other": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "untiered": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

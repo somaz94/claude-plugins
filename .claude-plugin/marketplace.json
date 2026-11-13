@@ -169,6 +169,24 @@
         "plans",
         "markdown"
       ]
+    },
+    {
+      "name": "tally",
+      "source": "./plugins/tally",
+      "version": "0.1.0",
+      "description": "Counts what your Claude Code harness did without keeping what it said — a hook decision logger that records a hash instead of the command, and a local aggregator that turns transcripts into a counts-only JSON file you can read before sharing.",
+      "category": "productivity",
+      "license": "MIT",
+      "homepage": "https://github.com/somaz94/claude-plugins/tree/main/plugins/tally",
+      "repository": "https://github.com/somaz94/claude-plugins",
+      "keywords": [
+        "hooks",
+        "metrics",
+        "transcripts",
+        "privacy",
+        "research",
+        "observability"
+      ]
     }
   ]
 }
