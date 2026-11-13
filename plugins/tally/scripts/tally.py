@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import functools
 import json
 import re
 import shlex
@@ -273,6 +274,15 @@ def _is_temp(word: str, line_has_temp: bool) -> bool:
     return bool(_TEMP_PATH.match(word)) or (word.startswith("$") and line_has_temp)
 
 
+# Any writer the classifier knows, as a bare word. A command without one cannot
+# mutate under this classifier, so it skips tokenizing, which dominates run time.
+_MAY_MUTATE = re.compile(
+    r"(?<![\w-])(rm|rmdir|mv|cp|ln|mkdir|touch|truncate|chmod|chown|sed|perl|git|gh|glab|"
+    r"kubectl|helm|terraform|docker|npm|cargo)(?![\w-])"
+)
+
+
+@functools.lru_cache(maxsize=8192)
 def classify(command: str) -> str | None:
     """None (no state change), "scratch" (only temp locations) or "workspace".
 
@@ -281,6 +291,8 @@ def classify(command: str) -> str | None:
     path after a `cd` into one. Anything it cannot place counts as workspace, so
     the workspace count errs high rather than low.
     """
+    if not _MAY_MUTATE.search(command):
+        return None
     line_has_temp = bool(_TEMP_MARK.search(command))
     in_temp = False
     found = None
@@ -368,7 +380,10 @@ class Tally:
         day = ts.date()
         self.first = day if self.first is None or day < self.first else self.first
         self.last = day if self.last is None or day > self.last else self.last
-        return self.weeks.setdefault(_week(ts), _zero_bucket())
+        key = _week(ts)
+        if key not in self.weeks:
+            self.weeks[key] = _zero_bucket()
+        return self.weeks[key]
 
     # ---- transcripts -------------------------------------------------------
 
