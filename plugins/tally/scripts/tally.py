@@ -34,7 +34,7 @@ from _shared import parse_frontmatter  # noqa: E402
 
 SCHEMA_ID = "tally/v0"
 CLASSIFIER_ID = "mutating-v0"
-TOOL_VERSION = "0.1.0"
+TOOL_VERSION = "0.1.1"
 
 FILE_EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 AGENT_TOOLS = {"Agent", "Task"}
