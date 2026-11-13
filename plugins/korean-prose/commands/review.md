@@ -25,7 +25,7 @@ Out of scope in both lanes: the `en:` half, `*-en.md`, English `.md`, code block
 
 ## Mode resolution — decide this before anything else
 
-| `$ARGUMENTS` | Mode |
+| Argument | Mode |
 |---|---|
 | empty, a path, a directory, "전체" / "전부" / "스캔" | **감사** |
 | pasted Korean prose, a proposed rewrite, "이렇게?" / "이거 어때" / "어색해" | **판정** |
