@@ -18,20 +18,25 @@
   ],
   "properties": {
     "schema": {
+      "description": "Identifier of the format this file follows, always tally/v0; a reader uses it to pick the matching field definitions.",
       "const": "tally/v0"
     },
     "tool_version": {
+      "description": "Version of tally.py that wrote this file, as MAJOR.MINOR.PATCH.",
       "type": "string",
       "pattern": "^\\d+\\.\\d+\\.\\d+$"
     },
     "classifier": {
+      "description": "Version label of the rules that decide which Bash calls change state (the mutating_bash_calls and scratch_bash_calls fields). Two files with different labels do not compare on those fields.",
       "const": "mutating-v0"
     },
     "generated": {
+      "description": "Date the file was written, as YYYY-MM-DD in the local time zone of the machine that ran tally.py. Every other date and week in the file is UTC.",
       "type": "string",
       "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
     },
     "window": {
+      "description": "The span of activity actually counted after the --since and --until filter (inclusive UTC dates). It describes the records found, not the filter bounds.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -41,34 +46,42 @@
       ],
       "properties": {
         "first": {
+          "description": "UTC date of the earliest timestamped transcript or hook-log record inside the date filter, or null when no record fell inside it.",
           "anyOf": [
             {
+              "description": "A UTC calendar date, YYYY-MM-DD.",
               "type": "string",
               "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
             },
             {
+              "description": "No timestamped record fell inside the date filter.",
               "type": "null"
             }
           ]
         },
         "last": {
+          "description": "UTC date of the latest timestamped transcript or hook-log record inside the date filter, or null when no record fell inside it.",
           "anyOf": [
             {
+              "description": "A UTC calendar date, YYYY-MM-DD.",
               "type": "string",
               "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
             },
             {
+              "description": "No timestamped record fell inside the date filter.",
               "type": "null"
             }
           ]
         },
         "weeks": {
+          "description": "Count of ISO weeks that hold at least one counted record; equals the length of the weeks array. Weeks without activity between first and last are left out, so this can be less than the calendar span.",
           "type": "integer",
           "minimum": 0
         }
       }
     },
     "input": {
+      "description": "How much raw input tally.py read, for judging coverage and format drift. Covers main-session transcripts, sub-agent transcripts and hook decision log files.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -78,20 +91,24 @@
       ],
       "properties": {
         "files_read": {
+          "description": "Count of files read: every main-session and sub-agent transcript (.jsonl) under the projects root plus every decisions-*.jsonl hook log file, whether or not any of their records fell inside the date filter.",
           "type": "integer",
           "minimum": 0
         },
         "lines_read": {
+          "description": "Count of lines in those files, including lines outside the date filter and the api-request records that are skipped unparsed.",
           "type": "integer",
           "minimum": 0
         },
         "unrecognized_lines": {
+          "description": "Count of lines that are not a JSON object, plus hook-log lines with a missing or unparseable ts. Transcript records of an unknown type or without a timestamp are skipped without being counted here, so a rising value signals format drift but zero does not rule it out.",
           "type": "integer",
           "minimum": 0
         }
       }
     },
     "harness": {
+      "description": "Size of the configuration in the --config directories (default ~/.claude), measured once at run time and not split by week. Agents, commands, skills and hooks supplied by plugins are not counted.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -103,10 +120,12 @@
       ],
       "properties": {
         "config_dirs": {
+          "description": "Count of --config directories measured, 1 when the option is not given. A directory that does not exist is still counted.",
           "type": "integer",
           "minimum": 0
         },
         "agents": {
+          "description": "Agent definition files: every .md file directly inside each config directory's agents/ folder, subfolders not read.",
           "type": "object",
           "additionalProperties": false,
           "required": [
@@ -116,28 +135,34 @@
           ],
           "properties": {
             "total": {
+              "description": "Count of agent definition files across all config directories; an agent present in two directories counts twice. Equals write_capable plus inherit_all_tools plus the agents whose tools list has no file-write tool.",
               "type": "integer",
               "minimum": 0
             },
             "write_capable": {
+              "description": "Count of agents whose frontmatter tools list names Edit, Write, MultiEdit or NotebookEdit (scoped forms such as Edit(src/**) included), or holds a bare * entry. A * inside a scoped rule such as Bash(git:*) does not count, and Bash alone does not make an agent write-capable.",
               "type": "integer",
               "minimum": 0
             },
             "inherit_all_tools": {
+              "description": "Count of agents with no tools key in their frontmatter, which therefore receive every tool. They are not included in write_capable even though they can edit files.",
               "type": "integer",
               "minimum": 0
             }
           }
         },
         "commands": {
+          "description": "Count of .md files anywhere under each config directory's commands/ folder, subfolders included.",
           "type": "integer",
           "minimum": 0
         },
         "skills": {
+          "description": "Count of skills/<name>/SKILL.md files, one level below each config directory's skills/ folder.",
           "type": "integer",
           "minimum": 0
         },
         "hooks": {
+          "description": "Hook commands registered under the hooks key of settings.json and settings.local.json in each config directory. Plugin hooks and other settings files are not read.",
           "type": "object",
           "additionalProperties": false,
           "required": [
@@ -146,10 +171,12 @@
           ],
           "properties": {
             "total": {
+              "description": "Count of hook command entries (each item in a matcher's hooks list) across all events; equals the sum of by_event.",
               "type": "integer",
               "minimum": 0
             },
             "by_event": {
+              "description": "Hook command entries per hook event name.",
               "type": "object",
               "additionalProperties": false,
               "required": [
@@ -166,42 +193,52 @@
               ],
               "properties": {
                 "PreToolUse": {
+                  "description": "Count of hook command entries registered for the PreToolUse event.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "PostToolUse": {
+                  "description": "Count of hook command entries registered for the PostToolUse event.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "UserPromptSubmit": {
+                  "description": "Count of hook command entries registered for the UserPromptSubmit event.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "SessionStart": {
+                  "description": "Count of hook command entries registered for the SessionStart event.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "SessionEnd": {
+                  "description": "Count of hook command entries registered for the SessionEnd event.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "Stop": {
+                  "description": "Count of hook command entries registered for the Stop event.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "SubagentStop": {
+                  "description": "Count of hook command entries registered for the SubagentStop event.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "PreCompact": {
+                  "description": "Count of hook command entries registered for the PreCompact event.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "Notification": {
+                  "description": "Count of hook command entries registered for the Notification event.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "other": {
+                  "description": "Count of hook command entries registered under any event name not listed in by_event.",
                   "type": "integer",
                   "minimum": 0
                 }
@@ -212,17 +249,21 @@
       }
     },
     "totals": {
+      "description": "Sum of every entry in weeks, so each field means the same as in a week entry but covers the whole window.",
       "$ref": "#/$defs/bucket"
     },
     "weeks": {
+      "description": "One entry per ISO week (Monday to Sunday, UTC) holding at least one counted record, oldest first. Weeks without activity are omitted.",
       "type": "array",
       "items": {
+        "description": "Counts for one ISO week.",
         "$ref": "#/$defs/week"
       }
     }
   },
   "$defs": {
     "bucket": {
+      "description": "Counts summed over every week in the window.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -235,10 +276,12 @@
       ],
       "properties": {
         "sessions": {
+          "description": "Count of main-session transcript files (the .jsonl files directly inside each project folder) with at least one timestamped record inside the date filter, across all weeks. Each file counts once, in the week of its first such record; sub-agent transcripts are not sessions.",
           "type": "integer",
           "minimum": 0
         },
         "main": {
+          "description": "Activity in main-session transcripts across all weeks, each record counted in the week of its own timestamp. Sub-agent activity is under subagents.",
           "type": "object",
           "additionalProperties": false,
           "required": [
@@ -253,40 +296,49 @@
           ],
           "properties": {
             "tool_calls": {
+              "description": "Count of tool calls the main session requested across all weeks, any tool including MCP tools, whether or not each call was allowed or succeeded.",
               "type": "integer",
               "minimum": 0
             },
             "file_edit_calls": {
+              "description": "Count of Edit, Write, MultiEdit and NotebookEdit calls the main session requested across all weeks, counted at request time, so rejected or failed calls are included.",
               "type": "integer",
               "minimum": 0
             },
             "mutating_bash_calls": {
+              "description": "Count of Bash calls the main session requested across all weeks that the mutating-v0 rules classify as a workspace change: a known writer (such as rm, mv, cp, mkdir, sed -i, or a writing git, gh, glab, kubectl, helm or terraform subcommand) with an operand outside temp locations or one the rules cannot place. Output redirection (>) is ignored, and calls confined to temp locations go to scratch_bash_calls instead.",
               "type": "integer",
               "minimum": 0
             },
             "scratch_bash_calls": {
+              "description": "Count of Bash calls the main session requested across all weeks whose every state-changing step touches only temp locations (/tmp, /private/tmp, /var/folders, $TMPDIR, a $variable on a command that mentions mktemp or a temp path, or a relative path after cd into one). Not included in mutating_bash_calls.",
               "type": "integer",
               "minimum": 0
             },
             "questions_asked": {
+              "description": "Count of AskUserQuestion calls the main session made across all weeks.",
               "type": "integer",
               "minimum": 0
             },
             "interrupts": {
+              "description": "Count of user-message blocks in main-session transcripts across all weeks that contain the '[Request interrupted by user' marker, both plain interrupts and interrupts during a tool call. A rejection at a permission prompt is often followed by this marker, so it can add one here as well as one to permissions.user_rejected.",
               "type": "integer",
               "minimum": 0
             },
             "compactions": {
+              "description": "Count of compaction boundaries, manual or automatic, recorded in main-session transcripts across all weeks.",
               "type": "integer",
               "minimum": 0
             },
             "subagent_launches": {
+              "description": "Count of Agent or Task calls the main session made across all weeks. Launches made by a sub-agent are not counted here; they appear only in subagents.tool_calls.",
               "type": "integer",
               "minimum": 0
             }
           }
         },
         "permissions": {
+          "description": "Permission outcomes recorded in main-session and sub-agent transcripts across all weeks. All fields except user_rejected come from the decision and source Claude Code writes on a record; user_rejected comes from the rejection message text.",
           "type": "object",
           "additionalProperties": false,
           "required": [
@@ -300,36 +352,44 @@
           ],
           "properties": {
             "auto_allowed": {
+              "description": "Count of calls allowed without asking anyone (recorded decision accept, source config) across all weeks.",
               "type": "integer",
               "minimum": 0
             },
             "user_allowed_once": {
+              "description": "Count of calls a person allowed at a prompt without saving a rule (decision accept, source user_temporary) across all weeks.",
               "type": "integer",
               "minimum": 0
             },
             "user_allowed_rule": {
+              "description": "Count of calls a person allowed at a prompt while saving an allow rule (decision accept, source user_permanent) across all weeks.",
               "type": "integer",
               "minimum": 0
             },
             "auto_denied": {
+              "description": "Count of calls denied without asking anyone (decision reject, source config), for example by a deny rule, across all weeks.",
               "type": "integer",
               "minimum": 0
             },
             "hook_denied": {
+              "description": "Count of calls denied by a hook (decision reject, source hook) across all weeks. Hook allows and asks are not counted here.",
               "type": "integer",
               "minimum": 0
             },
             "user_rejected": {
+              "description": "Count of tool results across all weeks containing the message 'The user doesn't want to proceed with this tool use', meaning a person declined the call at a prompt or stopped it. Counted from the message text, not from a recorded decision.",
               "type": "integer",
               "minimum": 0
             },
             "other": {
+              "description": "Count of recorded decisions across all weeks with any other decision and source pair, such as an allow coming from a hook.",
               "type": "integer",
               "minimum": 0
             }
           }
         },
         "subagents": {
+          "description": "Sub-agent runs and their activity across all weeks, read from the per-run transcripts in each session's subagents/ folder.",
           "type": "object",
           "additionalProperties": false,
           "required": [
@@ -346,48 +406,59 @@
           ],
           "properties": {
             "runs": {
+              "description": "Count of sub-agent transcript files with at least one timestamped record inside the date filter, across all weeks. Each run counts once, in the week of its first such record; built-in and custom agents are both included.",
               "type": "integer",
               "minimum": 0
             },
             "runs_custom": {
+              "description": "Count of runs across all weeks whose sidecar .meta.json marks the agent as not built in (isBuiltIn false), wherever the agent was defined. Runs with no sidecar, or with an older sidecar that lacks isBuiltIn, count as not custom.",
               "type": "integer",
               "minimum": 0
             },
             "runs_with_mutation": {
+              "description": "Count of runs across all weeks that made at least one file-edit call or workspace-changing Bash call inside the date filter, counted in the run's first week. Scratch-only Bash does not make a run mutating.",
               "type": "integer",
               "minimum": 0
             },
             "tool_calls": {
+              "description": "Count of tool calls sub-agents requested across all weeks, any tool including MCP tools and nested Agent or Task launches, whether or not each call was allowed or succeeded.",
               "type": "integer",
               "minimum": 0
             },
             "file_edit_calls": {
+              "description": "Count of Edit, Write, MultiEdit and NotebookEdit calls sub-agents requested across all weeks, counted at request time, so rejected or failed calls are included.",
               "type": "integer",
               "minimum": 0
             },
             "mutating_bash_calls": {
+              "description": "Count of Bash calls sub-agents requested across all weeks that the mutating-v0 rules classify as a workspace change: a known writer (such as rm, mv, cp, mkdir, sed -i, or a writing git, gh, glab, kubectl, helm or terraform subcommand) with an operand outside temp locations or one the rules cannot place. Output redirection (>) is ignored, and calls confined to temp locations go to scratch_bash_calls instead.",
               "type": "integer",
               "minimum": 0
             },
             "scratch_bash_calls": {
+              "description": "Count of Bash calls sub-agents requested across all weeks whose every state-changing step touches only temp locations (/tmp, /private/tmp, /var/folders, $TMPDIR, a $variable on a command that mentions mktemp or a temp path, or a relative path after cd into one). Not included in mutating_bash_calls.",
               "type": "integer",
               "minimum": 0
             },
             "runs_readonly_declared": {
+              "description": "Count of custom runs across all weeks whose agent type matches, by frontmatter name or file name, an agent in a --config directory whose tools list names none of Edit, Write, MultiEdit or NotebookEdit and holds no bare * entry. Such agents may still hold Bash; agents defined elsewhere, such as plugins or directories not passed with --config, never count here.",
               "type": "integer",
               "minimum": 0
             },
             "runs_readonly_declared_with_mutation": {
+              "description": "Count of runs_readonly_declared runs across all weeks that made at least one file-edit call or workspace-changing Bash call, counted in the run's first week.",
               "type": "integer",
               "minimum": 0
             },
             "readonly_declared_mutating_calls": {
+              "description": "Count of file-edit calls plus workspace-changing Bash calls made by runs_readonly_declared runs across all weeks, each in the week of its own timestamp. Scratch Bash calls are excluded.",
               "type": "integer",
               "minimum": 0
             }
           }
         },
         "hooks_transcript": {
+          "description": "Hook outcome records (attachment records whose type starts with hook_) that Claude Code wrote into main-session and sub-agent transcripts across all weeks. Claude Code does not record every hook run this way, so these are not a full count of hook executions.",
           "type": "object",
           "additionalProperties": false,
           "required": [
@@ -400,32 +471,39 @@
           ],
           "properties": {
             "additional_context": {
+              "description": "Count of hook_additional_context records across all weeks: a hook added context for the model.",
               "type": "integer",
               "minimum": 0
             },
             "blocking_error": {
+              "description": "Count of hook_blocking_error records across all weeks: a hook blocked the action.",
               "type": "integer",
               "minimum": 0
             },
             "non_blocking_error": {
+              "description": "Count of hook_non_blocking_error records across all weeks: a hook failed without blocking.",
               "type": "integer",
               "minimum": 0
             },
             "other": {
+              "description": "Count of records across all weeks with any other attachment type starting with hook_.",
               "type": "integer",
               "minimum": 0
             },
             "success": {
+              "description": "Count of hook_success records across all weeks.",
               "type": "integer",
               "minimum": 0
             },
             "system_message": {
+              "description": "Count of hook_system_message records across all weeks: a hook showed a message to the user.",
               "type": "integer",
               "minimum": 0
             }
           }
         },
         "hooks_log": {
+          "description": "Records that log-wrap.sh wrote to decisions-*.jsonl in the log directory (--log-dir, else $TALLY_LOG_DIR, else ~/.claude/tally/hook-decisions) across all weeks. Only wrapped hooks that exited non-zero or printed to stdout are logged, and every field is zero when the wrapper is not used.",
           "type": "object",
           "additionalProperties": false,
           "required": [
@@ -434,6 +512,7 @@
           ],
           "properties": {
             "decisions": {
+              "description": "Logged hook records by the decision log-wrap.sh derived from the hook's exit code and JSON output.",
               "type": "object",
               "additionalProperties": false,
               "required": [
@@ -449,44 +528,54 @@
               ],
               "properties": {
                 "block": {
+                  "description": "Count of logged records across all weeks where the hook exited with code 2.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "deny": {
+                  "description": "Count of logged records across all weeks where the hook's JSON output set hookSpecificOutput.permissionDecision to deny and the exit code was not 2.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "ask": {
+                  "description": "Count of logged records across all weeks where the hook's JSON output set hookSpecificOutput.permissionDecision to ask and the exit code was not 2.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "allow": {
+                  "description": "Count of logged records across all weeks where the hook's JSON output set hookSpecificOutput.permissionDecision to allow and the exit code was not 2.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "nudge": {
+                  "description": "Count of logged records across all weeks where the hook exited 0 with a systemMessage or additionalContext and its tier is not info.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "info": {
+                  "description": "Count of logged records across all weeks where the hook exited 0 with a systemMessage or additionalContext and its tier is info.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "nonblocking-error": {
+                  "description": "Count of logged records across all weeks where the hook exited with a code other than 0 or 2 and set no permissionDecision.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "output": {
+                  "description": "Count of logged records across all weeks where the hook exited 0 and printed output with no permissionDecision, systemMessage or additionalContext.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "other": {
+                  "description": "Count of logged records across all weeks with any other decision value.",
                   "type": "integer",
                   "minimum": 0
                 }
               }
             },
             "by_tier": {
+              "description": "Logged hook records by tier, taken from --tier or a '# tally: tier=' line in the hook script and lowercased.",
               "type": "object",
               "additionalProperties": false,
               "required": [
@@ -499,26 +588,32 @@
               ],
               "properties": {
                 "block": {
+                  "description": "Count of logged records across all weeks whose hook tier is block.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "ask": {
+                  "description": "Count of logged records across all weeks whose hook tier is ask.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "warn": {
+                  "description": "Count of logged records across all weeks whose hook tier is warn.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "info": {
+                  "description": "Count of logged records across all weeks whose hook tier is info.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "other": {
+                  "description": "Count of logged records across all weeks whose tier is set but is not block, ask, warn or info.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "untiered": {
+                  "description": "Count of logged records across all weeks with no tier.",
                   "type": "integer",
                   "minimum": 0
                 }
@@ -529,6 +624,7 @@
       }
     },
     "week": {
+      "description": "Counts for one ISO week. Each record is counted in the week of its own timestamp, so one session's calls can fall into several weeks.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -542,14 +638,17 @@
       ],
       "properties": {
         "week": {
+          "description": "ISO 8601 week label, YYYY-Www, from UTC timestamps. Weeks start on Monday, and around 1 January the ISO year can differ from the calendar year.",
           "type": "string",
           "pattern": "^\\d{4}-W\\d{2}$"
         },
         "sessions": {
+          "description": "Count of main-session transcript files (the .jsonl files directly inside each project folder) with at least one timestamped record inside the date filter, in this week. Each file counts once, in the week of its first such record; sub-agent transcripts are not sessions.",
           "type": "integer",
           "minimum": 0
         },
         "main": {
+          "description": "Activity in main-session transcripts in this week, each record counted in the week of its own timestamp. Sub-agent activity is under subagents.",
           "type": "object",
           "additionalProperties": false,
           "required": [
@@ -564,40 +663,49 @@
           ],
           "properties": {
             "tool_calls": {
+              "description": "Count of tool calls the main session requested in this week, any tool including MCP tools, whether or not each call was allowed or succeeded.",
               "type": "integer",
               "minimum": 0
             },
             "file_edit_calls": {
+              "description": "Count of Edit, Write, MultiEdit and NotebookEdit calls the main session requested in this week, counted at request time, so rejected or failed calls are included.",
               "type": "integer",
               "minimum": 0
             },
             "mutating_bash_calls": {
+              "description": "Count of Bash calls the main session requested in this week that the mutating-v0 rules classify as a workspace change: a known writer (such as rm, mv, cp, mkdir, sed -i, or a writing git, gh, glab, kubectl, helm or terraform subcommand) with an operand outside temp locations or one the rules cannot place. Output redirection (>) is ignored, and calls confined to temp locations go to scratch_bash_calls instead.",
               "type": "integer",
               "minimum": 0
             },
             "scratch_bash_calls": {
+              "description": "Count of Bash calls the main session requested in this week whose every state-changing step touches only temp locations (/tmp, /private/tmp, /var/folders, $TMPDIR, a $variable on a command that mentions mktemp or a temp path, or a relative path after cd into one). Not included in mutating_bash_calls.",
               "type": "integer",
               "minimum": 0
             },
             "questions_asked": {
+              "description": "Count of AskUserQuestion calls the main session made in this week.",
               "type": "integer",
               "minimum": 0
             },
             "interrupts": {
+              "description": "Count of user-message blocks in main-session transcripts in this week that contain the '[Request interrupted by user' marker, both plain interrupts and interrupts during a tool call. A rejection at a permission prompt is often followed by this marker, so it can add one here as well as one to permissions.user_rejected.",
               "type": "integer",
               "minimum": 0
             },
             "compactions": {
+              "description": "Count of compaction boundaries, manual or automatic, recorded in main-session transcripts in this week.",
               "type": "integer",
               "minimum": 0
             },
             "subagent_launches": {
+              "description": "Count of Agent or Task calls the main session made in this week. Launches made by a sub-agent are not counted here; they appear only in subagents.tool_calls.",
               "type": "integer",
               "minimum": 0
             }
           }
         },
         "permissions": {
+          "description": "Permission outcomes recorded in main-session and sub-agent transcripts in this week. All fields except user_rejected come from the decision and source Claude Code writes on a record; user_rejected comes from the rejection message text.",
           "type": "object",
           "additionalProperties": false,
           "required": [
@@ -611,36 +719,44 @@
           ],
           "properties": {
             "auto_allowed": {
+              "description": "Count of calls allowed without asking anyone (recorded decision accept, source config) in this week.",
               "type": "integer",
               "minimum": 0
             },
             "user_allowed_once": {
+              "description": "Count of calls a person allowed at a prompt without saving a rule (decision accept, source user_temporary) in this week.",
               "type": "integer",
               "minimum": 0
             },
             "user_allowed_rule": {
+              "description": "Count of calls a person allowed at a prompt while saving an allow rule (decision accept, source user_permanent) in this week.",
               "type": "integer",
               "minimum": 0
             },
             "auto_denied": {
+              "description": "Count of calls denied without asking anyone (decision reject, source config), for example by a deny rule, in this week.",
               "type": "integer",
               "minimum": 0
             },
             "hook_denied": {
+              "description": "Count of calls denied by a hook (decision reject, source hook) in this week. Hook allows and asks are not counted here.",
               "type": "integer",
               "minimum": 0
             },
             "user_rejected": {
+              "description": "Count of tool results in this week containing the message 'The user doesn't want to proceed with this tool use', meaning a person declined the call at a prompt or stopped it. Counted from the message text, not from a recorded decision.",
               "type": "integer",
               "minimum": 0
             },
             "other": {
+              "description": "Count of recorded decisions in this week with any other decision and source pair, such as an allow coming from a hook.",
               "type": "integer",
               "minimum": 0
             }
           }
         },
         "subagents": {
+          "description": "Sub-agent runs and their activity in this week, read from the per-run transcripts in each session's subagents/ folder.",
           "type": "object",
           "additionalProperties": false,
           "required": [
@@ -657,48 +773,59 @@
           ],
           "properties": {
             "runs": {
+              "description": "Count of sub-agent transcript files with at least one timestamped record inside the date filter, in this week. Each run counts once, in the week of its first such record; built-in and custom agents are both included.",
               "type": "integer",
               "minimum": 0
             },
             "runs_custom": {
+              "description": "Count of runs in this week whose sidecar .meta.json marks the agent as not built in (isBuiltIn false), wherever the agent was defined. Runs with no sidecar, or with an older sidecar that lacks isBuiltIn, count as not custom.",
               "type": "integer",
               "minimum": 0
             },
             "runs_with_mutation": {
+              "description": "Count of runs in this week that made at least one file-edit call or workspace-changing Bash call inside the date filter, counted in the run's first week. Scratch-only Bash does not make a run mutating.",
               "type": "integer",
               "minimum": 0
             },
             "tool_calls": {
+              "description": "Count of tool calls sub-agents requested in this week, any tool including MCP tools and nested Agent or Task launches, whether or not each call was allowed or succeeded.",
               "type": "integer",
               "minimum": 0
             },
             "file_edit_calls": {
+              "description": "Count of Edit, Write, MultiEdit and NotebookEdit calls sub-agents requested in this week, counted at request time, so rejected or failed calls are included.",
               "type": "integer",
               "minimum": 0
             },
             "mutating_bash_calls": {
+              "description": "Count of Bash calls sub-agents requested in this week that the mutating-v0 rules classify as a workspace change: a known writer (such as rm, mv, cp, mkdir, sed -i, or a writing git, gh, glab, kubectl, helm or terraform subcommand) with an operand outside temp locations or one the rules cannot place. Output redirection (>) is ignored, and calls confined to temp locations go to scratch_bash_calls instead.",
               "type": "integer",
               "minimum": 0
             },
             "scratch_bash_calls": {
+              "description": "Count of Bash calls sub-agents requested in this week whose every state-changing step touches only temp locations (/tmp, /private/tmp, /var/folders, $TMPDIR, a $variable on a command that mentions mktemp or a temp path, or a relative path after cd into one). Not included in mutating_bash_calls.",
               "type": "integer",
               "minimum": 0
             },
             "runs_readonly_declared": {
+              "description": "Count of custom runs in this week whose agent type matches, by frontmatter name or file name, an agent in a --config directory whose tools list names none of Edit, Write, MultiEdit or NotebookEdit and holds no bare * entry. Such agents may still hold Bash; agents defined elsewhere, such as plugins or directories not passed with --config, never count here.",
               "type": "integer",
               "minimum": 0
             },
             "runs_readonly_declared_with_mutation": {
+              "description": "Count of runs_readonly_declared runs in this week that made at least one file-edit call or workspace-changing Bash call, counted in the run's first week.",
               "type": "integer",
               "minimum": 0
             },
             "readonly_declared_mutating_calls": {
+              "description": "Count of file-edit calls plus workspace-changing Bash calls made by runs_readonly_declared runs in this week, each in the week of its own timestamp. Scratch Bash calls are excluded.",
               "type": "integer",
               "minimum": 0
             }
           }
         },
         "hooks_transcript": {
+          "description": "Hook outcome records (attachment records whose type starts with hook_) that Claude Code wrote into main-session and sub-agent transcripts in this week. Claude Code does not record every hook run this way, so these are not a full count of hook executions.",
           "type": "object",
           "additionalProperties": false,
           "required": [
@@ -711,32 +838,39 @@
           ],
           "properties": {
             "additional_context": {
+              "description": "Count of hook_additional_context records in this week: a hook added context for the model.",
               "type": "integer",
               "minimum": 0
             },
             "blocking_error": {
+              "description": "Count of hook_blocking_error records in this week: a hook blocked the action.",
               "type": "integer",
               "minimum": 0
             },
             "non_blocking_error": {
+              "description": "Count of hook_non_blocking_error records in this week: a hook failed without blocking.",
               "type": "integer",
               "minimum": 0
             },
             "other": {
+              "description": "Count of records in this week with any other attachment type starting with hook_.",
               "type": "integer",
               "minimum": 0
             },
             "success": {
+              "description": "Count of hook_success records in this week.",
               "type": "integer",
               "minimum": 0
             },
             "system_message": {
+              "description": "Count of hook_system_message records in this week: a hook showed a message to the user.",
               "type": "integer",
               "minimum": 0
             }
           }
         },
         "hooks_log": {
+          "description": "Records that log-wrap.sh wrote to decisions-*.jsonl in the log directory (--log-dir, else $TALLY_LOG_DIR, else ~/.claude/tally/hook-decisions) in this week. Only wrapped hooks that exited non-zero or printed to stdout are logged, and every field is zero when the wrapper is not used.",
           "type": "object",
           "additionalProperties": false,
           "required": [
@@ -745,6 +879,7 @@
           ],
           "properties": {
             "decisions": {
+              "description": "Logged hook records by the decision log-wrap.sh derived from the hook's exit code and JSON output.",
               "type": "object",
               "additionalProperties": false,
               "required": [
@@ -760,44 +895,54 @@
               ],
               "properties": {
                 "block": {
+                  "description": "Count of logged records in this week where the hook exited with code 2.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "deny": {
+                  "description": "Count of logged records in this week where the hook's JSON output set hookSpecificOutput.permissionDecision to deny and the exit code was not 2.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "ask": {
+                  "description": "Count of logged records in this week where the hook's JSON output set hookSpecificOutput.permissionDecision to ask and the exit code was not 2.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "allow": {
+                  "description": "Count of logged records in this week where the hook's JSON output set hookSpecificOutput.permissionDecision to allow and the exit code was not 2.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "nudge": {
+                  "description": "Count of logged records in this week where the hook exited 0 with a systemMessage or additionalContext and its tier is not info.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "info": {
+                  "description": "Count of logged records in this week where the hook exited 0 with a systemMessage or additionalContext and its tier is info.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "nonblocking-error": {
+                  "description": "Count of logged records in this week where the hook exited with a code other than 0 or 2 and set no permissionDecision.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "output": {
+                  "description": "Count of logged records in this week where the hook exited 0 and printed output with no permissionDecision, systemMessage or additionalContext.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "other": {
+                  "description": "Count of logged records in this week with any other decision value.",
                   "type": "integer",
                   "minimum": 0
                 }
               }
             },
             "by_tier": {
+              "description": "Logged hook records by tier, taken from --tier or a '# tally: tier=' line in the hook script and lowercased.",
               "type": "object",
               "additionalProperties": false,
               "required": [
@@ -810,26 +955,32 @@
               ],
               "properties": {
                 "block": {
+                  "description": "Count of logged records in this week whose hook tier is block.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "ask": {
+                  "description": "Count of logged records in this week whose hook tier is ask.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "warn": {
+                  "description": "Count of logged records in this week whose hook tier is warn.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "info": {
+                  "description": "Count of logged records in this week whose hook tier is info.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "other": {
+                  "description": "Count of logged records in this week whose tier is set but is not block, ask, warn or info.",
                   "type": "integer",
                   "minimum": 0
                 },
                 "untiered": {
+                  "description": "Count of logged records in this week with no tier.",
                   "type": "integer",
                   "minimum": 0
                 }

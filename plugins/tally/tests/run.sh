@@ -338,9 +338,15 @@ def shape(value):
                 "required": list(value), "properties": {k: shape(v) for k, v in value.items()}}
     return {"type": "integer", "minimum": 0}
 
-if schema["$defs"]["bucket"] != shape(tally._zero_bucket()):
+def structure(node):
+    """The schema node without its descriptions, which are documentation, not shape."""
+    if isinstance(node, dict):
+        return {k: structure(v) for k, v in node.items() if k != "description"}
+    return node
+
+if structure(schema["$defs"]["bucket"]) != shape(tally._zero_bucket()):
     fails.append("schema $defs.bucket no longer matches _zero_bucket() in tally.py")
-if schema["properties"]["harness"] != shape(tally.harness_shape([])[0]):
+if structure(schema["properties"]["harness"]) != shape(tally.harness_shape([])[0]):
     fails.append("schema properties.harness no longer matches harness_shape() in tally.py")
 if schema["properties"]["schema"]["const"] != tally.SCHEMA_ID:
     fails.append("schema id differs from tally.SCHEMA_ID")
